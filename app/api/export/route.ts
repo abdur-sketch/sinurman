@@ -26,7 +26,10 @@ function csvValue(value: unknown) {
 
 export async function GET(request: Request) {
   try {
-    await ensureUser(request);
+    const user = await ensureUser(request);
+    if (user.role === "Wali Santri") {
+      return Response.json({ error: "Laporan lengkap hanya tersedia untuk pengurus." }, { status: 403 });
+    }
     const url = new URL(request.url);
     const type = (url.searchParams.get("type") ?? "students") as keyof typeof exports;
     const format = url.searchParams.get("format") ?? "csv";

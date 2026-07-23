@@ -13,13 +13,18 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const user = await ensureUser(request);
-  if (user.role !== "Admin") return Response.json({ error:"Khusus Admin." },{status:403});
+  if (user.role === "Ustadz") return Response.json({ error:"Peran Anda tidak dapat mengakses pembayaran." },{status:403});
   const payload = await request.json() as { action?:string; billId?:number };
   if (payload.action !== "payment-link" || !payload.billId) {
     return Response.json({ error:"Tindakan integrasi tidak valid." },{status:400});
   }
   const bill = await database().prepare("SELECT b.*, s.name, s.guardian_phone FROM bills b JOIN students s ON s.id=b.student_id WHERE b.id=?").bind(payload.billId).first<Record<string,unknown>>();
   if(!bill) return Response.json({error:"Tagihan tidak ditemukan."},{status:404});
+  if (user.role === "Wali Santri") {
+    const owned = await database().prepare("SELECT b.id FROM bills b JOIN students s ON s.id=b.student_id WHERE b.id=? AND lower(s.guardian_email)=lower(?)")
+      .bind(payload.billId, user.email).first();
+    if (!owned) return Response.json({ error:"Tagihan tidak terhubung dengan akun ini." },{status:403});
+  }
   let paymentUrl="";
   if(env.MIDTRANS_SERVER_KEY) {
     const host = env.MIDTRANS_IS_PRODUCTION === "true" ? "https://app.midtrans.com" : "https://app.sandbox.midtrans.com";

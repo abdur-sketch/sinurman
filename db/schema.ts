@@ -16,6 +16,7 @@ export const students = sqliteTable("students", {
   room: text("room").notNull(),
   guardianName: text("guardian_name").notNull(),
   guardianPhone: text("guardian_phone").notNull(),
+  guardianEmail: text("guardian_email").notNull().default(""),
   status: text("status").notNull().default("Aktif"),
   createdAt: text("created_at").notNull(),
 });
@@ -175,6 +176,18 @@ export const bills = sqliteTable("bills", {
   status: text("status").notNull(),
   paymentUrl: text("payment_url").notNull(),
   createdAt: text("created_at").notNull(),
+});
+
+export const guardianMessages = sqliteTable("guardian_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  senderEmail: text("sender_email").notNull(),
+  subject: text("subject").notNull(),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("Baru"),
+  reply: text("reply").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  repliedAt: text("replied_at").notNull().default(""),
 });
 
 export const auditLogs = sqliteTable("audit_logs", {

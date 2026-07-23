@@ -22,6 +22,13 @@
       "when": 1784791127083,
       "tag": "0002_lively_arclight",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784792136487,
+      "tag": "0003_new_sprite",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@ import { canWrite, database, ensureUser } from "../_lib";
 const resourceConfig = {
   students: {
     table: "students",
-    columns: ["name", "nis", "class_name", "room", "guardian_name", "guardian_phone", "status", "created_at"],
+    columns: ["name", "nis", "class_name", "room", "guardian_name", "guardian_phone", "guardian_email", "status", "created_at"],
     required: ["name", "nis", "class_name", "room", "guardian_name", "guardian_phone"],
   },
   tahfidz: {

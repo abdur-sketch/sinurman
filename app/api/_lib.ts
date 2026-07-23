@@ -56,16 +56,16 @@ export async function seedIfNeeded() {
   const count = await db.prepare("SELECT COUNT(*) AS total FROM students").first<{ total: number }>();
   const now = new Date().toISOString();
   if (Number(count?.total ?? 0) === 0) await db.batch([
-    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("Muhammad Fikri", "SN-240181", "VIII A", "Ibnu Sina 03", "Ahmad Hidayat", "6281234567801", "Aktif", now),
-    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("Ahmad Fauzan", "SN-240182", "VIII A", "Ibnu Sina 03", "Siti Rahmah", "6281234567802", "Aktif", now),
-    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("Rizky Maulana", "SN-240194", "VIII B", "Al-Farabi 02", "Hendra Maulana", "6281234567803", "Aktif", now),
-    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("Nabil Hidayat", "SN-240207", "VII C", "Al-Khawarizmi 01", "Nur Hidayat", "6281234567804", "Izin", now),
-    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("Faris Abdullah", "SN-240212", "IX A", "Ibnu Khaldun 02", "Abdullah Karim", "6281234567805", "Aktif", now),
+    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Muhammad Fikri", "SN-240181", "VIII A", "Ibnu Sina 03", "Ahmad Hidayat", "6281234567801", "wali.fikri@sinurman.id", "Aktif", now),
+    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Ahmad Fauzan", "SN-240182", "VIII A", "Ibnu Sina 03", "Siti Rahmah", "6281234567802", "wali.fauzan@sinurman.id", "Aktif", now),
+    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Rizky Maulana", "SN-240194", "VIII B", "Al-Farabi 02", "Hendra Maulana", "6281234567803", "wali.rizky@sinurman.id", "Aktif", now),
+    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Nabil Hidayat", "SN-240207", "VII C", "Al-Khawarizmi 01", "Nur Hidayat", "6281234567804", "wali.nabil@sinurman.id", "Izin", now),
+    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Faris Abdullah", "SN-240212", "IX A", "Ibnu Khaldun 02", "Abdullah Karim", "6281234567805", "wali.faris@sinurman.id", "Aktif", now),
   ]);
   if (Number(count?.total ?? 0) === 0) await db.batch([
     db.prepare("INSERT INTO tahfidz_records (student_id, surah, verses, amount, grade, teacher, recorded_at) VALUES (1, ?, ?, ?, ?, ?, ?)")

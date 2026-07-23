@@ -13,10 +13,10 @@ export async function POST(request: Request) {
     const sheet=workbook.Sheets[workbook.SheetNames[0]];
     const rows=XLSX.utils.sheet_to_json<Record<string,unknown>>(sheet);
     const valid=rows.filter(r=>r.nama&&r.nis&&r.kelas);
-    if(!valid.length) return Response.json({error:"Kolom wajib: nama, nis, kelas. Kolom opsional: kamar, nama_wali, whatsapp."},{status:400});
+    if(!valid.length) return Response.json({error:"Kolom wajib: nama, nis, kelas. Kolom opsional: kamar, nama_wali, whatsapp, email_wali."},{status:400});
     const now=new Date().toISOString();
-    const statements=valid.slice(0,500).map(r=>database().prepare("INSERT OR IGNORE INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(String(r.nama),String(r.nis),String(r.kelas),String(r.kamar||"-"),String(r.nama_wali||"-"),String(r.whatsapp||"-"),"Aktif",now));
+    const statements=valid.slice(0,500).map(r=>database().prepare("INSERT OR IGNORE INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(String(r.nama),String(r.nis),String(r.kelas),String(r.kamar||"-"),String(r.nama_wali||"-"),String(r.whatsapp||"-"),String(r.email_wali||"").toLocaleLowerCase("id-ID"),"Aktif",now));
     const results=await database().batch(statements);
     const imported=results.reduce((sum,r)=>sum+Number(r.meta.changes||0),0);
     await database().prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
