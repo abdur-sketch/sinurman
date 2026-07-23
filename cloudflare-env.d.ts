@@ -1,6 +1,7 @@
 declare namespace Cloudflare {
   interface Env {
     DB: D1Database;
+    FILES: R2Bucket;
     MIDTRANS_SERVER_KEY?: string;
     MIDTRANS_IS_PRODUCTION?: string;
     XENDIT_API_KEY?: string;

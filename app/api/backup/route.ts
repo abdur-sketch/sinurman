@@ -1,6 +1,6 @@
 import { database, ensureUser } from "../_lib";
 
-const tables=["users","students","tahfidz_records","mutabaah_records","health_records","transactions","character_reports","inventory_items","announcements","notification_logs","attendance_records","leave_permits","schedules","rooms","admissions","counseling_records","bills","guardian_messages","guardian_requests","audit_logs"];
+const tables=["users","students","tahfidz_records","mutabaah_records","health_records","transactions","character_reports","inventory_items","announcements","notification_logs","attendance_records","leave_permits","schedules","rooms","admissions","admission_documents","counseling_records","bills","guardian_messages","guardian_requests","audit_logs"];
 
 export async function GET(request:Request) {
   const user=await ensureUser(request);

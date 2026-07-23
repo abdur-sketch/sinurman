@@ -25,6 +25,7 @@ export async function GET(request: Request) {
       schedules,
       rooms,
       admissions,
+      admissionDocuments,
       counseling,
       bills,
       users,
@@ -72,8 +73,11 @@ export async function GET(request: Request) {
         ? owned("SELECT * FROM rooms WHERE name IN (SELECT room FROM students WHERE lower(guardian_email)=?) ORDER BY name")
         : all("SELECT * FROM rooms ORDER BY name"),
       guardian
-        ? all("SELECT * FROM admissions WHERE 1=0")
+        ? owned("SELECT * FROM admissions WHERE lower(applicant_email)=? ORDER BY id DESC")
         : all("SELECT * FROM admissions ORDER BY id DESC"),
+      guardian
+        ? owned("SELECT d.* FROM admission_documents d JOIN admissions a ON a.id=d.admission_id WHERE lower(a.applicant_email)=? ORDER BY d.id DESC")
+        : all("SELECT * FROM admission_documents ORDER BY id DESC"),
       guardian
         ? all("SELECT c.*, s.name AS student_name FROM counseling_records c JOIN students s ON s.id=c.student_id WHERE 1=0")
         : all("SELECT c.*, s.name AS student_name FROM counseling_records c JOIN students s ON s.id=c.student_id ORDER BY c.id DESC LIMIT 100"),
@@ -110,6 +114,7 @@ export async function GET(request: Request) {
       schedules: schedules.results,
       rooms: rooms.results,
       admissions: admissions.results,
+      admissionDocuments: admissionDocuments.results,
       counseling: counseling.results,
       bills: bills.results,
       users: users.results,

@@ -89,3 +89,43 @@ test("logo dan tombol bantuan sidebar memiliki aksi", async () => {
   assert.match(page, /className="sidebar-help"[\s\S]*setShowHelp\(true\)/);
   assert.match(page, /PUSAT BANTUAN SINURMAN/);
 });
+
+test("PPDB online menyediakan formulir dan pelacakan status untuk wali", async () => {
+  const [page, bootstrap] = await Promise.all([
+    file("app/page.tsx"),
+    file("app/api/bootstrap/route.ts"),
+  ]);
+  assert.match(page, /PPDB ONLINE 2026\/2027/);
+  assert.match(page, /Kirim Pendaftaran/);
+  assert.match(page, /Kelola Dokumen/);
+  assert.match(page, /Catatan verifikator/);
+  assert.match(page, /new Set<PageKey>\(\["penerimaan","portalwali"\]\)/);
+  assert.match(bootstrap, /lower\(applicant_email\)=\?/);
+  assert.match(bootstrap, /admissionDocuments/);
+});
+
+test("unggah dokumen PPDB membatasi tipe, ukuran, dan kepemilikan", async () => {
+  const [documents, hosting, migration] = await Promise.all([
+    file("app/api/admissions/documents/route.ts"),
+    file(".openai/hosting.json"),
+    file("drizzle/0005_smart_drax.sql"),
+  ]);
+  assert.match(documents, /application\/pdf/);
+  assert.match(documents, /5 \* 1024 \* 1024/);
+  assert.match(documents, /applicant_email\.toLowerCase\(\) !== email\.toLowerCase\(\)/);
+  assert.match(documents, /env\.FILES\.put/);
+  assert.match(hosting, /"r2": "FILES"/);
+  assert.match(migration, /CREATE TABLE `admission_documents`/);
+});
+
+test("verifikasi PPDB hanya dapat dilakukan admin", async () => {
+  const [admissions, documents] = await Promise.all([
+    file("app/api/admissions/route.ts"),
+    file("app/api/admissions/documents/route.ts"),
+  ]);
+  assert.match(admissions, /user\.role !== "Admin"/);
+  assert.match(admissions, /Perlu Perbaikan/);
+  assert.match(admissions, /sendWhatsappNotification/);
+  assert.match(documents, /Hanya admin yang dapat memverifikasi dokumen/);
+  assert.match(documents, /status === "Ditolak"/);
+});

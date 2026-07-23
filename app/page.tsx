@@ -21,6 +21,7 @@ type AppData = {
   schedules: Row[];
   rooms: Row[];
   admissions: Row[];
+  admissionDocuments: Row[];
   counseling: Row[];
   bills: Row[];
   users: Row[];
@@ -41,7 +42,7 @@ type SearchResult = {
 const emptyData: AppData = {
   students: [], tahfidz: [], mutabaah: [], health: [], transactions: [], characters: [],
   inventory: [], announcements: [], notifications: [],
-  attendance: [], permits: [], schedules: [], rooms: [], admissions: [],
+  attendance: [], permits: [], schedules: [], rooms: [], admissions: [], admissionDocuments: [],
   counseling: [], bills: [], users: [], audit: [], guardianMessages: [], guardianRequests: [],
 };
 type PageKey =
@@ -160,6 +161,10 @@ function Progress({ value, tone = "blue" }: { value: number; tone?: string }) {
 
 function Status({ children, tone = "green" }: { children: React.ReactNode; tone?: string }) {
   return <span className={`status ${tone}`}><i />{children}</span>;
+}
+
+function Metric({ title, value, icon, tone }: { title:string; value:number|string; icon:string; tone:string }) {
+  return <article className="metric-card"><MiniIcon tone={tone}>{icon}</MiniIcon><div><span>{title}</span><strong>{value}</strong><small>Data PPDB terkini</small></div></article>;
 }
 
 function Overview({ data }: { data: AppData }) {
@@ -370,8 +375,125 @@ function SchedulePage({ data, edit, remove }: { data:AppData; edit:(r:Resource,r
   <article className="card data-card"><header className="card-header"><div><h3>Kamar & Hunian</h3><p>Kapasitas dan pembina asrama</p></div><button className="primary-button" onClick={()=>edit("rooms")}>+ Kamar</button></header><div className="room-grid">{data.rooms.map(x=><div className="room-card" key={String(x.id)}><span>◇</span><div><strong>{x.name}</strong><small>{x.supervisor}</small><p>Kapasitas {x.capacity} santri</p></div><Status>{x.status}</Status><DataActions row={x} onEdit={r=>edit("rooms",r)} onDelete={r=>remove("rooms",r)} /></div>)}</div></article></section></>;
 }
 
-function AdmissionsPage({ rows, edit, remove }: { rows:Row[]; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
-  return <><section className="summary-banner admission-banner"><div><span>PPDB 2026/2027</span><strong>{rows.length} Pendaftar</strong><p>Alur pendaftaran, verifikasi, tes, dan kelulusan dalam satu tempat.</p></div><button className="light-button" onClick={()=>edit("admissions")}>+ Pendaftar Baru</button></section><section className="card data-card"><header className="card-header"><div><h3>Daftar Calon Santri</h3><p>Penerimaan santri baru</p></div><button className="primary-button" onClick={()=>edit("admissions")}>Tambah Pendaftar</button></header><div className="table-wrap"><table><thead><tr><th>No. Pendaftaran</th><th>Nama</th><th>Asal Sekolah</th><th>Nilai</th><th>Tahap</th><th /></tr></thead><tbody>{rows.map(x=><tr key={String(x.id)}><td className="muted">{x.registration_no}</td><td><strong>{x.name}</strong><small className="cell-note">{x.guardian_name} · {x.guardian_phone}</small></td><td>{x.previous_school}</td><td>{x.score}</td><td><Status tone={x.status==="Lulus"?"green":"blue"}>{x.status}</Status></td><td><DataActions row={x} onEdit={r=>edit("admissions",r)} onDelete={r=>remove("admissions",r)} /></td></tr>)}</tbody></table></div></section></>;
+const ppdbDocumentTypes = ["Kartu Keluarga","Akta Kelahiran","Rapor Terakhir","Pas Foto","KIP / SKTM"];
+const ppdbStatuses = ["Pendaftaran","Verifikasi Dokumen","Perlu Perbaikan","Terverifikasi","Tes","Lulus","Tidak Lulus"];
+
+function ppdbTone(status: unknown) {
+  if (["Lulus","Terverifikasi","Valid"].includes(String(status))) return "green";
+  if (["Perlu Perbaikan","Ditolak","Tidak Lulus"].includes(String(status))) return "red";
+  if (["Pendaftaran","Menunggu"].includes(String(status))) return "amber";
+  return "blue";
+}
+
+function PpdbApplicationModal({ onClose, onSaved, notify }: { onClose:()=>void; onSaved:()=>Promise<void>; notify:(message:string)=>void }) {
+  const [form,setForm]=useState({name:"",nisn:"",birth_place:"",birth_date:"",gender:"Laki-laki",desired_level:"SMP",guardian_name:"",guardian_phone:"",previous_school:"",address:""});
+  const [saving,setSaving]=useState(false);
+  const [error,setError]=useState("");
+  async function submit(event:React.FormEvent) {
+    event.preventDefault(); setSaving(true); setError("");
+    try {
+      const response=await fetch("/api/admissions",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(form)});
+      const result=await response.json() as {error?:string;message?:string;registrationNo?:string};
+      if(!response.ok) throw new Error(result.error||"Pendaftaran gagal disimpan.");
+      await onSaved(); notify(`${result.message} Nomor: ${result.registrationNo}`); onClose();
+    } catch(e) { setError(e instanceof Error?e.message:"Pendaftaran gagal disimpan."); setSaving(false); }
+  }
+  const field=(key:keyof typeof form,value:string)=>setForm(current=>({...current,[key]:value}));
+  return <div className="modal-backdrop" onMouseDown={onClose}><form className="record-modal ppdb-form-modal" onSubmit={submit} onMouseDown={e=>e.stopPropagation()}>
+    <button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">PPDB ONLINE 2026/2027</span><h2>Formulir calon santri</h2><p>Nomor pendaftaran dibuat otomatis. Pastikan data sesuai dokumen resmi.</p>
+    <div className="form-grid">
+      <label>Nama lengkap<input required value={form.name} onChange={e=>field("name",e.target.value)}/></label>
+      <label>NISN<input required inputMode="numeric" value={form.nisn} onChange={e=>field("nisn",e.target.value)}/></label>
+      <label>Tempat lahir<input required value={form.birth_place} onChange={e=>field("birth_place",e.target.value)}/></label>
+      <label>Tanggal lahir<input required type="date" value={form.birth_date} onChange={e=>field("birth_date",e.target.value)}/></label>
+      <label>Jenis kelamin<select required value={form.gender} onChange={e=>field("gender",e.target.value)}><option>Laki-laki</option><option>Perempuan</option></select></label>
+      <label>Jenjang tujuan<select required value={form.desired_level} onChange={e=>field("desired_level",e.target.value)}><option>SMP</option><option>SMK</option></select></label>
+      <label>Asal sekolah<input required value={form.previous_school} onChange={e=>field("previous_school",e.target.value)}/></label>
+      <label>Nama wali<input required value={form.guardian_name} onChange={e=>field("guardian_name",e.target.value)}/></label>
+      <label>WhatsApp wali<input required type="tel" placeholder="08xxxxxxxxxx" value={form.guardian_phone} onChange={e=>field("guardian_phone",e.target.value)}/></label>
+      <label className="wide">Alamat lengkap<textarea required value={form.address} onChange={e=>field("address",e.target.value)}/></label>
+    </div>
+    {error&&<div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button className="primary-button" disabled={saving}>{saving?"Menyimpan…":"Kirim Pendaftaran →"}</button></div>
+  </form></div>;
+}
+
+function PpdbDocumentsModal({ admission, documents, role, onClose, onUpdated, notify }: { admission:Row; documents:Row[]; role:Role; onClose:()=>void; onUpdated:()=>Promise<void>; notify:(message:string)=>void }) {
+  const [uploading,setUploading]=useState("");
+  const [error,setError]=useState("");
+  const relevant=documents.filter(x=>Number(x.admission_id)===Number(admission.id));
+  async function upload(docType:string,file:File) {
+    setUploading(docType); setError("");
+    try {
+      const body=new FormData(); body.set("admissionId",String(admission.id)); body.set("docType",docType); body.set("file",file);
+      const response=await fetch("/api/admissions/documents",{method:"POST",body});
+      const result=await response.json() as {error?:string;message?:string};
+      if(!response.ok) throw new Error(result.error||"Unggah dokumen gagal.");
+      await onUpdated(); notify(result.message||"Dokumen berhasil diunggah.");
+    } catch(e) { setError(e instanceof Error?e.message:"Unggah dokumen gagal."); }
+    finally { setUploading(""); }
+  }
+  async function verify(document:Row,status:"Valid"|"Ditolak") {
+    const note=status==="Ditolak"?window.prompt("Tuliskan alasan penolakan dokumen:","Dokumen kurang jelas atau tidak sesuai."):"";
+    if(status==="Ditolak"&&!note?.trim()) return;
+    const response=await fetch("/api/admissions/documents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:document.id,status,verification_note:note||""})});
+    const result=await response.json() as {error?:string;message?:string};
+    if(!response.ok){notify(result.error||"Verifikasi dokumen gagal.");return;}
+    await onUpdated(); notify(result.message||"Status dokumen diperbarui.");
+  }
+  async function remove(document:Row) {
+    if(!window.confirm(`Hapus ${document.file_name}?`)) return;
+    const response=await fetch(`/api/admissions/documents?id=${document.id}`,{method:"DELETE"});
+    const result=await response.json() as {error?:string;message?:string};
+    if(!response.ok){notify(result.error||"Dokumen gagal dihapus.");return;}
+    await onUpdated(); notify(result.message||"Dokumen dihapus.");
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal ppdb-documents-modal" onMouseDown={e=>e.stopPropagation()}>
+    <button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">BERKAS PPDB</span><h2>{admission.name}</h2><p>{admission.registration_no} · PDF/JPG/PNG, maksimal 5 MB per berkas.</p>
+    <div className="document-checklist">{ppdbDocumentTypes.map(docType=>{
+      const entries=relevant.filter(x=>x.doc_type===docType);
+      const latest=entries[0];
+      return <article key={docType}><div className="document-main"><span className={`document-icon ${latest?"ready":""}`}>{latest?"✓":"＋"}</span><div><strong>{docType}{docType==="KIP / SKTM"&&<em>Opsional</em>}</strong>{latest?<><a href={`/api/admissions/documents?id=${latest.id}`} target="_blank" rel="noreferrer">{latest.file_name}</a><small>{(Number(latest.size_bytes)/1024/1024).toFixed(2)} MB · {latest.uploaded_at?new Date(String(latest.uploaded_at)).toLocaleDateString("id-ID"):""}</small>{latest.verification_note&&<p>{latest.verification_note}</p>}</>:<small>Belum ada dokumen</small>}</div></div><div className="document-actions">{latest&&<Status tone={ppdbTone(latest.status)}>{latest.status}</Status>}{role==="Admin"&&latest?<><button onClick={()=>void verify(latest,"Valid")}>Valid</button><button className="danger-link" onClick={()=>void verify(latest,"Ditolak")}>Tolak</button></>:<label className="upload-button">{uploading===docType?"Mengunggah…":latest?.status==="Ditolak"?"Unggah Ulang":"Pilih Berkas"}<input type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={!!uploading} onChange={e=>e.target.files?.[0]&&void upload(docType,e.target.files[0])}/></label>}{latest&&latest.status!=="Valid"&&<button className="danger-link" onClick={()=>void remove(latest)}>Hapus</button>}</div></article>;
+    })}</div>
+    {error&&<div className="form-error">{error}</div>}<div className="modal-actions"><button className="primary-button" onClick={onClose}>Selesai</button></div>
+  </div></div>;
+}
+
+function PpdbVerifyModal({ admission, onClose, onUpdated, notify }: { admission:Row; onClose:()=>void; onUpdated:()=>Promise<void>; notify:(message:string)=>void }) {
+  const [status,setStatus]=useState(String(admission.status||"Verifikasi Dokumen"));
+  const [score,setScore]=useState(String(admission.score||0));
+  const [note,setNote]=useState(String(admission.verification_note||""));
+  const [saving,setSaving]=useState(false);
+  async function save() {
+    setSaving(true);
+    const response=await fetch("/api/admissions",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:admission.id,status,score:Number(score),verification_note:note})});
+    const result=await response.json() as {error?:string;message?:string};
+    if(!response.ok){notify(result.error||"Verifikasi gagal.");setSaving(false);return;}
+    await onUpdated(); notify(result.message||"Status pendaftaran diperbarui."); onClose();
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal ppdb-verify-modal" onMouseDown={e=>e.stopPropagation()}>
+    <button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">VERIFIKASI ADMIN</span><h2>{admission.name}</h2><p>{admission.registration_no} · Perubahan status akan tercatat dan disiapkan sebagai notifikasi WhatsApp.</p>
+    <div className="form-grid"><label>Status<select value={status} onChange={e=>setStatus(e.target.value)}>{ppdbStatuses.map(x=><option key={x}>{x}</option>)}</select></label><label>Nilai tes<input type="number" min="0" max="100" value={score} onChange={e=>setScore(e.target.value)}/></label><label className="wide">Catatan verifikator<textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Catatan yang dapat dilihat calon wali santri"/></label></div>
+    <div className="modal-actions"><button className="secondary-button" onClick={onClose}>Batal</button><button className="primary-button" disabled={saving} onClick={()=>void save()}>{saving?"Menyimpan…":"Simpan Verifikasi"}</button></div>
+  </div></div>;
+}
+
+function AdmissionsPage({ data, role, reload, notify, remove }: { data:AppData; role:Role; reload:()=>Promise<void>; notify:(message:string)=>void; remove:(r:Resource,row:Row)=>void }) {
+  const [showForm,setShowForm]=useState(false);
+  const [documentsFor,setDocumentsFor]=useState<Row|null>(null);
+  const [verifyFor,setVerifyFor]=useState<Row|null>(null);
+  const rows=data.admissions;
+  const verified=rows.filter(x=>["Terverifikasi","Tes","Lulus"].includes(String(x.status))).length;
+  const needsFix=rows.filter(x=>x.status==="Perlu Perbaikan").length;
+  if(role==="Wali Santri") return <><section className="summary-banner admission-banner"><div><span>PPDB ONLINE 2026/2027</span><strong>{rows.length?`${rows.length} Pendaftaran`:"Daftar Sekarang"}</strong><p>Isi formulir, unggah dokumen, dan pantau hasil verifikasi secara online.</p></div><button className="light-button" onClick={()=>setShowForm(true)}>+ Formulir Baru</button></section>
+    <section className="ppdb-steps">{["Isi Formulir","Unggah Dokumen","Verifikasi Admin","Tes & Kelulusan"].map((x,i)=><article className="card" key={x}><span>{i+1}</span><strong>{x}</strong><small>{i===0?"Data calon santri":i===1?"PDF/JPG/PNG maks. 5 MB":i===2?"Pantau catatan perbaikan":"Hasil diumumkan di portal"}</small></article>)}</section>
+    <section className="ppdb-applications">{rows.map(row=>{const docs=data.admissionDocuments.filter(x=>Number(x.admission_id)===Number(row.id));const valid=docs.filter(x=>x.status==="Valid").length;return <article className="card ppdb-application-card" key={String(row.id)}><header><div><span>{row.registration_no}</span><h3>{row.name}</h3><p>{row.desired_level} · {row.previous_school}</p></div><Status tone={ppdbTone(row.status)}>{row.status}</Status></header><div className="ppdb-progress"><span><i style={{width:`${Math.min(100,Math.max(15,ppdbStatuses.indexOf(String(row.status))*18+15))}%`}}/></span><small>{valid} dokumen valid · {docs.length} berkas diunggah</small></div>{row.verification_note&&<div className="verification-note"><strong>Catatan verifikator</strong><p>{row.verification_note}</p></div>}<footer><button className="primary-button" onClick={()=>setDocumentsFor(row)}>Kelola Dokumen</button><small>Dibuat {new Date(String(row.created_at)).toLocaleDateString("id-ID")}</small></footer></article>})}{!rows.length&&<article className="card ppdb-empty"><span>＋</span><h3>Belum ada pendaftaran</h3><p>Mulai pendaftaran calon santri SMP atau SMK Nurul Iman.</p><button className="primary-button" onClick={()=>setShowForm(true)}>Isi Formulir PPDB</button></article>}</section>
+    {showForm&&<PpdbApplicationModal onClose={()=>setShowForm(false)} onSaved={reload} notify={notify}/>}
+    {documentsFor&&<PpdbDocumentsModal admission={documentsFor} documents={data.admissionDocuments} role={role} onClose={()=>setDocumentsFor(null)} onUpdated={reload} notify={notify}/>}</>;
+
+  return <><section className="summary-banner admission-banner"><div><span>PPDB 2026/2027</span><strong>{rows.length} Pendaftar</strong><p>Formulir, berkas, verifikasi, tes, dan kelulusan dalam satu tempat.</p></div><button className="light-button" onClick={()=>setShowForm(true)}>+ Pendaftar Baru</button></section><section className="stats-grid three ppdb-stats"><Metric title="Terverifikasi" value={verified} icon="✓" tone="green"/><Metric title="Perlu Perbaikan" value={needsFix} icon="!" tone="red"/><Metric title="Menunggu Proses" value={Math.max(0,rows.length-verified-needsFix)} icon="⌛" tone="blue"/></section><section className="card data-card"><header className="card-header"><div><h3>Daftar Calon Santri</h3><p>Penerimaan santri baru dan status pemeriksaan dokumen</p></div><button className="primary-button" onClick={()=>setShowForm(true)}>Tambah Pendaftar</button></header><div className="table-wrap"><table><thead><tr><th>No. Pendaftaran</th><th>Calon Santri</th><th>Jenjang</th><th>Dokumen</th><th>Nilai</th><th>Tahap</th><th /></tr></thead><tbody>{rows.map(x=>{const docs=data.admissionDocuments.filter(d=>Number(d.admission_id)===Number(x.id));return <tr key={String(x.id)}><td className="muted">{x.registration_no}</td><td><strong>{x.name}</strong><small className="cell-note">{x.guardian_name} · {x.guardian_phone}</small></td><td>{x.desired_level||"—"}<small className="cell-note">{x.previous_school}</small></td><td><button className="text-button" onClick={()=>setDocumentsFor(x)}>{docs.length} berkas · Periksa</button></td><td>{x.score||0}</td><td><Status tone={ppdbTone(x.status)}>{x.status}</Status></td><td><div className="row-actions"><button onClick={()=>setVerifyFor(x)} aria-label="Verifikasi">✓</button><button onClick={()=>setDocumentsFor(x)} aria-label="Dokumen">▤</button><button onClick={()=>remove("admissions",x)} aria-label="Hapus">×</button></div></td></tr>})}{!rows.length&&<tr><td colSpan={7} className="muted">Belum ada pendaftar.</td></tr>}</tbody></table></div></section>
+  {showForm&&<PpdbApplicationModal onClose={()=>setShowForm(false)} onSaved={reload} notify={notify}/>}
+  {documentsFor&&<PpdbDocumentsModal admission={documentsFor} documents={data.admissionDocuments} role={role} onClose={()=>setDocumentsFor(null)} onUpdated={reload} notify={notify}/>}
+  {verifyFor&&<PpdbVerifyModal admission={verifyFor} onClose={()=>setVerifyFor(null)} onUpdated={reload} notify={notify}/>}</>;
 }
 
 function CounselingPage({ rows, edit, remove }: { rows:Row[]; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
@@ -580,7 +702,7 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
     {key:"name",label:"Nama kamar"},{key:"capacity",label:"Kapasitas",type:"number"},{key:"supervisor",label:"Musyrif/Pembina"},{key:"status",label:"Status",options:["Aktif","Perawatan","Penuh"]},
   ],
   admissions: [
-    {key:"registration_no",label:"Nomor pendaftaran"},{key:"name",label:"Nama calon santri"},{key:"guardian_name",label:"Nama wali"},{key:"guardian_phone",label:"WhatsApp wali",type:"tel"},{key:"previous_school",label:"Asal sekolah"},{key:"status",label:"Tahap",options:["Pendaftaran","Verifikasi","Tes","Lulus","Tidak Lulus"]},{key:"score",label:"Nilai tes",type:"number"},
+    {key:"registration_no",label:"Nomor pendaftaran"},{key:"name",label:"Nama calon santri"},{key:"guardian_name",label:"Nama wali"},{key:"guardian_phone",label:"WhatsApp wali",type:"tel"},{key:"previous_school",label:"Asal sekolah"},{key:"status",label:"Tahap",options:ppdbStatuses},{key:"score",label:"Nilai tes",type:"number"},
   ],
   counseling: [
     {key:"student_id",label:"Santri",type:"student"},{key:"type",label:"Jenis",options:["Konseling","Pembinaan","Pelanggaran","Prestasi"]},{key:"category",label:"Kategori"},{key:"description",label:"Catatan kejadian",type:"textarea"},{key:"points",label:"Poin",type:"number"},{key:"status",label:"Status",options:["Baru","Ditindaklanjuti","Selesai"]},
@@ -699,7 +821,7 @@ export default function Home() {
   const title = pageTitles[page];
   const visibleNavGroups = useMemo(() => {
     const allowed = role === "Wali Santri"
-      ? new Set<PageKey>(["portalwali"])
+      ? new Set<PageKey>(["penerimaan","portalwali"])
       : role === "Ustadz"
         ? new Set<PageKey>(["dashboard","santri","tahfidz","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
         : null;
@@ -767,7 +889,7 @@ export default function Home() {
       ...data.counseling.map(row => result(`counseling:${row.id}`, row.student_name, `${row.category || "Konseling"} · ${row.recorded_at || ""}`, "konseling", "♧", `${row.description} pembinaan pelanggaran`)),
     ];
     const allowed=new Set(visibleNavGroups.flatMap(group=>group.items.map(item=>item.key)));
-    return items.filter(item=>allowed.has(item.page)||role==="Wali Santri").map(item=>role==="Wali Santri"?{...item,page:"portalwali" as PageKey}:item);
+    return items.filter(item=>allowed.has(item.page));
   }, [data, visibleNavGroups, role]);
 
   const searchResults = useMemo(() => {
@@ -821,7 +943,7 @@ export default function Home() {
       case "laporan": return <ReportsPage />;
       case "absensi": return <AttendancePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} reload={loadData} notify={notify} />;
       case "jadwal": return <SchedulePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
-      case "penerimaan": return <AdmissionsPage rows={data.admissions} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
+      case "penerimaan": return <AdmissionsPage data={data} role={role} reload={loadData} notify={notify} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "konseling": return <CounselingPage rows={data.counseling} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "pengguna": return <UsersPage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} reply={row=>void replyGuardianMessage(row)} />;
       case "integrasi": return <IntegrationsPage data={data} onImported={loadData} notify={notify} />;
@@ -940,7 +1062,7 @@ export default function Home() {
         </main>
       </div>
       <nav className={`mobile-nav ${role==="Wali Santri"?"guardian-mobile-nav":""}`}>
-        {(role==="Wali Santri"?[{key:"portalwali" as PageKey,icon:"♙",label:"Portal Wali"}]:[navGroups[0].items[0],navGroups[1].items[0],navGroups[1].items[1],navGroups[2].items[1]]).map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span></button>)}
+        {(role==="Wali Santri"?[{key:"portalwali" as PageKey,icon:"♙",label:"Portal Wali"},{key:"penerimaan" as PageKey,icon:"+",label:"PPDB Online"}]:[navGroups[0].items[0],navGroups[1].items[0],navGroups[1].items[1],navGroups[2].items[1]]).map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span></button>)}
         <button onClick={()=>setSidebarOpen(true)}><i>•••</i><span>Lainnya</span></button>
       </nav>
       {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} onClose={()=>setEditor(null)} onSave={saveRecord} />}

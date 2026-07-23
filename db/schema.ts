@@ -146,12 +146,37 @@ export const admissions = sqliteTable("admissions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   registrationNo: text("registration_no").notNull().unique(),
   name: text("name").notNull(),
+  applicantEmail: text("applicant_email").notNull().default(""),
+  nisn: text("nisn").notNull().default(""),
+  birthPlace: text("birth_place").notNull().default(""),
+  birthDate: text("birth_date").notNull().default(""),
+  gender: text("gender").notNull().default(""),
+  desiredLevel: text("desired_level").notNull().default("SMP"),
   guardianName: text("guardian_name").notNull(),
   guardianPhone: text("guardian_phone").notNull(),
   previousSchool: text("previous_school").notNull(),
+  address: text("address").notNull().default(""),
   status: text("status").notNull(),
   score: integer("score").notNull().default(0),
+  verificationNote: text("verification_note").notNull().default(""),
+  verifiedBy: text("verified_by").notNull().default(""),
+  verifiedAt: text("verified_at").notNull().default(""),
   createdAt: text("created_at").notNull(),
+});
+
+export const admissionDocuments = sqliteTable("admission_documents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  admissionId: integer("admission_id").notNull().references(() => admissions.id),
+  docType: text("doc_type").notNull(),
+  fileName: text("file_name").notNull(),
+  objectKey: text("object_key").notNull().unique(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  status: text("status").notNull().default("Menunggu"),
+  verificationNote: text("verification_note").notNull().default(""),
+  verifiedBy: text("verified_by").notNull().default(""),
+  verifiedAt: text("verified_at").notNull().default(""),
+  uploadedAt: text("uploaded_at").notNull(),
 });
 
 export const counselingRecords = sqliteTable("counseling_records", {
