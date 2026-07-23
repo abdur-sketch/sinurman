@@ -7,6 +7,73 @@ export function database() {
   return env.DB;
 }
 
+let schemaReady: Promise<void> | null = null;
+
+export function ensureDatabaseSchema() {
+  if (schemaReady) return schemaReady;
+  const db = database();
+  schemaReady = (async () => {
+    const definitions = [
+      "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,role TEXT NOT NULL,created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,nis TEXT NOT NULL UNIQUE,class_name TEXT NOT NULL,room TEXT NOT NULL,guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,guardian_email TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS tahfidz_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,surah TEXT NOT NULL,verses TEXT NOT NULL,amount INTEGER NOT NULL,grade TEXT NOT NULL,teacher TEXT NOT NULL,recorded_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS mutabaah_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,activity TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,record_date TEXT NOT NULL,recorded_by TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS health_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,complaint TEXT NOT NULL,diagnosis TEXT NOT NULL,treatment TEXT NOT NULL,status TEXT NOT NULL,recorded_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,type TEXT NOT NULL,category TEXT NOT NULL,amount INTEGER NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL,recorded_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS character_reports (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,category TEXT NOT NULL,score INTEGER NOT NULL,note TEXT NOT NULL,semester TEXT NOT NULL,recorded_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS inventory_items (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,location TEXT NOT NULL,quantity INTEGER NOT NULL,unit TEXT NOT NULL,condition TEXT NOT NULL,updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL,content TEXT NOT NULL,audience TEXT NOT NULL,published_at TEXT NOT NULL,author TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS notification_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER,channel TEXT NOT NULL,recipient TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL,sent_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS attendance_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,record_date TEXT NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL,recorded_by TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS leave_permits (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,start_date TEXT NOT NULL,end_date TEXT NOT NULL,reason TEXT NOT NULL,status TEXT NOT NULL,approved_by TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY AUTOINCREMENT,education_level TEXT NOT NULL DEFAULT 'SMP',class_name TEXT NOT NULL DEFAULT 'VII A',title TEXT NOT NULL,category TEXT NOT NULL,teacher TEXT NOT NULL,location TEXT NOT NULL,day_name TEXT NOT NULL,start_time TEXT NOT NULL,end_time TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,capacity INTEGER NOT NULL,supervisor TEXT NOT NULL,status TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS admissions (id INTEGER PRIMARY KEY AUTOINCREMENT,registration_no TEXT NOT NULL UNIQUE,name TEXT NOT NULL,applicant_email TEXT NOT NULL DEFAULT '',nisn TEXT NOT NULL DEFAULT '',birth_place TEXT NOT NULL DEFAULT '',birth_date TEXT NOT NULL DEFAULT '',gender TEXT NOT NULL DEFAULT '',desired_level TEXT NOT NULL DEFAULT 'SMP',guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,previous_school TEXT NOT NULL,address TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,score INTEGER NOT NULL DEFAULT 0,verification_note TEXT NOT NULL DEFAULT '',verified_by TEXT NOT NULL DEFAULT '',verified_at TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS admission_documents (id INTEGER PRIMARY KEY AUTOINCREMENT,admission_id INTEGER NOT NULL,doc_type TEXT NOT NULL,file_name TEXT NOT NULL,object_key TEXT NOT NULL UNIQUE,content_type TEXT NOT NULL,size_bytes INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'Menunggu',verification_note TEXT NOT NULL DEFAULT '',verified_by TEXT NOT NULL DEFAULT '',verified_at TEXT NOT NULL DEFAULT '',uploaded_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS counseling_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,type TEXT NOT NULL,category TEXT NOT NULL,description TEXT NOT NULL,points INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL,counselor TEXT NOT NULL,recorded_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS bills (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,invoice_no TEXT NOT NULL UNIQUE,category TEXT NOT NULL,amount INTEGER NOT NULL,due_date TEXT NOT NULL,status TEXT NOT NULL,payment_url TEXT NOT NULL,payment_method TEXT NOT NULL DEFAULT '',payment_reference TEXT NOT NULL DEFAULT '',paid_at TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS guardian_messages (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,sender_email TEXT NOT NULL,subject TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Baru',reply TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,replied_at TEXT NOT NULL DEFAULT '')",
+      "CREATE TABLE IF NOT EXISTS guardian_requests (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,requester_email TEXT NOT NULL,type TEXT NOT NULL,visit_date TEXT NOT NULL,start_time TEXT NOT NULL,end_time TEXT NOT NULL,purpose TEXT NOT NULL,visitor_name TEXT NOT NULL,visitor_phone TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Diajukan',qr_token TEXT NOT NULL UNIQUE,used_at TEXT NOT NULL DEFAULT '',approved_by TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,user_email TEXT NOT NULL,action TEXT NOT NULL,resource TEXT NOT NULL,record_id INTEGER,detail TEXT NOT NULL,created_at TEXT NOT NULL)",
+    ];
+    await db.batch(definitions.map((sql) => db.prepare(sql)));
+
+    const upgrades: Record<string, Record<string, string>> = {
+      students: { guardian_email: "TEXT NOT NULL DEFAULT ''" },
+      schedules: { education_level: "TEXT NOT NULL DEFAULT 'SMP'", class_name: "TEXT NOT NULL DEFAULT 'VII A'" },
+      bills: {
+        payment_method: "TEXT NOT NULL DEFAULT ''",
+        payment_reference: "TEXT NOT NULL DEFAULT ''",
+        paid_at: "TEXT NOT NULL DEFAULT ''",
+      },
+      admissions: {
+        applicant_email: "TEXT NOT NULL DEFAULT ''",
+        nisn: "TEXT NOT NULL DEFAULT ''",
+        birth_place: "TEXT NOT NULL DEFAULT ''",
+        birth_date: "TEXT NOT NULL DEFAULT ''",
+        gender: "TEXT NOT NULL DEFAULT ''",
+        desired_level: "TEXT NOT NULL DEFAULT 'SMP'",
+        address: "TEXT NOT NULL DEFAULT ''",
+        verification_note: "TEXT NOT NULL DEFAULT ''",
+        verified_by: "TEXT NOT NULL DEFAULT ''",
+        verified_at: "TEXT NOT NULL DEFAULT ''",
+      },
+    };
+    for (const [table, columns] of Object.entries(upgrades)) {
+      const info = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+      const existing = new Set(info.results.map((column) => column.name));
+      const missing = Object.entries(columns).filter(([name]) => !existing.has(name));
+      if (missing.length) {
+        await db.batch(missing.map(([name, definition]) => db.prepare(`ALTER TABLE ${table} ADD ${name} ${definition}`)));
+      }
+    }
+  })().catch((error) => {
+    schemaReady = null;
+    throw error;
+  });
+  return schemaReady;
+}
+
 export function currentIdentity(request: Request) {
   const email =
     request.headers.get("oai-authenticated-user-email") ||
@@ -21,6 +88,7 @@ export function currentIdentity(request: Request) {
 }
 
 export async function ensureUser(request: Request) {
+  await ensureDatabaseSchema();
   const db = database();
   const identity = currentIdentity(request);
   const existing = await db
@@ -52,6 +120,7 @@ export function canWrite(role: Role, resource: string) {
 }
 
 export async function seedIfNeeded() {
+  await ensureDatabaseSchema();
   const db = database();
   const count = await db.prepare("SELECT COUNT(*) AS total FROM students").first<{ total: number }>();
   const now = new Date().toISOString();

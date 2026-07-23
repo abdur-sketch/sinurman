@@ -821,7 +821,7 @@ export default function Home() {
   const title = pageTitles[page];
   const visibleNavGroups = useMemo(() => {
     const allowed = role === "Wali Santri"
-      ? new Set<PageKey>(["penerimaan","portalwali"])
+      ? new Set<PageKey>(["dashboard","penerimaan","portalwali"])
       : role === "Ustadz"
         ? new Set<PageKey>(["dashboard","santri","tahfidz","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
         : null;
@@ -837,7 +837,6 @@ export default function Home() {
       setData(result);
       if(result.user?.role) {
         setRole(result.user.role);
-        if(result.user.role==="Wali Santri") setPage("portalwali");
       }
     } catch (error) {
       setLoadError(error instanceof Error?error.message:"Data tidak dapat dimuat.");
@@ -988,7 +987,7 @@ export default function Home() {
   return (
     <div className={`app-shell ${dark ? "dark" : ""}`}>
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="brand"><button className="brand-home" aria-label="Kembali ke halaman utama" onClick={()=>selectPage(role==="Wali Santri"?"portalwali":"dashboard")}><span className="brand-mark">ن</span><span><strong>SINURMAN</strong><small>Nurul Iman</small></span></button><button className="close-sidebar" onClick={()=>setSidebarOpen(false)}>×</button></div>
+        <div className="brand"><button className="brand-home" aria-label="Kembali ke dashboard" onClick={()=>selectPage("dashboard")}><span className="brand-mark">ن</span><span><strong>SINURMAN</strong><small>Nurul Iman</small></span></button><button className="close-sidebar" onClick={()=>setSidebarOpen(false)}>×</button></div>
         <nav>{visibleNavGroups.map(group=><div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span>{item.key==="pengumuman"&&<b>3</b>}</button>)}</div>)}</nav>
         <button className="sidebar-help" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}><span>?</span><span><strong>Butuh bantuan?</strong><small>Buka pusat bantuan</small></span></button>
         <div className="sidebar-footer"><span>© 2026 SINURMAN</span><button onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}>Bantuan · v1.2</button></div>
@@ -1062,14 +1061,14 @@ export default function Home() {
         </main>
       </div>
       <nav className={`mobile-nav ${role==="Wali Santri"?"guardian-mobile-nav":""}`}>
-        {(role==="Wali Santri"?[{key:"portalwali" as PageKey,icon:"♙",label:"Portal Wali"},{key:"penerimaan" as PageKey,icon:"+",label:"PPDB Online"}]:[navGroups[0].items[0],navGroups[1].items[0],navGroups[1].items[1],navGroups[2].items[1]]).map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span></button>)}
+        {(role==="Wali Santri"?[{key:"dashboard" as PageKey,icon:"⌂",label:"Dashboard"},{key:"portalwali" as PageKey,icon:"♙",label:"Portal Wali"},{key:"penerimaan" as PageKey,icon:"+",label:"PPDB Online"}]:[navGroups[0].items[0],navGroups[1].items[0],navGroups[1].items[1],navGroups[2].items[1]]).map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span></button>)}
         <button onClick={()=>setSidebarOpen(true)}><i>•••</i><span>Lainnya</span></button>
       </nav>
       {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} onClose={()=>setEditor(null)} onSave={saveRecord} />}
       {cardStudent&&<StudentCardModal student={cardStudent} onClose={()=>setCardStudent(null)} />}
       {showNotification&&<NotificationModal students={data.students} onClose={()=>setShowNotification(false)} onSent={notify} />}
       {paymentBill&&<PaymentQrModal bill={paymentBill} onClose={()=>setPaymentBill(null)} onUpdated={loadData} notify={notify}/>}
-      {showLogin&&<LoginModal onClose={()=>setShowLogin(false)} onLogin={r=>{setRole(r);setShowLogin(false);if(r==="Wali Santri")setPage("portalwali");notify(`Mode tampilan ${r} aktif.`)}} />}
+      {showLogin&&<LoginModal onClose={()=>setShowLogin(false)} onLogin={r=>{setRole(r);setShowLogin(false);setPage("dashboard");notify(`Mode tampilan ${r} aktif.`)}} />}
       {showHelp&&<HelpModal role={role} onClose={()=>setShowHelp(false)} onNavigate={selectPage} onRefresh={async()=>{await loadData();notify("Data berhasil disinkronkan.");}}/>}
       {toast&&<div className="toast"><span>✓</span>{toast}</div>}
     </div>

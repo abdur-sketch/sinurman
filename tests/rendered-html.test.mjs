@@ -99,7 +99,7 @@ test("PPDB online menyediakan formulir dan pelacakan status untuk wali", async (
   assert.match(page, /Kirim Pendaftaran/);
   assert.match(page, /Kelola Dokumen/);
   assert.match(page, /Catatan verifikator/);
-  assert.match(page, /new Set<PageKey>\(\["penerimaan","portalwali"\]\)/);
+  assert.match(page, /new Set<PageKey>\(\["dashboard","penerimaan","portalwali"\]\)/);
   assert.match(bootstrap, /lower\(applicant_email\)=\?/);
   assert.match(bootstrap, /admissionDocuments/);
 });
@@ -128,4 +128,17 @@ test("verifikasi PPDB hanya dapat dilakukan admin", async () => {
   assert.match(admissions, /sendWhatsappNotification/);
   assert.match(documents, /Hanya admin yang dapat memverifikasi dokumen/);
   assert.match(documents, /status === "Ditolak"/);
+});
+
+test("dashboard menginisialisasi database dan dapat dibuka semua peran", async () => {
+  const [lib, page] = await Promise.all([
+    file("app/api/_lib.ts"),
+    file("app/page.tsx"),
+  ]);
+  assert.match(lib, /ensureDatabaseSchema/);
+  assert.match(lib, /CREATE TABLE IF NOT EXISTS students/);
+  assert.match(lib, /PRAGMA table_info/);
+  assert.match(page, /new Set<PageKey>\(\["dashboard","penerimaan","portalwali"\]\)/);
+  assert.doesNotMatch(page, /if\(result\.user\.role==="Wali Santri"\) setPage\("portalwali"\)/);
+  assert.match(page, /aria-label="Kembali ke dashboard"/);
 });
