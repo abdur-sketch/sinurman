@@ -43,6 +43,13 @@
       "when": 1784794007419,
       "tag": "0005_smart_drax",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1784800893298,
+      "tag": "0006_faithful_wendell_vaughn",
+      "breakpoints": true
     }
   ]
 }

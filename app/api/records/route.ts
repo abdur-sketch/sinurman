@@ -12,6 +12,11 @@ const resourceConfig = {
     columns: ["student_id", "surah", "verses", "amount", "grade", "teacher", "recorded_at"],
     required: ["student_id", "surah", "verses", "amount", "grade"],
   },
+  mutabaah: {
+    table: "mutabaah_records",
+    columns: ["student_id", "activity", "completed", "record_date", "recorded_by"],
+    required: ["student_id", "activity", "record_date"],
+  },
   health: {
     table: "health_records",
     columns: ["student_id", "complaint", "diagnosis", "treatment", "status", "recorded_at"],
@@ -74,7 +79,7 @@ const resourceConfig = {
   },
   users: {
     table: "users",
-    columns: ["email", "name", "role", "created_at"],
+    columns: ["email", "name", "role", "room_scope", "created_at"],
     required: ["email", "name", "role"],
   },
 } as const;
@@ -100,6 +105,20 @@ export async function POST(request: Request) {
     }
     const db = database();
     const config = resourceConfig[resource];
+    if (user.role === "Musyrif" || user.role === "Kepala Asrama") {
+      const studentResources = new Set<Resource>(["tahfidz","mutabaah","health","characters","attendance","permits","counseling"]);
+      if (studentResources.has(resource)) {
+        let studentId = Number(payload.data?.student_id ?? 0);
+        if (!studentId && payload.id) {
+          const record = await db.prepare(`SELECT student_id FROM ${config.table} WHERE id=?`).bind(payload.id).first<{ student_id:number }>();
+          studentId = Number(record?.student_id ?? 0);
+        }
+        const assigned = studentId
+          ? await db.prepare("SELECT id FROM students WHERE id=? AND room=?").bind(studentId, user.roomScope || "__BELUM_DITUGASKAN__").first()
+          : null;
+        if (!assigned) return Response.json({ error: "Santri ini berada di luar penugasan kamar Anda." }, { status: 403 });
+      }
+    }
     if (action === "delete") {
       if (!payload.id) return Response.json({ error: "ID wajib diisi." }, { status: 400 });
       await db.prepare(`DELETE FROM ${config.table} WHERE id = ?`).bind(payload.id).run();

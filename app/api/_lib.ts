@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-export type Role = "Admin" | "Ustadz" | "Wali Santri";
+export type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
 const ownerEmail = "baikganteng88@gmail.com";
 
 export function database() {
@@ -15,7 +15,7 @@ export function ensureDatabaseSchema() {
   const db = database();
   schemaReady = (async () => {
     const definitions = [
-      "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,role TEXT NOT NULL,created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,role TEXT NOT NULL,room_scope TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,nis TEXT NOT NULL UNIQUE,class_name TEXT NOT NULL,room TEXT NOT NULL,guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,guardian_email TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS tahfidz_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,surah TEXT NOT NULL,verses TEXT NOT NULL,amount INTEGER NOT NULL,grade TEXT NOT NULL,teacher TEXT NOT NULL,recorded_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS mutabaah_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,activity TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,record_date TEXT NOT NULL,recorded_by TEXT NOT NULL)",
@@ -29,7 +29,7 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS leave_permits (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,start_date TEXT NOT NULL,end_date TEXT NOT NULL,reason TEXT NOT NULL,status TEXT NOT NULL,approved_by TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY AUTOINCREMENT,education_level TEXT NOT NULL DEFAULT 'SMP',class_name TEXT NOT NULL DEFAULT 'VII A',title TEXT NOT NULL,category TEXT NOT NULL,teacher TEXT NOT NULL,location TEXT NOT NULL,day_name TEXT NOT NULL,start_time TEXT NOT NULL,end_time TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,capacity INTEGER NOT NULL,supervisor TEXT NOT NULL,status TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS admissions (id INTEGER PRIMARY KEY AUTOINCREMENT,registration_no TEXT NOT NULL UNIQUE,name TEXT NOT NULL,applicant_email TEXT NOT NULL DEFAULT '',nisn TEXT NOT NULL DEFAULT '',birth_place TEXT NOT NULL DEFAULT '',birth_date TEXT NOT NULL DEFAULT '',gender TEXT NOT NULL DEFAULT '',desired_level TEXT NOT NULL DEFAULT 'SMP',guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,previous_school TEXT NOT NULL,address TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,score INTEGER NOT NULL DEFAULT 0,verification_note TEXT NOT NULL DEFAULT '',verified_by TEXT NOT NULL DEFAULT '',verified_at TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS admissions (id INTEGER PRIMARY KEY AUTOINCREMENT,registration_no TEXT NOT NULL UNIQUE,name TEXT NOT NULL,applicant_email TEXT NOT NULL DEFAULT '',nisn TEXT NOT NULL DEFAULT '',birth_place TEXT NOT NULL DEFAULT '',birth_date TEXT NOT NULL DEFAULT '',gender TEXT NOT NULL DEFAULT '',desired_level TEXT NOT NULL DEFAULT 'SMP',guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,previous_school TEXT NOT NULL,address TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,score INTEGER NOT NULL DEFAULT 0,verification_note TEXT NOT NULL DEFAULT '',verified_by TEXT NOT NULL DEFAULT '',verified_at TEXT NOT NULL DEFAULT '',tracking_token TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS admission_documents (id INTEGER PRIMARY KEY AUTOINCREMENT,admission_id INTEGER NOT NULL,doc_type TEXT NOT NULL,file_name TEXT NOT NULL,object_key TEXT NOT NULL UNIQUE,content_type TEXT NOT NULL,size_bytes INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'Menunggu',verification_note TEXT NOT NULL DEFAULT '',verified_by TEXT NOT NULL DEFAULT '',verified_at TEXT NOT NULL DEFAULT '',uploaded_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS counseling_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,type TEXT NOT NULL,category TEXT NOT NULL,description TEXT NOT NULL,points INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL,counselor TEXT NOT NULL,recorded_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS bills (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,invoice_no TEXT NOT NULL UNIQUE,category TEXT NOT NULL,amount INTEGER NOT NULL,due_date TEXT NOT NULL,status TEXT NOT NULL,payment_url TEXT NOT NULL,payment_method TEXT NOT NULL DEFAULT '',payment_reference TEXT NOT NULL DEFAULT '',paid_at TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
@@ -40,6 +40,7 @@ export function ensureDatabaseSchema() {
     await db.batch(definitions.map((sql) => db.prepare(sql)));
 
     const upgrades: Record<string, Record<string, string>> = {
+      users: { room_scope: "TEXT NOT NULL DEFAULT ''" },
       students: { guardian_email: "TEXT NOT NULL DEFAULT ''" },
       schedules: { education_level: "TEXT NOT NULL DEFAULT 'SMP'", class_name: "TEXT NOT NULL DEFAULT 'VII A'" },
       bills: {
@@ -58,6 +59,7 @@ export function ensureDatabaseSchema() {
         verification_note: "TEXT NOT NULL DEFAULT ''",
         verified_by: "TEXT NOT NULL DEFAULT ''",
         verified_at: "TEXT NOT NULL DEFAULT ''",
+        tracking_token: "TEXT NOT NULL DEFAULT ''",
       },
     };
     for (const [table, columns] of Object.entries(upgrades)) {
@@ -76,9 +78,8 @@ export function ensureDatabaseSchema() {
 }
 
 export function currentIdentity(request: Request) {
-  const email =
-    request.headers.get("oai-authenticated-user-email") ||
-    "admin@sinurman.local";
+  const email = request.headers.get("oai-authenticated-user-email");
+  if (!email) throw new Error("Silakan masuk dengan ChatGPT untuk membuka portal internal.");
   const encodedName = request.headers.get("oai-authenticated-user-full-name");
   const encoding = request.headers.get("oai-authenticated-user-full-name-encoding");
   let name = email.split("@")[0];
@@ -93,9 +94,9 @@ export async function ensureUser(request: Request) {
   const db = database();
   const identity = currentIdentity(request);
   const existing = await db
-    .prepare("SELECT id, email, name, role FROM users WHERE email = ?")
+    .prepare("SELECT id, email, name, role, room_scope AS roomScope FROM users WHERE email = ?")
     .bind(identity.email)
-    .first<{ id: number; email: string; name: string; role: Role }>();
+    .first<{ id: number; email: string; name: string; role: Role; roomScope: string }>();
 
   if (existing) {
     if (identity.email.toLowerCase() === ownerEmail && existing.role !== "Admin") {
@@ -109,17 +110,23 @@ export async function ensureUser(request: Request) {
   const role: Role = identity.email.toLowerCase() === ownerEmail || Number(count?.total ?? 0) === 0 ? "Admin" : "Wali Santri";
   const now = new Date().toISOString();
   await db
-    .prepare("INSERT INTO users (email, name, role, created_at) VALUES (?, ?, ?, ?)")
+    .prepare("INSERT INTO users (email, name, role, room_scope, created_at) VALUES (?, ?, ?, '', ?)")
     .bind(identity.email, identity.name, role, now)
     .run();
   return (await db
-    .prepare("SELECT id, email, name, role FROM users WHERE email = ?")
+    .prepare("SELECT id, email, name, role, room_scope AS roomScope FROM users WHERE email = ?")
     .bind(identity.email)
-    .first()) as { id: number; email: string; name: string; role: Role };
+    .first()) as { id: number; email: string; name: string; role: Role; roomScope: string };
 }
 
 export function canWrite(role: Role, resource: string) {
   if (role === "Admin") return true;
+  if (role === "Kepala Asrama") {
+    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling"].includes(resource);
+  }
+  if (role === "Musyrif") {
+    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling"].includes(resource);
+  }
   if (role === "Ustadz") {
     return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "schedules"].includes(resource);
   }

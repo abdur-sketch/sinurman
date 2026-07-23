@@ -4,7 +4,8 @@ export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
-  role: text("role", { enum: ["Admin", "Ustadz", "Wali Santri"] }).notNull(),
+  role: text("role", { enum: ["Admin", "Kepala Asrama", "Musyrif", "Ustadz", "Wali Santri"] }).notNull(),
+  roomScope: text("room_scope").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
 
@@ -161,6 +162,7 @@ export const admissions = sqliteTable("admissions", {
   verificationNote: text("verification_note").notNull().default(""),
   verifiedBy: text("verified_by").notNull().default(""),
   verifiedAt: text("verified_at").notNull().default(""),
+  trackingToken: text("tracking_token").notNull().default("").unique(),
   createdAt: text("created_at").notNull(),
 });
 

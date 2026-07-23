@@ -5,7 +5,7 @@ import test from "node:test";
 const file = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("portal wali menyediakan seluruh layanan utama", async () => {
-  const page = await file("app/page.tsx");
+  const page = await file("app/dashboard-client.tsx");
   for (const feature of [
     "Jadwal Pelajaran Harian",
     "Tagihan & Pembayaran",
@@ -75,7 +75,7 @@ test("kunjungan dan penjemputan memakai QR sekali pakai", async () => {
   const [requestRoute, qrRoute, page] = await Promise.all([
     file("app/api/guardian-requests/route.ts"),
     file("app/api/guardian-requests/qr/route.ts"),
-    file("app/page.tsx"),
+    file("app/dashboard-client.tsx"),
   ]);
   assert.match(requestRoute, /crypto\.randomUUID/);
   assert.match(requestRoute, /status='Digunakan'/);
@@ -84,7 +84,7 @@ test("kunjungan dan penjemputan memakai QR sekali pakai", async () => {
 });
 
 test("logo dan tombol bantuan sidebar memiliki aksi", async () => {
-  const page = await file("app/page.tsx");
+  const page = await file("app/dashboard-client.tsx");
   assert.match(page, /className="brand-home"[\s\S]*onClick=/);
   assert.match(page, /className="sidebar-help"[\s\S]*setShowHelp\(true\)/);
   assert.match(page, /PUSAT BANTUAN SINURMAN/);
@@ -92,14 +92,14 @@ test("logo dan tombol bantuan sidebar memiliki aksi", async () => {
 
 test("PPDB online menyediakan formulir dan pelacakan status untuk wali", async () => {
   const [page, bootstrap] = await Promise.all([
-    file("app/page.tsx"),
+    file("app/dashboard-client.tsx"),
     file("app/api/bootstrap/route.ts"),
   ]);
   assert.match(page, /PPDB ONLINE 2026\/2027/);
   assert.match(page, /Kirim Pendaftaran/);
   assert.match(page, /Kelola Dokumen/);
   assert.match(page, /Catatan verifikator/);
-  assert.match(page, /new Set<PageKey>\(\["penerimaan","portalwali"\]\)/);
+  assert.match(page, /new Set<PageKey>\(\["portalwali"\]\)/);
   assert.match(bootstrap, /lower\(applicant_email\)=\?/);
   assert.match(bootstrap, /admissionDocuments/);
 });
@@ -133,13 +133,13 @@ test("verifikasi PPDB hanya dapat dilakukan admin", async () => {
 test("dashboard aman untuk admin dan wali diarahkan ke portal terbatas", async () => {
   const [lib, page, bootstrap] = await Promise.all([
     file("app/api/_lib.ts"),
-    file("app/page.tsx"),
+    file("app/dashboard-client.tsx"),
     file("app/api/bootstrap/route.ts"),
   ]);
   assert.match(lib, /ensureDatabaseSchema/);
   assert.match(lib, /CREATE TABLE IF NOT EXISTS students/);
   assert.match(lib, /PRAGMA table_info/);
-  assert.match(page, /new Set<PageKey>\(\["penerimaan","portalwali"\]\)/);
+  assert.match(page, /new Set<PageKey>\(\["portalwali"\]\)/);
   assert.match(page, /if\(result\.user\.role==="Wali Santri"\) setPage\("portalwali"\)/);
   assert.match(page, /role==="Wali Santri"\?"Kembali ke Portal Wali":"Kembali ke dashboard"/);
   assert.match(lib, /UPDATE users SET role='Admin'/);
@@ -149,4 +149,46 @@ test("dashboard aman untuk admin dan wali diarahkan ke portal terbatas", async (
   assert.match(page, /setRole\("Admin"\)/);
   assert.match(page, /Admin aktif/);
   assert.doesNotMatch(page, /Pratinjau peran demo/);
+});
+
+test("portal internal memakai login ChatGPT dan halaman PPDB tetap publik", async () => {
+  const [root, auth, publicPage, publicApi, lib] = await Promise.all([
+    file("app/page.tsx"),
+    file("app/chatgpt-auth.ts"),
+    file("app/ppdb/page.tsx"),
+    file("app/api/ppdb/route.ts"),
+    file("app/api/_lib.ts"),
+  ]);
+  assert.match(root, /requireChatGPTUser\("\/"\)/);
+  assert.match(auth, /signin-with-chatgpt/);
+  assert.match(publicPage, /PPDB ONLINE 2026\/2027/);
+  assert.match(publicPage, /Cek status pendaftaran/);
+  assert.match(publicApi, /trackingToken/);
+  assert.match(publicApi, /tracking_token=\?/);
+  assert.doesNotMatch(lib, /admin@sinurman\.local/);
+});
+
+test("Musyrif dan Kepala Asrama dibatasi modul serta kamar penugasan", async () => {
+  const [page, lib, bootstrap, records, migration] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/_lib.ts"),
+    file("app/api/bootstrap/route.ts"),
+    file("app/api/records/route.ts"),
+    file("drizzle/0006_faithful_wendell_vaughn.sql"),
+  ]);
+  assert.match(page, /role === "Musyrif"/);
+  assert.match(page, /role === "Kepala Asrama"/);
+  assert.match(lib, /role === "Musyrif"/);
+  assert.match(bootstrap, /WHERE s\.room=\?/);
+  assert.match(records, /Santri ini berada di luar penugasan kamar Anda/);
+  assert.match(records, /"mutabaah"/);
+  assert.match(migration, /ADD `room_scope`/);
+});
+
+test("unggah PPDB publik memvalidasi token, tipe, dan ukuran berkas", async () => {
+  const documents = await file("app/api/ppdb/documents/route.ts");
+  assert.match(documents, /tracking_token=\?/);
+  assert.match(documents, /application\/pdf/);
+  assert.match(documents, /5 \* 1024 \* 1024/);
+  assert.match(documents, /env\.FILES\.put/);
 });
