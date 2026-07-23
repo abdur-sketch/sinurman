@@ -15,6 +15,12 @@ untuk pengurus, ustadz, dan wali santri.
 - Pengumuman dan laporan
 - Demo pergantian peran Admin, Ustadz, dan Wali Santri
 - Mode terang/gelap serta tampilan responsif
+- Database D1 untuk penyimpanan data permanen
+- Hak akses tulis berdasarkan peran Admin, Ustadz, dan Wali Santri
+- Tambah, ubah, hapus, pencarian, dan sinkronisasi data
+- Pencatatan pembayaran SPP dan uang saku
+- Notifikasi wali melalui tautan WhatsApp dengan riwayat pengiriman
+- Ekspor laporan PDF dan Excel/CSV
 
 ## Pengembangan
 

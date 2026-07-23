@@ -1,8 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Role = "Admin" | "Ustadz" | "Wali Santri";
+type Resource = "students" | "tahfidz" | "health" | "transactions" | "characters" | "inventory" | "announcements";
+type Row = Record<string, string | number | null>;
+type AppData = {
+  user?: { name: string; email: string; role: Role };
+  students: Row[];
+  tahfidz: Row[];
+  health: Row[];
+  transactions: Row[];
+  characters: Row[];
+  inventory: Row[];
+  announcements: Row[];
+  notifications: Row[];
+};
+type EditorState = { resource: Resource; row?: Row } | null;
+
+const emptyData: AppData = {
+  students: [], tahfidz: [], health: [], transactions: [], characters: [],
+  inventory: [], announcements: [], notifications: [],
+};
 type PageKey =
   | "dashboard"
   | "santri"
@@ -92,16 +111,17 @@ function Status({ children, tone = "green" }: { children: React.ReactNode; tone?
   return <span className={`status ${tone}`}><i />{children}</span>;
 }
 
-function Overview() {
+function Overview({ data }: { data: AppData }) {
+  const paid = data.transactions.filter((x) => x.type === "Masuk").reduce((sum, x) => sum + Number(x.amount || 0), 0);
   return (
     <>
       <section className="stats-grid">
         <article className="stat-card">
-          <div className="stat-copy"><span>Total Santri</span><strong>486</strong><small className="up">↑ 8,2% <b>dari semester lalu</b></small></div>
+          <div className="stat-copy"><span>Total Santri</span><strong>{data.students.length || 486}</strong><small className="up">↑ Data aktif <b>tersimpan permanen</b></small></div>
           <MiniIcon tone="blue">♙</MiniIcon><Sparkline values={[32, 44, 38, 58, 51, 68, 72, 83]} />
         </article>
         <article className="stat-card">
-          <div className="stat-copy"><span>Setoran Hari Ini</span><strong>142</strong><small className="up">↑ 12,5% <b>dari kemarin</b></small></div>
+          <div className="stat-copy"><span>Total Setoran</span><strong>{data.tahfidz.length || 142}</strong><small className="up">↑ Sinkron <b>dengan data tahfidz</b></small></div>
           <MiniIcon tone="green">◫</MiniIcon><Sparkline color="green" values={[48, 31, 58, 45, 70, 62, 75, 88]} />
         </article>
         <article className="stat-card">
@@ -109,7 +129,7 @@ function Overview() {
           <MiniIcon tone="amber">✓</MiniIcon><Sparkline color="amber" values={[82, 75, 90, 84, 78, 92, 86, 80]} />
         </article>
         <article className="stat-card">
-          <div className="stat-copy"><span>Tagihan Tertagih</span><strong>Rp128jt</strong><small className="up">↑ 4,8% <b>bulan ini</b></small></div>
+          <div className="stat-copy"><span>Transaksi Masuk</span><strong>Rp{paid ? `${(paid/1000000).toFixed(1)}jt` : "128jt"}</strong><small className="up">↑ Tercatat <b>di buku keuangan</b></small></div>
           <MiniIcon tone="violet">Rp</MiniIcon><Sparkline color="violet" values={[24, 40, 35, 56, 48, 68, 62, 78]} />
         </article>
       </section>
@@ -161,13 +181,7 @@ function Overview() {
   );
 }
 
-function TahfidzPage() {
-  const rows = [
-    ["Muhammad Fikri","Al-Mulk: 1–15","15 ayat","Mumtaz","Hari ini, 07.25"],
-    ["Ahmad Fauzan","Al-Qalam: 1–12","12 ayat","Jayyid Jiddan","Hari ini, 07.18"],
-    ["Rizky Maulana","Al-Haqqah: 20–30","11 ayat","Jayyid","Hari ini, 07.05"],
-    ["Faris Abdullah","Al-Ma’arij: 1–18","18 ayat","Mumtaz","Kemarin, 16.40"],
-  ];
+function TahfidzPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void }) {
   return (
     <>
       <section className="stats-grid three">
@@ -176,24 +190,26 @@ function TahfidzPage() {
         <article className="metric-card"><MiniIcon tone="amber">☆</MiniIcon><div><span>Santri Sesuai Target</span><strong>78%</strong><small>379 dari 486 santri</small></div></article>
       </section>
       <section className="card data-card">
-        <header className="card-header"><div><h3>Setoran Hafalan Terbaru</h3><p>Daftar setoran yang telah diperiksa ustadz</p></div><button className="primary-button">+ Input Setoran</button></header>
+        <header className="card-header"><div><h3>Setoran Hafalan Terbaru</h3><p>Daftar setoran tersimpan dan telah diperiksa ustadz</p></div><button className="primary-button" onClick={onAdd}>+ Input Setoran</button></header>
         <div className="table-wrap"><table><thead><tr><th>Santri</th><th>Surat / Ayat</th><th>Jumlah</th><th>Penilaian</th><th>Waktu</th><th /></tr></thead>
-          <tbody>{rows.map((r,i)=><tr key={r[0]}><td><div className="person"><span>{r[0].split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{r[0]}</strong></div></td><td>{r[1]}</td><td>{r[2]}</td><td><Status tone={i===2?"amber":"green"}>{r[3]}</Status></td><td className="muted">{r[4]}</td><td><button className="more">•••</button></td></tr>)}</tbody>
+          <tbody>{rows.map((r,i)=><tr key={String(r.id)}><td><div className="person"><span>{String(r.student_name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{r.student_name}</strong></div></td><td>{r.surah}: {r.verses}</td><td>{r.amount} ayat</td><td><Status tone={i===2?"amber":"green"}>{r.grade}</Status></td><td className="muted">{new Date(String(r.recorded_at)).toLocaleDateString("id-ID")}</td><td><div className="row-actions"><button onClick={()=>onEdit(r)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(r)}>Hapus</button></div></td></tr>)}</tbody>
         </table></div>
       </section>
     </>
   );
 }
 
-function StudentsPage() {
+function StudentsPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void }) {
+  const [query, setQuery] = useState("");
+  const filtered = rows.filter((s) => `${s.name} ${s.nis}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <section className="card data-card">
-      <header className="card-header responsive"><div><h3>Daftar Santri</h3><p>486 santri terdaftar pada tahun ajaran 2026/2027</p></div><div className="header-actions"><button className="secondary-button">⇩ Ekspor</button><button className="primary-button">+ Tambah Santri</button></div></header>
-      <div className="filters"><div className="search-field">⌕ <input placeholder="Cari nama atau NIS..." /></div><select><option>Semua Kelas</option><option>VII</option><option>VIII</option><option>IX</option></select><select><option>Semua Status</option><option>Aktif</option><option>Izin</option></select></div>
+      <header className="card-header responsive"><div><h3>Daftar Santri</h3><p>{rows.length} santri tersimpan pada tahun ajaran 2026/2027</p></div><div className="header-actions"><a className="secondary-button link-button" href="/api/export?type=students&format=csv">⇩ Excel/CSV</a><button className="primary-button" onClick={onAdd}>+ Tambah Santri</button></div></header>
+      <div className="filters"><div className="search-field">⌕ <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cari nama atau NIS..." /></div><select><option>Semua Kelas</option><option>VII</option><option>VIII</option><option>IX</option></select><select><option>Semua Status</option><option>Aktif</option><option>Izin</option></select></div>
       <div className="table-wrap"><table><thead><tr><th>Nama Santri</th><th>NIS</th><th>Kelas</th><th>Kamar</th><th>Status</th><th /></tr></thead>
-        <tbody>{students.map(s=><tr key={s.nis}><td><div className="person"><span>{s.avatar}</span><strong>{s.name}</strong></div></td><td className="muted">{s.nis}</td><td>{s.class}</td><td>{s.room}</td><td><Status tone={s.status==="Aktif"?"green":"amber"}>{s.status}</Status></td><td><button className="more">•••</button></td></tr>)}</tbody>
+        <tbody>{filtered.map(s=><tr key={String(s.id)}><td><div className="person"><span>{String(s.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{s.name}</strong></div></td><td className="muted">{s.nis}</td><td>{s.class_name}</td><td>{s.room}</td><td><Status tone={s.status==="Aktif"?"green":"amber"}>{s.status}</Status></td><td><div className="row-actions"><button onClick={()=>onEdit(s)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(s)}>Hapus</button></div></td></tr>)}</tbody>
       </table></div>
-      <footer className="table-footer"><span>Menampilkan 1–5 dari 486 santri</span><div><button>‹</button><button className="active">1</button><button>2</button><button>3</button><button>›</button></div></footer>
+      <footer className="table-footer"><span>Menampilkan {filtered.length} dari {rows.length} santri</span><div><button>‹</button><button className="active">1</button><button>›</button></div></footer>
     </section>
   );
 }
@@ -215,7 +231,7 @@ function MutabaahPage() {
   );
 }
 
-function HealthPage() {
+function HealthPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void }) {
   return (
     <>
       <section className="stats-grid three">
@@ -223,38 +239,39 @@ function HealthPage() {
         <article className="metric-card"><MiniIcon tone="amber">✚</MiniIcon><div><span>Dalam Perawatan</span><strong>9</strong><small>Keluhan ringan</small></div></article>
         <article className="metric-card"><MiniIcon tone="red">!</MiniIcon><div><span>Dirujuk</span><strong>4</strong><small>Fasilitas kesehatan</small></div></article>
       </section>
-      <section className="card data-card"><header className="card-header"><div><h3>Kunjungan Klinik Terbaru</h3><p>Catatan pemeriksaan tujuh hari terakhir</p></div><button className="primary-button">+ Pemeriksaan Baru</button></header>
+      <section className="card data-card"><header className="card-header"><div><h3>Kunjungan Klinik Terbaru</h3><p>{rows.length} catatan pemeriksaan tersimpan</p></div><button className="primary-button" onClick={onAdd}>+ Pemeriksaan Baru</button></header>
         <div className="table-wrap"><table><thead><tr><th>Santri</th><th>Keluhan</th><th>Diagnosis</th><th>Penanganan</th><th>Status</th></tr></thead><tbody>
-          {[["Nabil Hidayat","Demam & pusing","Demam ringan","Istirahat, paracetamol","Dipantau"],["Rizky Maulana","Batuk","Iritasi tenggorokan","Obat batuk","Membaik"],["Faris Abdullah","Nyeri pergelangan","Terkilir ringan","Kompres & perban","Istirahat"]].map((r,i)=><tr key={r[0]}><td><strong>{r[0]}</strong></td><td>{r[1]}</td><td>{r[2]}</td><td className="muted">{r[3]}</td><td><Status tone={i===0?"amber":"green"}>{r[4]}</Status></td></tr>)}
+          {rows.map((r,i)=><tr key={String(r.id)}><td><strong>{r.student_name}</strong></td><td>{r.complaint}</td><td>{r.diagnosis}</td><td className="muted">{r.treatment}</td><td><Status tone={i===0?"amber":"green"}>{r.status}</Status><div className="row-actions"><button onClick={()=>onEdit(r)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(r)}>Hapus</button></div></td></tr>)}
         </tbody></table></div></section>
     </>
   );
 }
 
-function FinancePage() {
+function FinancePage({ rows, onAdd, onNotify }: { rows: Row[]; onAdd: () => void; onNotify: () => void }) {
+  const incoming = rows.filter(x=>x.type==="Masuk").reduce((sum,x)=>sum+Number(x.amount||0),0);
   return (
     <>
       <section className="stats-grid three">
-        <article className="metric-card"><MiniIcon tone="blue">Rp</MiniIcon><div><span>SPP Tertagih</span><strong>Rp128,4jt</strong><small>92% bulan Juli</small></div></article>
+        <article className="metric-card"><MiniIcon tone="blue">Rp</MiniIcon><div><span>Pemasukan Tercatat</span><strong>Rp{money.format(incoming)}</strong><small>Data transaksi permanen</small></div></article>
         <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Uang Saku Masuk</span><strong>Rp46,8jt</strong><small>486 rekening aktif</small></div></article>
         <article className="metric-card"><MiniIcon tone="amber">!</MiniIcon><div><span>Belum Dibayar</span><strong>Rp11,2jt</strong><small>38 wali santri</small></div></article>
       </section>
       <section className="dashboard-grid">
-        <article className="card balance-card"><span>Saldo Uang Saku</span><strong>Rp 1.275.000</strong><p>Muhammad Fikri · SN-240181</p><div><button className="primary-button">+ Tambah Saldo</button><button className="secondary-button">Lihat Mutasi</button></div></article>
-        <article className="card"><header className="card-header"><div><h3>Pengeluaran Terbesar</h3><p>Bulan Juli 2026</p></div></header>
-          {[["Koperasi Santri","Rp 8.420.000",76],["Kantin","Rp 6.180.000",58],["Laundry","Rp 3.750.000",36]].map((x)=><div className="expense" key={String(x[0])}><div><strong>{x[0]}</strong><span>{x[1]}</span></div><Progress value={Number(x[2])} tone="blue" /></div>)}
+        <article className="card balance-card"><span>Kelola Pembayaran & Uang Saku</span><strong>Rp {money.format(incoming)}</strong><p>{rows.length} transaksi tercatat dan siap dilaporkan</p><div><button className="primary-button" onClick={onAdd}>+ Catat Pembayaran</button><button className="secondary-button" onClick={onNotify}>Kirim Pengingat WA</button></div></article>
+        <article className="card"><header className="card-header"><div><h3>Transaksi Terbaru</h3><p>SPP, uang saku, dan pengeluaran</p></div><a className="text-button link-button" href="/api/export?type=finance&format=csv">Ekspor</a></header>
+          {rows.slice(0,5).map((x)=><div className="expense" key={String(x.id)}><div><strong>{x.student_name} · {x.category}</strong><span>Rp {money.format(Number(x.amount||0))}</span></div><Progress value={Math.min(100,Number(x.amount||0)/10000)} tone={x.type==="Masuk"?"green":"amber"} /></div>)}
         </article>
       </section>
     </>
   );
 }
 
-function CharacterPage() {
+function CharacterPage({ onAdd }: { onAdd: () => void }) {
   const traits = [["Adab & Akhlak",92,"green"],["Kedisiplinan",86,"blue"],["Kemandirian",81,"amber"],["Tanggung Jawab",88,"violet"],["Kebersihan",84,"green"]];
   return (
     <section className="dashboard-grid">
       <article className="card character-profile"><span className="large-avatar">MF</span><h3>Muhammad Fikri</h3><p>VIII A · Ibnu Sina 03</p><strong>A</strong><small>Predikat: Sangat Baik</small><button className="secondary-button">Pilih Santri</button></article>
-      <article className="card compact-list"><header className="card-header"><div><h3>Penilaian Karakter</h3><p>Semester Ganjil 2026/2027</p></div><button className="primary-button">Input Nilai</button></header>
+      <article className="card compact-list"><header className="card-header"><div><h3>Penilaian Karakter</h3><p>Semester Ganjil 2026/2027</p></div><button className="primary-button" onClick={onAdd}>Input Nilai</button></header>
         {traits.map(([t,v,c])=><div className="trait-row" key={String(t)}><div><strong>{t}</strong><small>{Number(v)>=90?"Istiqamah":"Baik"}</small></div><Progress value={Number(v)} tone={String(c)} /><b>{v}</b></div>)}
         <div className="teacher-note"><span>“</span><p>Fikri menunjukkan perkembangan adab yang sangat baik dan konsisten membantu teman satu kamar.</p><small>— Ustadz Hasan, Wali Kelas</small></div>
       </article>
@@ -262,23 +279,103 @@ function CharacterPage() {
   );
 }
 
-function InventoryPage() {
-  const assets = [["Ranjang Susun","Asrama","248 unit","Baik"],["Lemari Santri","Asrama","486 unit","Baik"],["Proyektor","Ruang Kelas","14 unit","Perawatan"],["Kitab Fathul Qarib","Perpustakaan","112 eks","Baik"],["Dispenser","Asrama","22 unit","Perbaikan"]];
-  return <section className="card data-card"><header className="card-header"><div><h3>Daftar Inventaris</h3><p>882 item pada 24 lokasi</p></div><button className="primary-button">+ Tambah Barang</button></header><div className="table-wrap"><table><thead><tr><th>Nama Barang</th><th>Lokasi</th><th>Jumlah</th><th>Kondisi</th><th /></tr></thead><tbody>{assets.map((r,i)=><tr key={r[0]}><td><strong>{r[0]}</strong></td><td>{r[1]}</td><td>{r[2]}</td><td><Status tone={i===2?"amber":i===4?"red":"green"}>{r[3]}</Status></td><td><button className="more">•••</button></td></tr>)}</tbody></table></div></section>;
+function InventoryPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void }) {
+  return <section className="card data-card"><header className="card-header"><div><h3>Daftar Inventaris</h3><p>{rows.reduce((sum,x)=>sum+Number(x.quantity||0),0)} item tercatat</p></div><button className="primary-button" onClick={onAdd}>+ Tambah Barang</button></header><div className="table-wrap"><table><thead><tr><th>Nama Barang</th><th>Lokasi</th><th>Jumlah</th><th>Kondisi</th><th /></tr></thead><tbody>{rows.map((r,i)=><tr key={String(r.id)}><td><strong>{r.name}</strong></td><td>{r.location}</td><td>{r.quantity} {r.unit}</td><td><Status tone={i===2?"amber":"green"}>{r.condition}</Status></td><td><div className="row-actions"><button onClick={()=>onEdit(r)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(r)}>Hapus</button></div></td></tr>)}</tbody></table></div></section>;
 }
 
-function AnnouncementsPage() {
-  const items = [
-    ["26","JUL","Akademik","Jadwal Ujian Tahfidz Semester","Ujian tahfidz semester ganjil akan dilaksanakan mulai 29 Juli 2026.","blue"],
-    ["24","JUL","Kunjungan","Jadwal Kunjungan Wali Santri","Kunjungan bulan Agustus dibuka pada hari Ahad pekan pertama dan ketiga.","green"],
-    ["21","JUL","Kegiatan","Peringatan Tahun Baru Hijriah","Seluruh santri mengikuti pawai dan kajian Muharram pada Sabtu pagi.","violet"],
-  ];
-  return <section className="card announcements-page"><header className="card-header"><div><h3>Semua Pengumuman</h3><p>Informasi resmi Pondok Pesantren Nurul Iman</p></div><button className="primary-button">+ Buat Pengumuman</button></header>{items.map(x=><article key={x[3]}><span className="date-box"><b>{x[0]}</b>{x[1]}</span><div><Status tone={x[5]}>{x[2]}</Status><h3>{x[3]}</h3><p>{x[4]}</p><small>Dipublikasikan oleh Admin · 09.00 WIB</small></div><button className="more">•••</button></article>)}</section>;
+function AnnouncementsPage({ rows, onAdd, onEdit, onDelete, onNotify }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onNotify: () => void }) {
+  return <section className="card announcements-page"><header className="card-header"><div><h3>Semua Pengumuman</h3><p>Informasi resmi Pondok Pesantren Nurul Iman</p></div><div className="header-actions"><button className="secondary-button" onClick={onNotify}>Kirim WhatsApp</button><button className="primary-button" onClick={onAdd}>+ Buat Pengumuman</button></div></header>{rows.map((x,i)=><article key={String(x.id)}><span className="date-box"><b>{new Date(String(x.published_at)).getDate()}</b>JUL</span><div><Status tone={["blue","green","violet"][i%3]}>{x.category}</Status><h3>{x.title}</h3><p>{x.content}</p><small>Dipublikasikan oleh {x.author} · {x.audience}</small></div><div className="row-actions"><button onClick={()=>onEdit(x)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(x)}>Hapus</button></div></article>)}</section>;
 }
 
 function ReportsPage() {
-  const reports = [["Laporan Perkembangan Santri","Akademik & karakter","PDF","23 Jul 2026"],["Rekap Setoran Tahfidz","Hafalan per kelas","XLSX","23 Jul 2026"],["Laporan Keuangan Bulanan","SPP dan uang saku","PDF","20 Jul 2026"],["Rekap Kesehatan Santri","Kunjungan klinik","XLSX","18 Jul 2026"]];
-  return <><section className="report-hero"><div><span>PUSAT DATA SINURMAN</span><h2>Laporan pesantren, siap dalam beberapa klik.</h2><p>Pilih periode dan jenis laporan, kemudian unduh dalam format yang Anda butuhkan.</p></div><button className="light-button">Buat Laporan Baru →</button></section><section className="report-grid">{reports.map((r,i)=><article className="card report-card" key={r[0]}><MiniIcon tone={["blue","green","violet","amber"][i]}>{r[2]==="PDF"?"▥":"▦"}</MiniIcon><div><h3>{r[0]}</h3><p>{r[1]}</p><span>{r[2]} · Diperbarui {r[3]}</span></div><button>⇩</button></article>)}</section></>;
+  const reports = [["students","Laporan Data Santri","Profil, kelas, dan wali"],["tahfidz","Rekap Setoran Tahfidz","Hafalan per santri"],["finance","Laporan Keuangan","SPP dan uang saku"],["health","Rekap Kesehatan","Kunjungan klinik"]];
+  return <><section className="report-hero"><div><span>PUSAT DATA SINURMAN</span><h2>Laporan pesantren, siap dalam beberapa klik.</h2><p>Unduh data terbaru dalam PDF siap cetak atau CSV yang dapat dibuka di Excel.</p></div><a className="light-button link-button" href="/api/export?type=students&format=pdf">Unduh Laporan Utama →</a></section><section className="report-grid">{reports.map((r,i)=><article className="card report-card" key={r[0]}><MiniIcon tone={["blue","green","violet","amber"][i]}>▥</MiniIcon><div><h3>{r[1]}</h3><p>{r[2]}</p><span>PDF & Excel/CSV · Data langsung</span></div><div className="export-actions"><a href={`/api/export?type=${r[0]}&format=pdf`}>PDF</a><a href={`/api/export?type=${r[0]}&format=csv`}>CSV</a></div></article>)}</section></>;
+}
+
+const formFields: Record<Resource, { key: string; label: string; type?: string; options?: string[] }[]> = {
+  students: [
+    { key:"name",label:"Nama lengkap" },{ key:"nis",label:"NIS" },{ key:"class_name",label:"Kelas" },
+    { key:"room",label:"Kamar" },{ key:"guardian_name",label:"Nama wali" },{ key:"guardian_phone",label:"Nomor WhatsApp wali",type:"tel" },
+    { key:"status",label:"Status",options:["Aktif","Izin","Nonaktif"] },
+  ],
+  tahfidz: [
+    { key:"student_id",label:"Santri",type:"student" },{ key:"surah",label:"Surat" },{ key:"verses",label:"Ayat" },
+    { key:"amount",label:"Jumlah ayat",type:"number" },{ key:"grade",label:"Penilaian",options:["Mumtaz","Jayyid Jiddan","Jayyid","Mengulang"] },
+  ],
+  health: [
+    { key:"student_id",label:"Santri",type:"student" },{ key:"complaint",label:"Keluhan" },{ key:"diagnosis",label:"Diagnosis" },
+    { key:"treatment",label:"Penanganan" },{ key:"status",label:"Status",options:["Dipantau","Membaik","Dirujuk","Selesai"] },
+  ],
+  transactions: [
+    { key:"student_id",label:"Santri",type:"student" },{ key:"type",label:"Jenis",options:["Masuk","Keluar"] },
+    { key:"category",label:"Kategori",options:["SPP","Uang Saku","Koperasi","Kantin","Laundry","Lainnya"] },
+    { key:"amount",label:"Nominal",type:"number" },{ key:"status",label:"Status",options:["Berhasil","Lunas","Tertunda"] },{ key:"note",label:"Catatan" },
+  ],
+  characters: [
+    { key:"student_id",label:"Santri",type:"student" },{ key:"category",label:"Kategori",options:["Adab & Akhlak","Kedisiplinan","Kemandirian","Tanggung Jawab","Kebersihan"] },
+    { key:"score",label:"Nilai",type:"number" },{ key:"note",label:"Catatan pembina" },
+  ],
+  inventory: [
+    { key:"name",label:"Nama barang" },{ key:"location",label:"Lokasi" },{ key:"quantity",label:"Jumlah",type:"number" },
+    { key:"unit",label:"Satuan" },{ key:"condition",label:"Kondisi",options:["Baik","Perawatan","Perbaikan","Rusak"] },
+  ],
+  announcements: [
+    { key:"title",label:"Judul" },{ key:"category",label:"Kategori",options:["Akademik","Kunjungan","Kegiatan","Keuangan","Umum"] },
+    { key:"content",label:"Isi pengumuman",type:"textarea" },{ key:"audience",label:"Penerima",options:["Semua","Wali Santri","Ustadz","Admin"] },
+  ],
+};
+
+const resourceNames: Record<Resource,string> = {
+  students:"santri",tahfidz:"setoran tahfidz",health:"pemeriksaan",transactions:"transaksi",
+  characters:"nilai karakter",inventory:"barang",announcements:"pengumuman",
+};
+
+function RecordModal({ editor, students, onClose, onSave }: { editor: NonNullable<EditorState>; students: Row[]; onClose: () => void; onSave: (resource: Resource, row: Row | undefined, data: Record<string, unknown>) => Promise<void> }) {
+  const [form, setForm] = useState<Record<string, string>>(() => {
+    const values: Record<string,string> = {};
+    for (const field of formFields[editor.resource]) values[field.key] = String(editor.row?.[field.key] ?? "");
+    return values;
+  });
+  const [saving,setSaving] = useState(false);
+  const [error,setError] = useState("");
+  async function submit(event: React.FormEvent) {
+    event.preventDefault(); setSaving(true); setError("");
+    try {
+      const data: Record<string,unknown> = {};
+      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id"].includes(key) ? Number(value) : value;
+      await onSave(editor.resource,editor.row,data);
+    } catch (e) { setError(e instanceof Error?e.message:"Gagal menyimpan."); setSaving(false); }
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><form className="record-modal" onSubmit={submit} onMouseDown={e=>e.stopPropagation()}>
+    <button type="button" className="modal-close" onClick={onClose}>×</button>
+    <span className="modal-eyebrow">DATA SINURMAN</span>
+    <h2>{editor.row?"Ubah":"Tambah"} {resourceNames[editor.resource]}</h2>
+    <p>Data akan tersimpan permanen dan langsung memperbarui dashboard.</p>
+    <div className="form-grid">{formFields[editor.resource].map(field=><label key={field.key} className={field.type==="textarea"?"wide":""}>{field.label}
+      {field.type==="student"?<select required value={form[field.key]} onChange={e=>setForm({...form,[field.key]:e.target.value})}><option value="">Pilih santri</option>{students.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.nis}</option>)}</select>
+      :field.options?<select required value={form[field.key]} onChange={e=>setForm({...form,[field.key]:e.target.value})}><option value="">Pilih</option>{field.options.map(o=><option key={o}>{o}</option>)}</select>
+      :field.type==="textarea"?<textarea required value={form[field.key]} onChange={e=>setForm({...form,[field.key]:e.target.value})} />
+      :<input required={!["status","note"].includes(field.key)} type={field.type||"text"} value={form[field.key]} onChange={e=>setForm({...form,[field.key]:e.target.value})} />}
+    </label>)}</div>
+    {error&&<div className="form-error">{error}</div>}
+    <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button disabled={saving} className="primary-button">{saving?"Menyimpan...":"Simpan Data"}</button></div>
+  </form></div>;
+}
+
+function NotificationModal({ students, onClose, onSent }: { students: Row[]; onClose: () => void; onSent: (message:string) => void }) {
+  const [studentId,setStudentId] = useState(String(students[0]?.id??""));
+  const student = students.find(s=>String(s.id)===studentId);
+  const [message,setMessage] = useState("Assalamu’alaikum, kami mengingatkan pembayaran SPP bulan Juli 2026 melalui SINURMAN. Jazakumullahu khairan.");
+  const [sending,setSending] = useState(false);
+  async function send() {
+    if(!student) return; setSending(true);
+    const response=await fetch("/api/notifications",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({studentId:Number(student.id),recipient:student.guardian_phone,message,channel:"WhatsApp"})});
+    const result=await response.json() as {error?:string;whatsappUrl?:string};
+    if(!response.ok) { setSending(false); onSent(result.error||"Gagal menyiapkan WhatsApp."); return; }
+    if(result.whatsappUrl) window.open(result.whatsappUrl,"_blank","noopener,noreferrer");
+    onSent("Pesan dicatat dan WhatsApp siap dikirim."); onClose();
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal notification-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">NOTIFIKASI WALI</span><h2>Kirim melalui WhatsApp</h2><p>Pesan dicatat sebagai riwayat, lalu dibuka di WhatsApp untuk konfirmasi pengiriman.</p><label>Santri<select value={studentId} onChange={e=>setStudentId(e.target.value)}>{students.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.guardian_name}</option>)}</select></label><label>Pesan<textarea value={message} onChange={e=>setMessage(e.target.value)} /></label><div className="recipient-preview"><span>Tujuan</span><strong>{student?.guardian_name} · +{student?.guardian_phone}</strong></div><div className="modal-actions"><button className="secondary-button" onClick={onClose}>Batal</button><button className="whatsapp-button" disabled={sending} onClick={send}>{sending?"Menyiapkan...":"Buka WhatsApp →"}</button></div></div></div>;
 }
 
 function LoginModal({ onClose, onLogin }: { onClose: () => void; onLogin: (role: Role) => void }) {
@@ -299,6 +396,11 @@ function LoginModal({ onClose, onLogin }: { onClose: () => void; onLogin: (role:
 export default function Home() {
   const [page, setPage] = useState<PageKey>("dashboard");
   const [role, setRole] = useState<Role>("Admin");
+  const [data, setData] = useState<AppData>(emptyData);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [editor, setEditor] = useState<EditorState>(null);
+  const [showNotification, setShowNotification] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [dark, setDark] = useState(false);
@@ -306,20 +408,51 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const title = pageTitles[page];
 
+  const loadData = useCallback(async () => {
+    setLoading(true); setLoadError("");
+    try {
+      const response = await fetch("/api/bootstrap", { cache:"no-store" });
+      const result = await response.json() as AppData & { error?:string };
+      if (!response.ok) throw new Error(result.error || "Data tidak dapat dimuat.");
+      setData(result);
+      if(result.user?.role) setRole(result.user.role);
+    } catch (error) {
+      setLoadError(error instanceof Error?error.message:"Data tidak dapat dimuat.");
+    } finally { setLoading(false); }
+  },[]);
+
+  useEffect(()=>{ void loadData(); },[loadData]);
+
+  async function saveRecord(resource: Resource, row: Row | undefined, values: Record<string, unknown>) {
+    const response=await fetch("/api/records",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:row?"update":"create",resource,id:row?.id,data:values})});
+    const result=await response.json() as {error?:string};
+    if(!response.ok) throw new Error(result.error||"Gagal menyimpan data.");
+    setEditor(null); notify("Data berhasil disimpan."); await loadData();
+  }
+
+  async function deleteRecord(resource: Resource,row: Row) {
+    if(!window.confirm(`Hapus ${resourceNames[resource]} ini? Tindakan ini tidak dapat dibatalkan.`)) return;
+    const response=await fetch("/api/records",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"delete",resource,id:row.id})});
+    const result=await response.json() as {error?:string};
+    if(!response.ok) { notify(result.error||"Gagal menghapus data."); return; }
+    notify("Data berhasil dihapus."); await loadData();
+  }
+
   const content = useMemo(() => {
+    const actions=(resource:Resource)=>({onAdd:()=>setEditor({resource}),onEdit:(row:Row)=>setEditor({resource,row}),onDelete:(row:Row)=>void deleteRecord(resource,row)});
     switch (page) {
-      case "dashboard": return <Overview />;
-      case "santri": return <StudentsPage />;
-      case "tahfidz": return <TahfidzPage />;
+      case "dashboard": return <Overview data={data} />;
+      case "santri": return <StudentsPage rows={data.students} {...actions("students")} />;
+      case "tahfidz": return <TahfidzPage rows={data.tahfidz} {...actions("tahfidz")} />;
       case "mutabaah": return <MutabaahPage />;
-      case "kesehatan": return <HealthPage />;
-      case "keuangan": return <FinancePage />;
-      case "karakter": return <CharacterPage />;
-      case "inventaris": return <InventoryPage />;
-      case "pengumuman": return <AnnouncementsPage />;
+      case "kesehatan": return <HealthPage rows={data.health} {...actions("health")} />;
+      case "keuangan": return <FinancePage rows={data.transactions} onAdd={()=>setEditor({resource:"transactions"})} onNotify={()=>setShowNotification(true)} />;
+      case "karakter": return <CharacterPage onAdd={()=>setEditor({resource:"characters"})} />;
+      case "inventaris": return <InventoryPage rows={data.inventory} {...actions("inventory")} />;
+      case "pengumuman": return <AnnouncementsPage rows={data.announcements} {...actions("announcements")} onNotify={()=>setShowNotification(true)} />;
       case "laporan": return <ReportsPage />;
     }
-  }, [page]);
+  }, [page,data]);
 
   function selectPage(key: PageKey) {
     setPage(key);
@@ -349,14 +482,16 @@ export default function Home() {
             <button onClick={()=>setDark(!dark)} aria-label="Ubah tema">{dark?"☀":"☾"}</button>
             <button className="notification" onClick={()=>notify("Tidak ada notifikasi baru.")} aria-label="Notifikasi">♢<i /></button>
             <span className="divider" />
-            <div className="profile-wrap"><button className="profile-button" onClick={()=>setProfileOpen(!profileOpen)}><span>AH</span><div><strong>Ahmad Hidayat</strong><small>{role}</small></div><i>⌄</i></button>
+            <div className="profile-wrap"><button className="profile-button" onClick={()=>setProfileOpen(!profileOpen)}><span>{(data.user?.name||"Ahmad Hidayat").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{data.user?.name||"Ahmad Hidayat"}</strong><small>{role}</small></div><i>⌄</i></button>
               {profileOpen&&<div className="profile-menu"><button onClick={()=>{setShowLogin(true);setProfileOpen(false)}}>⇄ Ganti peran demo</button><button onClick={()=>notify("Profil pengguna dibuka.")}>♙ Profil saya</button><button onClick={()=>notify("Pengaturan dibuka.")}>⚙ Pengaturan</button></div>}
             </div>
           </div>
         </header>
 
         <main>
-          <div className="page-heading"><div><p>Beranda <span>/</span> {page==="dashboard"?"Ringkasan":title.title}</p><h1>{title.title}</h1><span>{title.subtitle}</span></div><div className="heading-actions"><button className="secondary-button" onClick={()=>notify("Data terbaru berhasil dimuat.")}>↻ Perbarui</button><button className="primary-button" onClick={()=>selectPage("laporan")}>▥ Buat Laporan</button></div></div>
+          <div className="page-heading"><div><p>Beranda <span>/</span> {page==="dashboard"?"Ringkasan":title.title}</p><h1>{page==="dashboard"&&data.user?.name?`Assalamu’alaikum, ${data.user.name} 👋`:title.title}</h1><span>{title.subtitle}</span></div><div className="heading-actions"><button className="secondary-button" onClick={()=>void loadData()}>↻ Perbarui</button><button className="primary-button" onClick={()=>selectPage("laporan")}>▥ Buat Laporan</button></div></div>
+          {loading&&<div className="sync-banner">Menyinkronkan data SINURMAN…</div>}
+          {loadError&&<div className="sync-banner error">Data online belum tersedia: {loadError} <button onClick={()=>void loadData()}>Coba lagi</button></div>}
           {content}
           <footer className="page-footer"><span>© 2026 Pondok Pesantren Nurul Iman</span><div><button>Kebijakan Privasi</button><button>Bantuan</button></div></footer>
         </main>
@@ -365,6 +500,8 @@ export default function Home() {
         {[navGroups[0].items[0],navGroups[1].items[0],navGroups[1].items[1],navGroups[2].items[1]].map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span></button>)}
         <button onClick={()=>setSidebarOpen(true)}><i>•••</i><span>Lainnya</span></button>
       </nav>
+      {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} onClose={()=>setEditor(null)} onSave={saveRecord} />}
+      {showNotification&&<NotificationModal students={data.students} onClose={()=>setShowNotification(false)} onSent={notify} />}
       {showLogin&&<LoginModal onClose={()=>setShowLogin(false)} onLogin={r=>{setRole(r);setShowLogin(false);notify(`Berhasil masuk sebagai ${r}.`)}} />}
       {toast&&<div className="toast"><span>✓</span>{toast}</div>}
     </div>

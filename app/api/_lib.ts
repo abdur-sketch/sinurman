@@ -1,0 +1,99 @@
+import { env } from "cloudflare:workers";
+
+export type Role = "Admin" | "Ustadz" | "Wali Santri";
+
+export function database() {
+  if (!env.DB) throw new Error("Database SINURMAN belum tersedia.");
+  return env.DB;
+}
+
+export function currentIdentity(request: Request) {
+  const email =
+    request.headers.get("oai-authenticated-user-email") ||
+    "admin@sinurman.local";
+  const encodedName = request.headers.get("oai-authenticated-user-full-name");
+  const encoding = request.headers.get("oai-authenticated-user-full-name-encoding");
+  let name = email.split("@")[0];
+  if (encodedName && encoding === "percent-encoded-utf-8") {
+    try { name = decodeURIComponent(encodedName); } catch { /* use fallback */ }
+  }
+  return { email, name };
+}
+
+export async function ensureUser(request: Request) {
+  const db = database();
+  const identity = currentIdentity(request);
+  const existing = await db
+    .prepare("SELECT id, email, name, role FROM users WHERE email = ?")
+    .bind(identity.email)
+    .first<{ id: number; email: string; name: string; role: Role }>();
+
+  if (existing) return existing;
+
+  const count = await db.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>();
+  const role: Role = Number(count?.total ?? 0) === 0 ? "Admin" : "Wali Santri";
+  const now = new Date().toISOString();
+  await db
+    .prepare("INSERT INTO users (email, name, role, created_at) VALUES (?, ?, ?, ?)")
+    .bind(identity.email, identity.name, role, now)
+    .run();
+  return (await db
+    .prepare("SELECT id, email, name, role FROM users WHERE email = ?")
+    .bind(identity.email)
+    .first()) as { id: number; email: string; name: string; role: Role };
+}
+
+export function canWrite(role: Role, resource: string) {
+  if (role === "Admin") return true;
+  if (role === "Ustadz") {
+    return ["tahfidz", "mutabaah", "health", "characters"].includes(resource);
+  }
+  return false;
+}
+
+export async function seedIfNeeded() {
+  const db = database();
+  const count = await db.prepare("SELECT COUNT(*) AS total FROM students").first<{ total: number }>();
+  if (Number(count?.total ?? 0) > 0) return;
+  const now = new Date().toISOString();
+  await db.batch([
+    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Muhammad Fikri", "SN-240181", "VIII A", "Ibnu Sina 03", "Ahmad Hidayat", "6281234567801", "Aktif", now),
+    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Ahmad Fauzan", "SN-240182", "VIII A", "Ibnu Sina 03", "Siti Rahmah", "6281234567802", "Aktif", now),
+    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Rizky Maulana", "SN-240194", "VIII B", "Al-Farabi 02", "Hendra Maulana", "6281234567803", "Aktif", now),
+    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Nabil Hidayat", "SN-240207", "VII C", "Al-Khawarizmi 01", "Nur Hidayat", "6281234567804", "Izin", now),
+    db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Faris Abdullah", "SN-240212", "IX A", "Ibnu Khaldun 02", "Abdullah Karim", "6281234567805", "Aktif", now),
+  ]);
+  await db.batch([
+    db.prepare("INSERT INTO tahfidz_records (student_id, surah, verses, amount, grade, teacher, recorded_at) VALUES (1, ?, ?, ?, ?, ?, ?)")
+      .bind("Al-Mulk", "1–15", 15, "Mumtaz", "Ustadz Hasan", now),
+    db.prepare("INSERT INTO tahfidz_records (student_id, surah, verses, amount, grade, teacher, recorded_at) VALUES (2, ?, ?, ?, ?, ?, ?)")
+      .bind("Al-Qalam", "1–12", 12, "Jayyid Jiddan", "Ustadz Hasan", now),
+    db.prepare("INSERT INTO tahfidz_records (student_id, surah, verses, amount, grade, teacher, recorded_at) VALUES (3, ?, ?, ?, ?, ?, ?)")
+      .bind("Al-Haqqah", "20–30", 11, "Jayyid", "Ustadz Fauzi", now),
+    db.prepare("INSERT INTO health_records (student_id, complaint, diagnosis, treatment, status, recorded_at) VALUES (4, ?, ?, ?, ?, ?)")
+      .bind("Demam & pusing", "Demam ringan", "Istirahat dan paracetamol", "Dipantau", now),
+    db.prepare("INSERT INTO health_records (student_id, complaint, diagnosis, treatment, status, recorded_at) VALUES (3, ?, ?, ?, ?, ?)")
+      .bind("Batuk", "Iritasi tenggorokan", "Obat batuk", "Membaik", now),
+    db.prepare("INSERT INTO transactions (student_id, type, category, amount, status, note, recorded_at) VALUES (1, ?, ?, ?, ?, ?, ?)")
+      .bind("Masuk", "SPP", 750000, "Lunas", "SPP Juli 2026", now),
+    db.prepare("INSERT INTO transactions (student_id, type, category, amount, status, note, recorded_at) VALUES (1, ?, ?, ?, ?, ?, ?)")
+      .bind("Masuk", "Uang Saku", 500000, "Berhasil", "Top up wali santri", now),
+  ]);
+  await db.batch([
+    db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind("Ranjang Susun", "Asrama", 248, "unit", "Baik", now),
+    db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind("Lemari Santri", "Asrama", 486, "unit", "Baik", now),
+    db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind("Proyektor", "Ruang Kelas", 14, "unit", "Perawatan", now),
+    db.prepare("INSERT INTO announcements (title, category, content, audience, published_at, author) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind("Jadwal Ujian Tahfidz Semester", "Akademik", "Ujian tahfidz dilaksanakan mulai 29 Juli 2026.", "Semua", now, "Admin"),
+    db.prepare("INSERT INTO announcements (title, category, content, audience, published_at, author) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind("Jadwal Kunjungan Wali Santri", "Kunjungan", "Kunjungan dibuka pada Ahad pekan pertama dan ketiga.", "Wali Santri", now, "Admin"),
+  ]);
+}
