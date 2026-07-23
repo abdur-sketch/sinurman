@@ -18,24 +18,42 @@ export async function POST(request: Request) {
   if (payload.action !== "payment-link" || !payload.billId) {
     return Response.json({ error:"Tindakan integrasi tidak valid." },{status:400});
   }
-  if (!env.MIDTRANS_SERVER_KEY) {
-    return Response.json({ error:"MIDTRANS_SERVER_KEY belum dikonfigurasi pada hosting." },{status:503});
-  }
   const bill = await database().prepare("SELECT b.*, s.name, s.guardian_phone FROM bills b JOIN students s ON s.id=b.student_id WHERE b.id=?").bind(payload.billId).first<Record<string,unknown>>();
   if(!bill) return Response.json({error:"Tagihan tidak ditemukan."},{status:404});
-  const host = env.MIDTRANS_IS_PRODUCTION === "true" ? "https://app.midtrans.com" : "https://app.sandbox.midtrans.com";
-  const authorization = btoa(`${env.MIDTRANS_SERVER_KEY}:`);
-  const response = await fetch(`${host}/snap/v1/transactions`,{
-    method:"POST",
-    headers:{"content-type":"application/json","authorization":`Basic ${authorization}`},
-    body:JSON.stringify({
-      transaction_details:{order_id:bill.invoice_no,gross_amount:bill.amount},
-      customer_details:{first_name:bill.name,phone:bill.guardian_phone},
-      item_details:[{id:String(bill.id),price:bill.amount,quantity:1,name:bill.category}],
-    }),
-  });
-  const result=await response.json() as {redirect_url?:string;error_messages?:string[]};
-  if(!response.ok||!result.redirect_url) return Response.json({error:result.error_messages?.join(", ")||"Gateway menolak transaksi."},{status:502});
-  await database().prepare("UPDATE bills SET payment_url=? WHERE id=?").bind(result.redirect_url,payload.billId).run();
-  return Response.json({paymentUrl:result.redirect_url});
+  let paymentUrl="";
+  if(env.MIDTRANS_SERVER_KEY) {
+    const host = env.MIDTRANS_IS_PRODUCTION === "true" ? "https://app.midtrans.com" : "https://app.sandbox.midtrans.com";
+    const authorization = btoa(`${env.MIDTRANS_SERVER_KEY}:`);
+    const response = await fetch(`${host}/snap/v1/transactions`,{
+      method:"POST",
+      headers:{"content-type":"application/json","authorization":`Basic ${authorization}`},
+      body:JSON.stringify({
+        transaction_details:{order_id:bill.invoice_no,gross_amount:bill.amount},
+        customer_details:{first_name:bill.name,phone:bill.guardian_phone},
+        item_details:[{id:String(bill.id),price:bill.amount,quantity:1,name:bill.category}],
+      }),
+    });
+    const result=await response.json() as {redirect_url?:string;error_messages?:string[]};
+    if(!response.ok||!result.redirect_url) return Response.json({error:result.error_messages?.join(", ")||"Midtrans menolak transaksi."},{status:502});
+    paymentUrl=result.redirect_url;
+  } else if(env.XENDIT_API_KEY) {
+    const origin=new URL(request.url).origin;
+    const response=await fetch("https://api.xendit.co/sessions",{
+      method:"POST",
+      headers:{"content-type":"application/json","authorization":`Basic ${btoa(`${env.XENDIT_API_KEY}:`)}`},
+      body:JSON.stringify({
+        reference_id:String(bill.invoice_no),session_type:"PAY",mode:"PAYMENT_LINK",
+        amount:Number(bill.amount),currency:"IDR",country:"ID",
+        customer:{reference_id:`student-${bill.student_id}`,type:"INDIVIDUAL",mobile_number:`+${String(bill.guardian_phone).replace(/\D/g,"")}`,individual_detail:{given_names:String(bill.name)}},
+        description:String(bill.category),success_return_url:origin,cancel_return_url:origin,
+      }),
+    });
+    const result=await response.json() as {payment_link_url?:string;message?:string};
+    if(!response.ok||!result.payment_link_url) return Response.json({error:result.message||"Xendit menolak transaksi."},{status:502});
+    paymentUrl=result.payment_link_url;
+  } else {
+    return Response.json({ error:"Kredensial Midtrans atau Xendit belum dikonfigurasi pada hosting." },{status:503});
+  }
+  await database().prepare("UPDATE bills SET payment_url=? WHERE id=?").bind(paymentUrl,payload.billId).run();
+  return Response.json({paymentUrl});
 }
