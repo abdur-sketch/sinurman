@@ -775,15 +775,71 @@ function NotificationModal({ students, onClose, onSent }: { students: Row[]; onC
 }
 
 function HelpModal({ role, onClose, onNavigate, onRefresh }: { role:Role; onClose:()=>void; onNavigate:(page:PageKey)=>void; onRefresh:()=>Promise<void> }) {
-  const guides=role==="Wali Santri"
-    ? [["Pembayaran","Buka Portal Wali, pilih tagihan, lalu tekan Tampilkan QR."],["Izin & Kunjungan","Ajukan izin atau akses kunjungan dari profil santri."],["Data anak","Pastikan email akun wali sama dengan email pada Data Santri."]]
-    : [["Data santri","Gunakan Data Santri untuk menghubungkan email akun wali."],["Integrasi","Aktifkan WhatsApp dan pembayaran pada menu Integrasi & Backup."],["QR gerbang","Validasi token kunjungan melalui menu Absensi & Perizinan."]];
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal help-modal" onMouseDown={e=>e.stopPropagation()}>
-    <button type="button" className="modal-close" onClick={onClose}>×</button>
-    <span className="modal-eyebrow">PUSAT BANTUAN SINURMAN</span><h2>Ada yang bisa dibantu?</h2><p>Panduan cepat sesuai peran Anda sebagai {role}.</p>
-    <div className="help-guide-list">{guides.map(([title,copy],index)=><article key={title}><span>{index+1}</span><div><strong>{title}</strong><p>{copy}</p></div></article>)}</div>
+  const closeButtonRef=useRef<HTMLButtonElement>(null);
+  const guides:{title:string;copy:string;page:PageKey;label:string}[]=role==="Wali Santri"
+    ? [
+      {title:"Pembayaran",copy:"Buka tagihan anak, lalu tekan Tampilkan QR untuk melanjutkan pembayaran.",page:"portalwali",label:"Buka Portal Wali"},
+      {title:"Izin & Kunjungan",copy:"Ajukan izin, kunjungan, atau penjemputan dari profil santri.",page:"portalwali",label:"Buka layanan wali"},
+      {title:"Data anak",copy:"Pastikan email akun wali sama dengan email yang tersimpan pada Data Santri.",page:"portalwali",label:"Periksa data anak"},
+    ]
+    : role==="Admin"
+      ? [
+        {title:"Data santri",copy:"Kelola identitas, kelas, kamar, serta hubungan akun wali.",page:"santri",label:"Buka Data Santri"},
+        {title:"Integrasi",copy:"Periksa WhatsApp, pembayaran, impor data, dan backup sistem.",page:"integrasi",label:"Buka Integrasi"},
+        {title:"QR gerbang",copy:"Validasi token kunjungan dan penjemputan melalui Absensi & Perizinan.",page:"absensi",label:"Buka Absensi"},
+      ]
+      : [
+        {title:"Santri binaan",copy:"Lihat santri yang sesuai dengan kamar atau penugasan Anda.",page:"santri",label:"Buka Data Santri"},
+        {title:"Nilai & kegiatan",copy:"Perbarui tahfidz, mutaba’ah, karakter, dan kegiatan santri.",page:"tahfidz",label:"Buka Tahfidz"},
+        {title:"Izin & kehadiran",copy:"Catat absensi serta tindak lanjuti perizinan santri binaan.",page:"absensi",label:"Buka Absensi"},
+      ];
+  useEffect(()=>{
+    closeButtonRef.current?.focus();
+    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==="Escape") onClose();};
+    window.addEventListener("keydown",closeOnEscape);
+    return()=>window.removeEventListener("keydown",closeOnEscape);
+  },[onClose]);
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal help-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title" onMouseDown={e=>e.stopPropagation()}>
+    <button ref={closeButtonRef} type="button" className="modal-close" aria-label="Tutup pusat bantuan" onClick={onClose}>×</button>
+    <span className="modal-eyebrow">PUSAT BANTUAN SINURMAN</span><h2 id="help-modal-title">Ada yang bisa dibantu?</h2><p>Panduan cepat sesuai peran Anda sebagai {role}.</p>
+    <div className="help-guide-list">{guides.map((guide,index)=><article key={guide.title}><span>{index+1}</span><div><strong>{guide.title}</strong><p>{guide.copy}</p><button type="button" onClick={()=>{onNavigate(guide.page);onClose();}}>{guide.label} →</button></div></article>)}</div>
     <div className="help-contact"><span>Butuh bantuan lanjutan?</span><strong>Tim SINURMAN siap membantu pengurus dan wali santri.</strong><a href="mailto:support@sinurman.id?subject=Bantuan%20SINURMAN">Kirim email ke support@sinurman.id</a></div>
-    <div className="modal-actions"><button className="secondary-button" onClick={()=>void onRefresh()}>↻ Sinkronkan Data</button>{role==="Admin"&&<button className="secondary-button" onClick={()=>{onNavigate("integrasi");onClose();}}>Periksa Integrasi</button>}<button className="primary-button" onClick={onClose}>Selesai</button></div>
+    <div className="modal-actions"><button type="button" className="secondary-button" onClick={()=>void onRefresh()}>↻ Sinkronkan Data</button>{role==="Admin"&&<button type="button" className="secondary-button" onClick={()=>{onNavigate("integrasi");onClose();}}>Periksa Integrasi</button>}<button type="button" className="primary-button" onClick={onClose}>Selesai</button></div>
+  </div></div>;
+}
+
+function AccountModal({ user, role, onClose }: { user:AppData["user"]; role:Role; onClose:()=>void }) {
+  const closeButtonRef=useRef<HTMLButtonElement>(null);
+  useEffect(()=>{
+    closeButtonRef.current?.focus();
+    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==="Escape") onClose();};
+    window.addEventListener("keydown",closeOnEscape);
+    return()=>window.removeEventListener("keydown",closeOnEscape);
+  },[onClose]);
+  const initials=(user?.name||"Pengguna").split(" ").map(value=>value[0]).slice(0,2).join("").toUpperCase();
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="account-modal-title" onMouseDown={event=>event.stopPropagation()}>
+    <button ref={closeButtonRef} type="button" className="modal-close" aria-label="Tutup profil akun" onClick={onClose}>×</button>
+    <span className="modal-eyebrow">AKUN SINURMAN</span><h2 id="account-modal-title">Profil pengguna</h2><p>Identitas ini berasal dari akun ChatGPT yang sedang masuk.</p>
+    <div className="account-summary"><span>{initials}</span><div><strong>{user?.name||"Pengguna SINURMAN"}</strong><small>{user?.email||"Email belum tersedia"}</small></div></div>
+    <dl className="account-details"><div><dt>Peran</dt><dd>{role}</dd></div><div><dt>Penugasan kamar</dt><dd>{user?.roomScope||"Tidak dibatasi"}</dd></div><div><dt>Status akun</dt><dd><Status tone="green">Aktif</Status></dd></div></dl>
+    <div className="modal-actions"><a className="secondary-button link-button" href="/signout-with-chatgpt?return_to=%2F">Keluar dari akun</a><button type="button" className="primary-button" onClick={onClose}>Selesai</button></div>
+  </div></div>;
+}
+
+function SettingsModal({ dark, onDarkChange, onHelp, onClose }: { dark:boolean; onDarkChange:(value:boolean)=>void; onHelp:()=>void; onClose:()=>void }) {
+  const closeButtonRef=useRef<HTMLButtonElement>(null);
+  useEffect(()=>{
+    closeButtonRef.current?.focus();
+    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==="Escape") onClose();};
+    window.addEventListener("keydown",closeOnEscape);
+    return()=>window.removeEventListener("keydown",closeOnEscape);
+  },[onClose]);
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" onMouseDown={event=>event.stopPropagation()}>
+    <button ref={closeButtonRef} type="button" className="modal-close" aria-label="Tutup pengaturan" onClick={onClose}>×</button>
+    <span className="modal-eyebrow">PENGATURAN TAMPILAN</span><h2 id="settings-modal-title">Sesuaikan dashboard</h2><p>Pilihan tampilan disimpan pada perangkat ini.</p>
+    <div className="theme-options"><button type="button" className={!dark?"active":""} aria-pressed={!dark} onClick={()=>onDarkChange(false)}><span>☀</span><strong>Terang</strong><small>Nyaman untuk penggunaan siang hari</small></button><button type="button" className={dark?"active":""} aria-pressed={dark} onClick={()=>onDarkChange(true)}><span>☾</span><strong>Gelap</strong><small>Mengurangi silau pada malam hari</small></button></div>
+    <div className="settings-help"><div><strong>Kesulitan menggunakan SINURMAN?</strong><small>Buka panduan sesuai dengan peran akun Anda.</small></div><button type="button" onClick={()=>{onClose();onHelp();}}>Buka Bantuan</button></div>
+    <div className="modal-actions"><button type="button" className="primary-button" onClick={onClose}>Simpan & Tutup</button></div>
   </div></div>;
 }
 
@@ -799,14 +855,22 @@ export default function DashboardClient() {
   const [paymentBill,setPaymentBill]=useState<Row|null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showHelp,setShowHelp]=useState(false);
+  const [showAccount,setShowAccount]=useState(false);
+  const [showSettings,setShowSettings]=useState(false);
   const [dark, setDark] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [topbarPanel,setTopbarPanel]=useState<"notifications"|"profile"|null>(null);
+  const [notificationsRead,setNotificationsRead]=useState(false);
   const [toast, setToast] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchActiveIndex, setSearchActiveIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const title = pageTitles[page];
+  const topNotices=useMemo(()=>[
+    ...data.guardianMessages.filter(row=>row.status==="Baru").map(row=>({id:`message-${row.id}`,title:`Pesan baru dari ${row.sender_email||"wali santri"}`,copy:String(row.subject||row.message||"Pesan wali menunggu balasan."),meta:"Pesan Wali"})),
+    ...data.notifications.map(row=>({id:`notification-${row.id}`,title:String(row.recipient||"Notifikasi sistem"),copy:String(row.message||"Pembaruan notifikasi SINURMAN."),meta:String(row.status||"Notifikasi")})),
+    ...data.announcements.map(row=>({id:`announcement-${row.id}`,title:String(row.title||"Pengumuman"),copy:String(row.content||"Informasi terbaru pesantren."),meta:String(row.category||"Pengumuman")})),
+  ].slice(0,5),[data]);
   const visibleNavGroups = useMemo(() => {
     const allowed = role === "Wali Santri"
       ? new Set<PageKey>(["portalwali"])
@@ -841,6 +905,12 @@ export default function DashboardClient() {
 
   useEffect(()=>{ const timer=window.setTimeout(()=>void loadData(),0); return ()=>window.clearTimeout(timer); },[loadData]);
 
+  useEffect(()=>{
+    const savedTheme=window.localStorage.getItem("sinurman-theme");
+    const timer=window.setTimeout(()=>setDark(savedTheme?savedTheme==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches),0);
+    return()=>window.clearTimeout(timer);
+  },[]);
+
   useEffect(() => {
     function openSearch(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -850,6 +920,7 @@ export default function DashboardClient() {
       }
       if (event.key === "Escape") {
         setSearchOpen(false);
+        setTopbarPanel(null);
         searchInputRef.current?.blur();
       }
     }
@@ -980,15 +1051,22 @@ export default function DashboardClient() {
     window.setTimeout(() => setToast(""), 2600);
   }
 
+  function changeTheme(nextDark:boolean) {
+    setDark(nextDark);
+    window.localStorage.setItem("sinurman-theme",nextDark?"dark":"light");
+    notify(nextDark?"Mode gelap diaktifkan.":"Mode terang diaktifkan.");
+  }
+
   return (
     <div className={`app-shell ${dark ? "dark" : ""}`}>
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="brand"><button className="brand-home" aria-label={role==="Wali Santri"?"Kembali ke Portal Wali":"Kembali ke dashboard"} onClick={()=>selectPage(role==="Wali Santri"?"portalwali":"dashboard")}><span className="brand-mark">ن</span><span><strong>SINURMAN</strong><small>Nurul Iman</small></span></button><button className="close-sidebar" onClick={()=>setSidebarOpen(false)}>×</button></div>
         <nav>{visibleNavGroups.map(group=><div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span>{item.key==="pengumuman"&&<b>3</b>}</button>)}</div>)}</nav>
-        <button className="sidebar-help" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}><span>?</span><span><strong>Butuh bantuan?</strong><small>Buka pusat bantuan</small></span></button>
-        <div className="sidebar-footer"><span>© 2026 SINURMAN</span><button onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}>Bantuan · v1.2</button></div>
+        <button type="button" className="sidebar-help" aria-haspopup="dialog" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}><span>?</span><span><strong>Butuh bantuan?</strong><small>Buka pusat bantuan</small></span></button>
+        <div className="sidebar-footer"><span>© 2026 SINURMAN</span><button type="button" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}>Bantuan · v1.3</button></div>
       </aside>
       {sidebarOpen && <button className="mobile-overlay" aria-label="Tutup menu" onClick={()=>setSidebarOpen(false)} />}
+      {topbarPanel&&<button type="button" className="topbar-dismiss" aria-label="Tutup menu kanan atas" onClick={()=>setTopbarPanel(null)} />}
 
       <div className="main-area">
         <header className="topbar">
@@ -1039,11 +1117,14 @@ export default function DashboardClient() {
             </div>}
           </div>
           <div className="top-actions">
-            <button onClick={()=>setDark(!dark)} aria-label="Ubah tema">{dark?"☀":"☾"}</button>
-            <button className="notification" onClick={()=>notify("Tidak ada notifikasi baru.")} aria-label="Notifikasi">♢<i /></button>
+            <button type="button" className="theme-toggle" onClick={()=>changeTheme(!dark)} aria-label={dark?"Aktifkan mode terang":"Aktifkan mode gelap"} title={dark?"Mode terang":"Mode gelap"}>{dark?"☀":"☾"}</button>
+            <div className="notification-wrap">
+              <button type="button" className={`notification ${topbarPanel==="notifications"?"active":""}`} onClick={()=>{setTopbarPanel(current=>current==="notifications"?null:"notifications");setNotificationsRead(true);}} aria-label={`Notifikasi${topNotices.length?` (${topNotices.length})`:""}`} aria-haspopup="menu" aria-expanded={topbarPanel==="notifications"} title="Notifikasi">♢{!notificationsRead&&topNotices.length>0&&<i />}</button>
+              {topbarPanel==="notifications"&&<div className="topbar-popover notification-menu" role="menu"><header><div><strong>Notifikasi</strong><small>{topNotices.length?`${topNotices.length} pembaruan terbaru`:"Semua sudah dibaca"}</small></div><button type="button" onClick={()=>setTopbarPanel(null)} aria-label="Tutup notifikasi">×</button></header><div className="notification-list">{topNotices.length?topNotices.map(notice=><article key={notice.id}><span>•</span><div><strong>{notice.title}</strong><p>{notice.copy}</p><small>{notice.meta}</small></div></article>):<div className="notification-empty"><b>✓</b><strong>Belum ada notifikasi</strong><span>Pembaruan pesantren akan muncul di sini.</span></div>}</div><button type="button" className="popover-action" onClick={()=>{selectPage(role==="Admin"?"integrasi":role==="Wali Santri"?"portalwali":"pengumuman");setTopbarPanel(null);}}>Lihat pusat informasi →</button></div>}
+            </div>
             <span className="divider" />
-            <div className="profile-wrap"><button className="profile-button" onClick={()=>setProfileOpen(!profileOpen)}><span>{(data.user?.name||"Ahmad Hidayat").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{data.user?.name||"Ahmad Hidayat"}</strong><small>{role}</small></div><i>⌄</i></button>
-              {profileOpen&&<div className="profile-menu"><button onClick={()=>notify("Anda masuk sebagai Administrator SINURMAN.")}>✓ Admin aktif</button><button onClick={()=>notify("Profil pengguna dibuka.")}>♙ Profil saya</button><button onClick={()=>notify("Pengaturan dibuka.")}>⚙ Pengaturan</button></div>}
+            <div className="profile-wrap"><button type="button" className={`profile-button ${topbarPanel==="profile"?"active":""}`} onClick={()=>setTopbarPanel(current=>current==="profile"?null:"profile")} aria-haspopup="menu" aria-expanded={topbarPanel==="profile"}><span>{(data.user?.name||"Pengguna").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{data.user?.name||"Pengguna SINURMAN"}</strong><small>{role}</small></div><i>{topbarPanel==="profile"?"⌃":"⌄"}</i></button>
+              {topbarPanel==="profile"&&<div className="topbar-popover profile-menu" role="menu"><div className="profile-menu-head"><span>{(data.user?.name||"Pengguna").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{data.user?.name||"Pengguna SINURMAN"}</strong><small>{data.user?.email||role}</small></div></div><div className="profile-role"><span>✓</span><div><strong>{role} aktif</strong><small>{data.user?.roomScope?`Kamar ${data.user.roomScope}`:"Akses sesuai penugasan akun"}</small></div></div><button type="button" onClick={()=>{setTopbarPanel(null);setShowAccount(true);}}>♙ <span>Profil akun</span></button><button type="button" onClick={()=>{setTopbarPanel(null);setShowSettings(true);}}>⚙ <span>Pengaturan tampilan</span></button><button type="button" onClick={()=>{setTopbarPanel(null);setShowHelp(true);}}>? <span>Pusat bantuan</span></button><a href="/signout-with-chatgpt?return_to=%2F">↪ <span>Keluar</span></a></div>}
             </div>
           </div>
         </header>
@@ -1053,7 +1134,7 @@ export default function DashboardClient() {
           {loading&&<div className="sync-banner">Menyinkronkan data SINURMAN…</div>}
           {loadError&&<div className="sync-banner error">Data online belum tersedia: {loadError} <button onClick={()=>void loadData()}>Coba lagi</button></div>}
           {content}
-          <footer className="page-footer"><span>© 2026 Pondok Pesantren Nurul Iman</span><div><button>Kebijakan Privasi</button><button>Bantuan</button></div></footer>
+          <footer className="page-footer"><span>© 2026 Pondok Pesantren Nurul Iman</span><div><button type="button" onClick={()=>notify("Data akun dan operasional hanya digunakan untuk layanan SINURMAN.")}>Kebijakan Privasi</button><button type="button" onClick={()=>setShowHelp(true)}>Bantuan</button></div></footer>
         </main>
       </div>
       <nav className={`mobile-nav ${role==="Wali Santri"?"guardian-mobile-nav":""}`}>
@@ -1065,6 +1146,8 @@ export default function DashboardClient() {
       {showNotification&&<NotificationModal students={data.students} onClose={()=>setShowNotification(false)} onSent={notify} />}
       {paymentBill&&<PaymentQrModal bill={paymentBill} onClose={()=>setPaymentBill(null)} onUpdated={loadData} notify={notify}/>}
       {showHelp&&<HelpModal role={role} onClose={()=>setShowHelp(false)} onNavigate={selectPage} onRefresh={async()=>{await loadData();notify("Data berhasil disinkronkan.");}}/>}
+      {showAccount&&<AccountModal user={data.user} role={role} onClose={()=>setShowAccount(false)}/>}
+      {showSettings&&<SettingsModal dark={dark} onDarkChange={changeTheme} onHelp={()=>setShowHelp(true)} onClose={()=>setShowSettings(false)}/>}
       {toast&&<div className="toast"><span>✓</span>{toast}</div>}
     </div>
   );

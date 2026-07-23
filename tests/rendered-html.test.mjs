@@ -147,8 +147,22 @@ test("dashboard aman untuk admin dan wali diarahkan ke portal terbatas", async (
   assert.match(lib, /identity\.email\.toLowerCase\(\) === ownerEmail/);
   assert.match(bootstrap, /const safe = async/);
   assert.match(page, /setRole\("Admin"\)/);
-  assert.match(page, /Admin aktif/);
+  assert.match(page, /\{role\} aktif/);
   assert.doesNotMatch(page, /Pratinjau peran demo/);
+});
+
+test("pusat bantuan dan ikon kanan atas memiliki aksi lengkap", async () => {
+  const page = await file("app/dashboard-client.tsx");
+  assert.match(page, /aria-haspopup="dialog"[\s\S]*setShowHelp\(true\)/);
+  assert.match(page, /PUSAT BANTUAN SINURMAN/);
+  assert.match(page, /onNavigate\(guide\.page\)/);
+  assert.match(page, /topbarPanel==="notifications"/);
+  assert.match(page, /notification-list/);
+  assert.match(page, /setShowAccount\(true\)/);
+  assert.match(page, /setShowSettings\(true\)/);
+  assert.match(page, /sinurman-theme/);
+  assert.match(page, /signout-with-chatgpt\?return_to=%2F/);
+  assert.match(page, /event\.key==="Escape"/);
 });
 
 test("portal internal memakai login ChatGPT dan halaman PPDB tetap publik", async () => {
