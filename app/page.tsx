@@ -663,6 +663,19 @@ function LoginModal({ onClose, onLogin }: { onClose: () => void; onLogin: (role:
   </div></div>;
 }
 
+function HelpModal({ role, onClose, onNavigate, onRefresh }: { role:Role; onClose:()=>void; onNavigate:(page:PageKey)=>void; onRefresh:()=>Promise<void> }) {
+  const guides=role==="Wali Santri"
+    ? [["Pembayaran","Buka Portal Wali, pilih tagihan, lalu tekan Tampilkan QR."],["Izin & Kunjungan","Ajukan izin atau akses kunjungan dari profil santri."],["Data anak","Pastikan email akun wali sama dengan email pada Data Santri."]]
+    : [["Data santri","Gunakan Data Santri untuk menghubungkan email akun wali."],["Integrasi","Aktifkan WhatsApp dan pembayaran pada menu Integrasi & Backup."],["QR gerbang","Validasi token kunjungan melalui menu Absensi & Perizinan."]];
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal help-modal" onMouseDown={e=>e.stopPropagation()}>
+    <button type="button" className="modal-close" onClick={onClose}>×</button>
+    <span className="modal-eyebrow">PUSAT BANTUAN SINURMAN</span><h2>Ada yang bisa dibantu?</h2><p>Panduan cepat sesuai peran Anda sebagai {role}.</p>
+    <div className="help-guide-list">{guides.map(([title,copy],index)=><article key={title}><span>{index+1}</span><div><strong>{title}</strong><p>{copy}</p></div></article>)}</div>
+    <div className="help-contact"><span>Butuh bantuan lanjutan?</span><strong>Tim SINURMAN siap membantu pengurus dan wali santri.</strong><a href="mailto:support@sinurman.id?subject=Bantuan%20SINURMAN">Kirim email ke support@sinurman.id</a></div>
+    <div className="modal-actions"><button className="secondary-button" onClick={()=>void onRefresh()}>↻ Sinkronkan Data</button>{role==="Admin"&&<button className="secondary-button" onClick={()=>{onNavigate("integrasi");onClose();}}>Periksa Integrasi</button>}<button className="primary-button" onClick={onClose}>Selesai</button></div>
+  </div></div>;
+}
+
 export default function Home() {
   const [page, setPage] = useState<PageKey>("dashboard");
   const [role, setRole] = useState<Role>("Admin");
@@ -675,6 +688,7 @@ export default function Home() {
   const [paymentBill,setPaymentBill]=useState<Row|null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showHelp,setShowHelp]=useState(false);
   const [dark, setDark] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -852,10 +866,10 @@ export default function Home() {
   return (
     <div className={`app-shell ${dark ? "dark" : ""}`}>
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="brand"><span className="brand-mark">ن</span><div><strong>SINURMAN</strong><small>Nurul Iman</small></div><button className="close-sidebar" onClick={()=>setSidebarOpen(false)}>×</button></div>
+        <div className="brand"><button className="brand-home" aria-label="Kembali ke halaman utama" onClick={()=>selectPage(role==="Wali Santri"?"portalwali":"dashboard")}><span className="brand-mark">ن</span><span><strong>SINURMAN</strong><small>Nurul Iman</small></span></button><button className="close-sidebar" onClick={()=>setSidebarOpen(false)}>×</button></div>
         <nav>{visibleNavGroups.map(group=><div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span>{item.key==="pengumuman"&&<b>3</b>}</button>)}</div>)}</nav>
-        <div className="sidebar-help"><span>?</span><div><strong>Butuh bantuan?</strong><small>Hubungi tim SINURMAN</small></div></div>
-        <div className="sidebar-footer"><span>© 2026 SINURMAN</span><small>Versi 1.0.0</small></div>
+        <button className="sidebar-help" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}><span>?</span><span><strong>Butuh bantuan?</strong><small>Buka pusat bantuan</small></span></button>
+        <div className="sidebar-footer"><span>© 2026 SINURMAN</span><button onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}>Bantuan · v1.2</button></div>
       </aside>
       {sidebarOpen && <button className="mobile-overlay" aria-label="Tutup menu" onClick={()=>setSidebarOpen(false)} />}
 
@@ -934,6 +948,7 @@ export default function Home() {
       {showNotification&&<NotificationModal students={data.students} onClose={()=>setShowNotification(false)} onSent={notify} />}
       {paymentBill&&<PaymentQrModal bill={paymentBill} onClose={()=>setPaymentBill(null)} onUpdated={loadData} notify={notify}/>}
       {showLogin&&<LoginModal onClose={()=>setShowLogin(false)} onLogin={r=>{setRole(r);setShowLogin(false);if(r==="Wali Santri")setPage("portalwali");notify(`Mode tampilan ${r} aktif.`)}} />}
+      {showHelp&&<HelpModal role={role} onClose={()=>setShowHelp(false)} onNavigate={selectPage} onRefresh={async()=>{await loadData();notify("Data berhasil disinkronkan.");}}/>}
       {toast&&<div className="toast"><span>✓</span>{toast}</div>}
     </div>
   );

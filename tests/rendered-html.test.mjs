@@ -82,3 +82,10 @@ test("kunjungan dan penjemputan memakai QR sekali pakai", async () => {
   assert.match(qrRoute, /SINURMAN:REQUEST:/);
   assert.match(page, /Validasi QR/);
 });
+
+test("logo dan tombol bantuan sidebar memiliki aksi", async () => {
+  const page = await file("app/page.tsx");
+  assert.match(page, /className="brand-home"[\s\S]*onClick=/);
+  assert.match(page, /className="sidebar-help"[\s\S]*setShowHelp\(true\)/);
+  assert.match(page, /PUSAT BANTUAN SINURMAN/);
+});
