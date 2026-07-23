@@ -34,7 +34,7 @@ export async function GET(request: Request) {
       db.prepare("SELECT * FROM notification_logs ORDER BY id DESC LIMIT 30").all(),
       db.prepare("SELECT a.*, s.name AS student_name FROM attendance_records a JOIN students s ON s.id=a.student_id ORDER BY a.id DESC LIMIT 100").all(),
       db.prepare("SELECT p.*, s.name AS student_name FROM leave_permits p JOIN students s ON s.id=p.student_id ORDER BY p.id DESC LIMIT 50").all(),
-      db.prepare("SELECT * FROM schedules ORDER BY day_name, start_time").all(),
+      db.prepare("SELECT * FROM schedules ORDER BY education_level, class_name, CASE day_name WHEN 'Senin' THEN 1 WHEN 'Selasa' THEN 2 WHEN 'Rabu' THEN 3 WHEN 'Kamis' THEN 4 WHEN 'Jumat' THEN 5 WHEN 'Sabtu' THEN 6 ELSE 7 END, start_time").all(),
       db.prepare("SELECT * FROM rooms ORDER BY name").all(),
       db.prepare("SELECT * FROM admissions ORDER BY id DESC").all(),
       db.prepare("SELECT c.*, s.name AS student_name FROM counseling_records c JOIN students s ON s.id=c.student_id ORDER BY c.id DESC LIMIT 100").all(),

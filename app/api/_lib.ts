@@ -108,11 +108,51 @@ export async function seedIfNeeded() {
       .bind(now.slice(0,10), now.slice(0,10), "Pemeriksaan kesehatan", "Disetujui", "Admin"),
   ]);
   const scheduleCount = await db.prepare("SELECT COUNT(*) AS total FROM schedules").first<{ total:number }>();
-  if (Number(scheduleCount?.total ?? 0) === 0) await db.batch([
-    db.prepare("INSERT INTO schedules (title, category, teacher, location, day_name, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .bind("Tahfidz Pagi", "Tahfidz", "Ustadz Hasan", "Masjid Utama", "Senin–Kamis", "05:30", "06:30"),
-    db.prepare("INSERT INTO schedules (title, category, teacher, location, day_name, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .bind("Fiqih", "Pelajaran", "Ustadz Fauzi", "Kelas VIII A", "Senin", "08:00", "09:30"),
+  if (Number(scheduleCount?.total ?? 0) < 50) {
+    const classes = [
+      ["SMP","VII A"],["SMP","VIII A"],["SMP","IX A"],
+      ["SMK","X RPL"],["SMK","XI RPL"],["SMK","XII RPL"],
+      ["SMK","X TKJ"],["SMK","XI TKJ"],["SMK","XII TKJ"],
+    ];
+    const days = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+    const slots = [["07:00","07:40"],["07:40","08:20"],["08:30","09:10"],["09:10","09:50"],["10:10","10:50"],["10:50","11:30"]];
+    const smpSubjects = [
+      ["Tahfidz","Matematika","Bahasa Indonesia","IPA","PAI","Bahasa Inggris"],
+      ["Tahfidz","IPS","Matematika","Bahasa Arab","Informatika","PJOK"],
+      ["Tahfidz","Bahasa Indonesia","IPA","Matematika","Fiqih","Seni Budaya"],
+      ["Tahfidz","Bahasa Inggris","IPS","Matematika","Akidah Akhlak","Informatika"],
+      ["Tahfidz","PAI","Bahasa Indonesia","IPA","Prakarya","Literasi"],
+      ["Tahfidz","PJOK","Projek P5","Projek P5","Muhadharah","Evaluasi Pekanan"],
+    ];
+    const smkSubjects = [
+      ["Tahfidz","Matematika","Bahasa Indonesia","Produktif 1","Produktif 1","PAI"],
+      ["Tahfidz","Bahasa Inggris","Produktif 2","Produktif 2","PKK","Bahasa Arab"],
+      ["Tahfidz","Matematika","Informatika","Produktif 1","Produktif 1","Fiqih"],
+      ["Tahfidz","Bahasa Indonesia","Produktif 2","Produktif 2","IPAS","BK"],
+      ["Tahfidz","PAI","Bahasa Inggris","PKK","Projek P5","Projek P5"],
+      ["Tahfidz","PJOK","Praktik Kejuruan","Praktik Kejuruan","Muhadharah","Evaluasi Pekanan"],
+    ];
+    const teachers: Record<string,string> = {
+      Tahfidz:"Ustadz Hasan",Matematika:"Ibu Nur Aini","Bahasa Indonesia":"Ibu Salma",IPA:"Bapak Arif",IPS:"Bapak Rizal",PAI:"Ustadz Fauzi","Bahasa Inggris":"Ibu Nadia","Bahasa Arab":"Ustadz Karim",Informatika:"Bapak Ilham",PJOK:"Bapak Fadli","Akidah Akhlak":"Ustadz Rahmat",Fiqih:"Ustadz Fauzi","Seni Budaya":"Ibu Hana",Prakarya:"Ibu Hana",Literasi:"Ibu Salma",BK:"Ibu Laila",IPAS:"Bapak Arif",PKK:"Bapak Dimas","Projek P5":"Tim Projek",Muhadharah:"Ustadz Hasan","Evaluasi Pekanan":"Wali Kelas","Praktik Kejuruan":"Guru Produktif",
+    };
+    const statements: D1PreparedStatement[] = [];
+    for (const [level,className] of classes) {
+      for (let dayIndex=0; dayIndex<days.length; dayIndex++) {
+        for (let slotIndex=0; slotIndex<slots.length; slotIndex++) {
+          let subject=(level==="SMP"?smpSubjects:smkSubjects)[dayIndex][slotIndex];
+          if(subject.startsWith("Produktif")) subject=className.includes("RPL")?(subject==="Produktif 1"?"Pemrograman Web":"Basis Data"):(subject==="Produktif 1"?"Jaringan Komputer":"Administrasi Sistem");
+          if(subject==="Praktik Kejuruan") subject=className.includes("RPL")?"Praktik Pemrograman":"Praktik Jaringan";
+          const category=subject==="Tahfidz"?"Tahfidz":subject.includes("Pemrograman")||subject.includes("Jaringan")||subject==="Basis Data"||subject==="Administrasi Sistem"||subject==="PKK"?"Produktif":"Pelajaran Umum";
+          const teacher=teachers[subject]??(category==="Produktif"?"Bapak Dimas":"Wali Kelas");
+          statements.push(db.prepare("INSERT INTO schedules (education_level, class_name, title, category, teacher, location, day_name, start_time, end_time) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM schedules WHERE class_name=? AND day_name=? AND start_time=?)")
+            .bind(level,className,subject,category,teacher,`Kelas ${className}`,days[dayIndex],slots[slotIndex][0],slots[slotIndex][1],className,days[dayIndex],slots[slotIndex][0]));
+        }
+      }
+    }
+    for(let index=0;index<statements.length;index+=75) await db.batch(statements.slice(index,index+75));
+  }
+  const roomCount = await db.prepare("SELECT COUNT(*) AS total FROM rooms").first<{ total:number }>();
+  if (Number(roomCount?.total ?? 0) === 0) await db.batch([
     db.prepare("INSERT INTO rooms (name, capacity, supervisor, status) VALUES (?, ?, ?, ?)")
       .bind("Ibnu Sina 03", 24, "Ustadz Rahmat", "Aktif"),
     db.prepare("INSERT INTO rooms (name, capacity, supervisor, status) VALUES (?, ?, ?, ?)")

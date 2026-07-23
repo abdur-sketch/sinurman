@@ -48,8 +48,8 @@ const resourceConfig = {
   },
   schedules: {
     table: "schedules",
-    columns: ["title", "category", "teacher", "location", "day_name", "start_time", "end_time"],
-    required: ["title", "category", "teacher", "location", "day_name", "start_time", "end_time"],
+    columns: ["education_level", "class_name", "title", "category", "teacher", "location", "day_name", "start_time", "end_time"],
+    required: ["education_level", "class_name", "title", "category", "teacher", "location", "day_name", "start_time", "end_time"],
   },
   rooms: {
     table: "rooms",

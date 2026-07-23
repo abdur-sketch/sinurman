@@ -23,6 +23,7 @@ untuk pengurus, ustadz, dan wali santri.
 - Ekspor laporan PDF dan Excel/CSV
 - Absensi harian dan perizinan pulang/sakit
 - Jadwal pelajaran, ustadz, kegiatan, dan kamar
+- Jadwal harian per kelas untuk SMP VII–IX dan SMK X–XII jurusan RPL/TKJ
 - Portal khusus wali santri
 - Tagihan dan konektor Midtrans/Xendit
 - WhatsApp Cloud API dengan fallback tautan WhatsApp

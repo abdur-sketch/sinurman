@@ -122,6 +122,8 @@ export const leavePermits = sqliteTable("leave_permits", {
 
 export const schedules = sqliteTable("schedules", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  educationLevel: text("education_level").notNull().default("SMP"),
+  className: text("class_name").notNull().default("VII A"),
   title: text("title").notNull(),
   category: text("category").notNull(),
   teacher: text("teacher").notNull(),
