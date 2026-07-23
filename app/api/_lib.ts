@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 
 export type Role = "Admin" | "Ustadz" | "Wali Santri";
+const ownerEmail = "baikganteng88@gmail.com";
 
 export function database() {
   if (!env.DB) throw new Error("Database SINURMAN belum tersedia.");
@@ -96,10 +97,16 @@ export async function ensureUser(request: Request) {
     .bind(identity.email)
     .first<{ id: number; email: string; name: string; role: Role }>();
 
-  if (existing) return existing;
+  if (existing) {
+    if (identity.email.toLowerCase() === ownerEmail && existing.role !== "Admin") {
+      await db.prepare("UPDATE users SET role='Admin' WHERE id=?").bind(existing.id).run();
+      return { ...existing, role: "Admin" as const };
+    }
+    return existing;
+  }
 
   const count = await db.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>();
-  const role: Role = Number(count?.total ?? 0) === 0 ? "Admin" : "Wali Santri";
+  const role: Role = identity.email.toLowerCase() === ownerEmail || Number(count?.total ?? 0) === 0 ? "Admin" : "Wali Santri";
   const now = new Date().toISOString();
   await db
     .prepare("INSERT INTO users (email, name, role, created_at) VALUES (?, ?, ?, ?)")

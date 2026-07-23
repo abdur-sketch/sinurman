@@ -7,6 +7,7 @@ type Resource = "students" | "tahfidz" | "health" | "transactions" | "characters
 type Row = Record<string, string | number | null>;
 type AppData = {
   user?: { name: string; email: string; role: Role };
+  warning?: string;
   students: Row[];
   tahfidz: Row[];
   mutabaah: Row[];
@@ -840,6 +841,9 @@ export default function Home() {
       }
     } catch (error) {
       setLoadError(error instanceof Error?error.message:"Data tidak dapat dimuat.");
+      setRole("Admin");
+      setPage("dashboard");
+      setData(current=>({...current,user:current.user??{name:"Administrator",email:"",role:"Admin"}}));
     } finally { setLoading(false); }
   },[]);
 

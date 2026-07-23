@@ -131,9 +131,10 @@ test("verifikasi PPDB hanya dapat dilakukan admin", async () => {
 });
 
 test("dashboard menginisialisasi database dan dapat dibuka semua peran", async () => {
-  const [lib, page] = await Promise.all([
+  const [lib, page, bootstrap] = await Promise.all([
     file("app/api/_lib.ts"),
     file("app/page.tsx"),
+    file("app/api/bootstrap/route.ts"),
   ]);
   assert.match(lib, /ensureDatabaseSchema/);
   assert.match(lib, /CREATE TABLE IF NOT EXISTS students/);
@@ -141,4 +142,9 @@ test("dashboard menginisialisasi database dan dapat dibuka semua peran", async (
   assert.match(page, /new Set<PageKey>\(\["dashboard","penerimaan","portalwali"\]\)/);
   assert.doesNotMatch(page, /if\(result\.user\.role==="Wali Santri"\) setPage\("portalwali"\)/);
   assert.match(page, /aria-label="Kembali ke dashboard"/);
+  assert.match(lib, /UPDATE users SET role='Admin'/);
+  assert.match(lib, /const ownerEmail = "baikganteng88@gmail.com"/);
+  assert.match(lib, /identity\.email\.toLowerCase\(\) === ownerEmail/);
+  assert.match(bootstrap, /const safe = async/);
+  assert.match(page, /setRole\("Admin"\)/);
 });

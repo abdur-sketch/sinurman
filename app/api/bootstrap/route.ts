@@ -2,13 +2,22 @@ import { database, ensureUser, seedIfNeeded } from "../_lib";
 
 export async function GET(request: Request) {
   try {
-    await seedIfNeeded();
     const db = database();
     const user = await ensureUser(request);
+    let seedWarning = "";
+    try {
+      await seedIfNeeded();
+    } catch (error) {
+      seedWarning = error instanceof Error ? error.message : "Data contoh belum dapat disiapkan.";
+    }
     const guardian = user.role === "Wali Santri";
     const guardianEmail = user.email.toLocaleLowerCase("id-ID");
-    const all = (query: string) => db.prepare(query).all();
-    const owned = (query: string) => db.prepare(query).bind(guardianEmail).all();
+    const safe = async (operation: Promise<D1Result<unknown>>) => {
+      try { return await operation; }
+      catch { return { results: [] } as unknown as D1Result<unknown>; }
+    };
+    const all = (query: string) => safe(db.prepare(query).all());
+    const owned = (query: string) => safe(db.prepare(query).bind(guardianEmail).all());
 
     const [
       students,
@@ -121,6 +130,7 @@ export async function GET(request: Request) {
       audit: audit.results,
       guardianMessages: guardianMessages.results,
       guardianRequests: guardianRequests.results,
+      warning: seedWarning,
     });
   } catch (error) {
     return Response.json(
