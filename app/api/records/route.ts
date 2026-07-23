@@ -1,5 +1,6 @@
 import { canWrite, database, ensureUser } from "../_lib";
 import { notifyRecordChange } from "../_notifications";
+import { quranRangeAmount } from "../../quran-data";
 
 const resourceConfig = {
   students: {
@@ -46,6 +47,16 @@ const resourceConfig = {
     table: "attendance_records",
     columns: ["student_id", "record_date", "status", "note", "recorded_by"],
     required: ["student_id", "record_date", "status"],
+  },
+  subjects: {
+    table: "academic_subjects",
+    columns: ["code","name","education_level","class_name","teacher","semester","academic_year","minimum_score","created_at"],
+    required: ["code","name","education_level","class_name","teacher","semester","academic_year","minimum_score"],
+  },
+  grades: {
+    table: "academic_grades",
+    columns: ["student_id","subject_id","assignment_score","midterm_score","exam_score","final_score","predicate","note","semester","academic_year","recorded_by","recorded_at"],
+    required: ["student_id","subject_id","assignment_score","midterm_score","exam_score"],
   },
   permits: {
     table: "leave_permits",
@@ -106,7 +117,7 @@ export async function POST(request: Request) {
     const db = database();
     const config = resourceConfig[resource];
     if (user.role === "Musyrif" || user.role === "Kepala Asrama") {
-      const studentResources = new Set<Resource>(["tahfidz","mutabaah","health","characters","attendance","permits","counseling"]);
+      const studentResources = new Set<Resource>(["tahfidz","mutabaah","health","characters","attendance","permits","counseling","grades"]);
       if (studentResources.has(resource)) {
         let studentId = Number(payload.data?.student_id ?? 0);
         if (!studentId && payload.id) {
@@ -135,9 +146,18 @@ export async function POST(request: Request) {
       const verseTo=Number(source.verse_to??0);
       if(!surahFrom||!surahTo) return Response.json({error:"Surat awal dan surat akhir wajib diisi."},{status:400});
       if(!Number.isInteger(verseFrom)||!Number.isInteger(verseTo)||verseFrom<1||verseTo<1) return Response.json({error:"Ayat awal dan ayat akhir harus berupa angka mulai dari 1."},{status:400});
-      if(surahFrom.toLocaleLowerCase("id-ID")===surahTo.toLocaleLowerCase("id-ID")&&verseTo<verseFrom) return Response.json({error:"Ayat akhir tidak boleh lebih kecil dari ayat awal pada surat yang sama."},{status:400});
+      if(surahFrom===surahTo&&verseTo<verseFrom) return Response.json({error:"Ayat akhir tidak boleh lebih kecil dari ayat awal."},{status:400});
+      try { source.amount=quranRangeAmount(surahFrom,verseFrom,surahTo,verseTo); }
+      catch(error) { return Response.json({error:error instanceof Error?error.message:"Rentang hafalan tidak valid."},{status:400}); }
       source.surah=surahFrom===surahTo?surahFrom:`${surahFrom} s.d. ${surahTo}`;
       source.verses=`${verseFrom}-${verseTo}`;
+    }
+    if (resource === "grades") {
+      const scores=["assignment_score","midterm_score","exam_score"].map(key=>Number(source[key]));
+      if(scores.some(score=>!Number.isFinite(score)||score<0||score>100)) return Response.json({error:"Semua komponen nilai harus berada pada rentang 0–100."},{status:400});
+      const finalScore=Math.round(scores[0]*0.3+scores[1]*0.3+scores[2]*0.4);
+      source.final_score=finalScore;
+      source.predicate=finalScore>=90?"A":finalScore>=80?"B":finalScore>=70?"C":"D";
     }
     if (action === "update") {
       if (!payload.id) return Response.json({ error: "ID wajib diisi." }, { status: 400 });
@@ -148,7 +168,7 @@ export async function POST(request: Request) {
         .bind(...values, payload.id).run();
       await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(user.email, "Ubah", resource, payload.id, `Memperbarui data ${resource}`, new Date().toISOString()).run();
-      if(["permits","attendance","tahfidz","health","bills"].includes(resource)) {
+      if(["permits","attendance","tahfidz","health","bills","grades","characters","counseling"].includes(resource)) {
         const updated=await db.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(payload.id).first<Record<string,unknown>>();
         if(updated) try{await notifyRecordChange(resource,updated);}catch{/* notification must not block the record */}
       }
@@ -181,6 +201,7 @@ export async function POST(request: Request) {
       points: 0,
       payment_url: "",
       role: "Wali Santri",
+      academic_year: "2026/2027",
     };
     const data = { ...defaults, ...source };
     const columns = config.columns.filter((column) => data[column] !== undefined);
@@ -190,7 +211,7 @@ export async function POST(request: Request) {
       .bind(...values).run();
     await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(user.email, "Tambah", resource, result.meta.last_row_id, `Menambahkan data ${resource}`, now).run();
-    if(["attendance","tahfidz","health","bills"].includes(resource)) {
+    if(["attendance","tahfidz","health","bills","grades","characters","counseling"].includes(resource)) {
       try{await notifyRecordChange(resource,data);}catch{/* notification must not block the record */}
     }
     return Response.json({ ok: true, id: result.meta.last_row_id }, { status: 201 });

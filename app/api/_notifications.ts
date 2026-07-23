@@ -49,5 +49,8 @@ export async function notifyRecordChange(resource:string,row:Record<string,unkno
   if(resource==="health") message=`SINURMAN: Catatan kesehatan ${student.name}: ${row.complaint}. Status ${row.status}.`;
   if(resource==="bills") message=`SINURMAN: Tagihan baru ${row.category} untuk ${student.name} sebesar Rp${Number(row.amount||0).toLocaleString("id-ID")}, jatuh tempo ${row.due_date}.`;
   if(resource==="permits"&&["Disetujui","Ditolak"].includes(String(row.status))) message=`SINURMAN: Pengajuan izin ${student.name} telah ${String(row.status).toLowerCase()}.`;
+  if(resource==="grades") message=`SINURMAN: Nilai akademik ${student.name} diperbarui. Nilai akhir ${row.final_score} (predikat ${row.predicate}) untuk semester ${row.semester}.`;
+  if(resource==="characters") message=`SINURMAN: Nilai karakter ${student.name} untuk ${row.category} diperbarui menjadi ${row.score}.`;
+  if(resource==="counseling"&&["Pelanggaran","Prestasi"].includes(String(row.type))) message=`SINURMAN: Catatan ${String(row.type).toLowerCase()} ${student.name}: ${row.category}. Status ${row.status}.`;
   if(message) await notifyGuardian(studentId,message);
 }

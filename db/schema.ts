@@ -116,6 +116,35 @@ export const attendanceRecords = sqliteTable("attendance_records", {
   recordedBy: text("recorded_by").notNull(),
 });
 
+export const academicSubjects = sqliteTable("academic_subjects", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  educationLevel: text("education_level").notNull(),
+  className: text("class_name").notNull(),
+  teacher: text("teacher").notNull(),
+  semester: text("semester").notNull(),
+  academicYear: text("academic_year").notNull(),
+  minimumScore: integer("minimum_score").notNull().default(75),
+  createdAt: text("created_at").notNull(),
+});
+
+export const academicGrades = sqliteTable("academic_grades", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  subjectId: integer("subject_id").notNull().references(() => academicSubjects.id),
+  assignmentScore: integer("assignment_score").notNull(),
+  midtermScore: integer("midterm_score").notNull(),
+  examScore: integer("exam_score").notNull(),
+  finalScore: integer("final_score").notNull(),
+  predicate: text("predicate").notNull(),
+  note: text("note").notNull(),
+  semester: text("semester").notNull(),
+  academicYear: text("academic_year").notNull(),
+  recordedBy: text("recorded_by").notNull(),
+  recordedAt: text("recorded_at").notNull(),
+});
+
 export const leavePermits = sqliteTable("leave_permits", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   studentId: integer("student_id").notNull().references(() => students.id),

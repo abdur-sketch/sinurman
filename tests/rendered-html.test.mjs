@@ -257,3 +257,55 @@ test("unggah PPDB publik memvalidasi token, tipe, dan ukuran berkas", async () =
   assert.match(documents, /5 \* 1024 \* 1024/);
   assert.match(documents, /env\.FILES\.put/);
 });
+
+test("akademik SMP-SMK menghitung rapor dan membatasi data sesuai kamar", async () => {
+  const [dashboard, records, bootstrap, exportRoute, migration] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/records/route.ts"),
+    file("app/api/bootstrap/route.ts"),
+    file("app/api/export/route.ts"),
+    file("drizzle/0008_academic_qr.sql"),
+  ]);
+  assert.match(dashboard, /Akademik & Rapor/);
+  assert.match(dashboard, /assignment_score/);
+  assert.match(records, /scores\[0\]\*0\.3\+scores\[1\]\*0\.3\+scores\[2\]\*0\.4/);
+  assert.match(records, /finalScore>=90\?"A"/);
+  assert.match(bootstrap, /academic_grades/);
+  assert.match(bootstrap, /WHERE s\.room=\?/);
+  assert.match(exportRoute, /academics: \{/);
+  assert.match(migration, /CREATE TABLE `academic_subjects`/);
+  assert.match(migration, /CREATE TABLE `academic_grades`/);
+});
+
+test("presensi QR dan notifikasi WhatsApp otomatis terintegrasi", async () => {
+  const [qr, card, notifications, dashboard] = await Promise.all([
+    file("app/api/attendance-qr/route.ts"),
+    file("app/api/student-card/route.ts"),
+    file("app/api/_notifications.ts"),
+    file("app/dashboard-client.tsx"),
+  ]);
+  assert.match(card, /app:"SINURMAN"/);
+  assert.match(qr, /payload\.app!=="SINURMAN"/);
+  assert.match(qr, /student_id=\? AND record_date=\?/);
+  assert.match(qr, /Santri berada di luar penugasan kamar Anda/);
+  assert.match(qr, /notifyRecordChange\("attendance"/);
+  for (const resource of ["grades","characters","counseling"]) assert.match(notifications, new RegExp(`resource==="${resource}"`));
+  assert.match(dashboard, /Notifikasi WhatsApp Otomatis/);
+});
+
+test("dashboard analitik dapat difilter per kelas, kamar, dan periode", async () => {
+  const dashboard = await file("app/dashboard-client.tsx");
+  assert.match(dashboard, /classFilter/);
+  assert.match(dashboard, /roomFilter/);
+  assert.match(dashboard, /periodFilter/);
+  assert.match(dashboard, /Distribusi per Kelas/);
+  assert.match(dashboard, /Distribusi per Kamar/);
+});
+
+test("master Al-Quran berisi 114 surat dan memvalidasi rentang lintas surat", async () => {
+  const quran = await file("app/quran-data.ts");
+  assert.match(quran, /\[1,"Al-Fatihah",7\]/);
+  assert.match(quran, /\[114,"An-Nas",6\]/);
+  assert.match(quran, /end<start/);
+  assert.match(quran, /amount\+=QURAN_SURAHS\[index\]\.verses/);
+});

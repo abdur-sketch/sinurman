@@ -44,6 +44,13 @@ const exports:Record<string,ExportDefinition> = {
     columns:[{key:"santri",label:"Santri",weight:1.5},{key:"class_name",label:"Kelas"},{key:"record_date",label:"Tanggal"},{key:"status",label:"Status"},{key:"note",label:"Catatan",weight:1.8},{key:"recorded_by",label:"Pencatat",weight:1.3}],
     dateKey:"record_date",
   },
+  academics: {
+    title:"Rapor Akademik SMP–SMK",
+    description:"Nilai tugas, PTS, PAS, nilai akhir, predikat, dan catatan rapor.",
+    query:"SELECT s.nis,s.name AS santri,s.class_name,a.name AS mata_pelajaran,g.assignment_score,g.midterm_score,g.exam_score,g.final_score,g.predicate,g.semester,g.academic_year,g.note FROM academic_grades g JOIN students s ON s.id=g.student_id JOIN academic_subjects a ON a.id=g.subject_id ORDER BY s.class_name,s.name,a.name",
+    scopedQuery:"SELECT s.nis,s.name AS santri,s.class_name,a.name AS mata_pelajaran,g.assignment_score,g.midterm_score,g.exam_score,g.final_score,g.predicate,g.semester,g.academic_year,g.note FROM academic_grades g JOIN students s ON s.id=g.student_id JOIN academic_subjects a ON a.id=g.subject_id WHERE s.room=? ORDER BY s.class_name,s.name,a.name",
+    columns:[{key:"nis",label:"NIS"},{key:"santri",label:"Santri",weight:1.4},{key:"class_name",label:"Kelas"},{key:"mata_pelajaran",label:"Pelajaran",weight:1.4},{key:"assignment_score",label:"Tugas"},{key:"midterm_score",label:"PTS"},{key:"exam_score",label:"PAS"},{key:"final_score",label:"Akhir"},{key:"predicate",label:"Predikat"},{key:"semester",label:"Semester"},{key:"academic_year",label:"Tahun"},{key:"note",label:"Catatan",weight:1.6}],
+  },
   characters: {
     title:"Rapor Karakter Santri",
     description:"Nilai karakter, semester, dan catatan pembina.",

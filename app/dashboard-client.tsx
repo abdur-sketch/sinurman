@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { QURAN_SURAHS, quranRangeAmount } from "./quran-data";
 
 type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
-type Resource = "students" | "tahfidz" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users";
+type Resource = "students" | "tahfidz" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
 type Row = Record<string, string | number | null>;
 type AppData = {
   user?: { name: string; email: string; role: Role; roomScope?: string };
@@ -18,6 +19,8 @@ type AppData = {
   announcements: Row[];
   notifications: Row[];
   attendance: Row[];
+  subjects: Row[];
+  grades: Row[];
   permits: Row[];
   schedules: Row[];
   rooms: Row[];
@@ -43,13 +46,14 @@ type SearchResult = {
 const emptyData: AppData = {
   students: [], tahfidz: [], mutabaah: [], health: [], transactions: [], characters: [],
   inventory: [], announcements: [], notifications: [],
-  attendance: [], permits: [], schedules: [], rooms: [], admissions: [], admissionDocuments: [],
+  attendance: [], subjects: [], grades: [], permits: [], schedules: [], rooms: [], admissions: [], admissionDocuments: [],
   counseling: [], bills: [], users: [], audit: [], guardianMessages: [], guardianRequests: [],
 };
 type PageKey =
   | "dashboard"
   | "santri"
   | "tahfidz"
+  | "akademik"
   | "mutabaah"
   | "kesehatan"
   | "keuangan"
@@ -77,6 +81,7 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
     label: "AKADEMIK & PEMBINAAN",
     items: [
       { key: "tahfidz", icon: "◫", label: "Tahfidz" },
+      { key: "akademik", icon: "A", label: "Akademik & Rapor" },
       { key: "mutabaah", icon: "✓", label: "Mutaba’ah" },
       { key: "karakter", icon: "☆", label: "Rapor Karakter" },
       { key: "absensi", icon: "◷", label: "Absensi & Izin" },
@@ -114,6 +119,7 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
   dashboard: { title: "Assalamu’alaikum, Ahmad 👋", subtitle: "Berikut ringkasan perkembangan pesantren hari ini." },
   santri: { title: "Data Santri", subtitle: "Kelola profil, kelas, kamar, dan status seluruh santri." },
   tahfidz: { title: "Tahfidz & Hafalan", subtitle: "Pantau target, setoran, dan capaian hafalan santri." },
+  akademik: { title: "Akademik & Rapor", subtitle: "Kelola mata pelajaran dan nilai rapor SMP–SMK." },
   mutabaah: { title: "Mutaba’ah Ibadah", subtitle: "Rekap pelaksanaan ibadah dan kegiatan harian." },
   kesehatan: { title: "Kesehatan Santri", subtitle: "Catatan pemeriksaan, keluhan, dan tindak lanjut kesehatan." },
   keuangan: { title: "Keuangan", subtitle: "Kelola SPP, uang saku, dan riwayat transaksi." },
@@ -180,63 +186,57 @@ function Metric({ title, value, icon, tone }: { title:string; value:number|strin
 }
 
 function Overview({ data }: { data: AppData }) {
-  const paid = data.transactions.filter((x) => x.type === "Masuk").reduce((sum, x) => sum + Number(x.amount || 0), 0);
+  const [classFilter,setClassFilter]=useState("Semua");
+  const [roomFilter,setRoomFilter]=useState("Semua");
+  const [periodFilter,setPeriodFilter]=useState("30");
+  const [referenceTime]=useState(()=>Date.now());
+  const classes=[...new Set(data.students.map(row=>String(row.class_name)).filter(Boolean))].sort();
+  const rooms=[...new Set(data.students.map(row=>String(row.room)).filter(Boolean))].sort();
+  const filteredStudents=data.students.filter(row=>(classFilter==="Semua"||row.class_name===classFilter)&&(roomFilter==="Semua"||row.room===roomFilter));
+  const studentIds=new Set(filteredStudents.map(row=>String(row.id)));
+  const cutoff=periodFilter==="all"?0:referenceTime-Number(periodFilter)*86400000;
+  const inPeriod=(value:unknown)=>!cutoff||new Date(String(value)).getTime()>=cutoff;
+  const tahfidz=data.tahfidz.filter(row=>studentIds.has(String(row.student_id))&&inPeriod(row.recorded_at));
+  const attendance=data.attendance.filter(row=>studentIds.has(String(row.student_id))&&inPeriod(row.record_date));
+  const grades=data.grades.filter(row=>studentIds.has(String(row.student_id))&&inPeriod(row.recorded_at));
+  const transactions=data.transactions.filter(row=>studentIds.has(String(row.student_id))&&inPeriod(row.recorded_at));
+  const paid = transactions.filter((x) => x.type === "Masuk").reduce((sum, x) => sum + Number(x.amount || 0), 0);
+  const attendanceRate=attendance.length?Math.round(attendance.filter(row=>row.status==="Hadir").length/attendance.length*100):0;
+  const gradeAverage=grades.length?Math.round(grades.reduce((sum,row)=>sum+Number(row.final_score||0),0)/grades.length):0;
+  const classStats=classes.map(label=>({label,value:data.students.filter(row=>row.class_name===label&&(roomFilter==="Semua"||row.room===roomFilter)).length})).filter(item=>item.value);
+  const roomStats=rooms.map(label=>({label,value:data.students.filter(row=>row.room===label&&(classFilter==="Semua"||row.class_name===classFilter)).length})).filter(item=>item.value);
+  const maxBar=Math.max(1,...classStats.map(item=>item.value),...roomStats.map(item=>item.value));
   return (
     <>
+      <section className="card analytics-toolbar"><div><strong>Analitik Operasional</strong><small>Grafik dan angka mengikuti kelas, kamar, serta periode yang dipilih.</small></div><label>Kelas<select value={classFilter} onChange={event=>setClassFilter(event.target.value)}><option>Semua</option>{classes.map(item=><option key={item}>{item}</option>)}</select></label><label>Kamar<select value={roomFilter} onChange={event=>setRoomFilter(event.target.value)}><option>Semua</option>{rooms.map(item=><option key={item}>{item}</option>)}</select></label><label>Periode<select value={periodFilter} onChange={event=>setPeriodFilter(event.target.value)}><option value="7">7 hari</option><option value="30">30 hari</option><option value="90">90 hari</option><option value="365">1 tahun</option><option value="all">Semua</option></select></label></section>
       <section className="stats-grid">
         <article className="stat-card">
-          <div className="stat-copy"><span>Total Santri</span><strong>{data.students.length || 486}</strong><small className="up">↑ Data aktif <b>tersimpan permanen</b></small></div>
+          <div className="stat-copy"><span>Santri Terpilih</span><strong>{filteredStudents.length}</strong><small className="up">Filter <b>kelas & kamar aktif</b></small></div>
           <MiniIcon tone="blue">♙</MiniIcon><Sparkline values={[32, 44, 38, 58, 51, 68, 72, 83]} />
         </article>
         <article className="stat-card">
-          <div className="stat-copy"><span>Total Setoran</span><strong>{data.tahfidz.length || 142}</strong><small className="up">↑ Sinkron <b>dengan data tahfidz</b></small></div>
+          <div className="stat-copy"><span>Total Setoran</span><strong>{tahfidz.length}</strong><small className="up">Periode <b>yang dipilih</b></small></div>
           <MiniIcon tone="green">◫</MiniIcon><Sparkline color="green" values={[48, 31, 58, 45, 70, 62, 75, 88]} />
         </article>
         <article className="stat-card">
-          <div className="stat-copy"><span>Kehadiran</span><strong>96,8%</strong><small className="down">↓ 0,4% <b>dari kemarin</b></small></div>
+          <div className="stat-copy"><span>Kehadiran</span><strong>{attendanceRate}%</strong><small><b>{attendance.length} catatan</b> presensi</small></div>
           <MiniIcon tone="amber">✓</MiniIcon><Sparkline color="amber" values={[82, 75, 90, 84, 78, 92, 86, 80]} />
         </article>
         <article className="stat-card">
-          <div className="stat-copy"><span>Transaksi Masuk</span><strong>Rp{paid ? `${(paid/1000000).toFixed(1)}jt` : "128jt"}</strong><small className="up">↑ Tercatat <b>di buku keuangan</b></small></div>
+          <div className="stat-copy"><span>Rata-rata Nilai</span><strong>{gradeAverage||"-"}</strong><small className="up"><b>{grades.length} nilai</b> akademik</small></div>
           <MiniIcon tone="violet">Rp</MiniIcon><Sparkline color="violet" values={[24, 40, 35, 56, 48, 68, 62, 78]} />
         </article>
       </section>
 
       <section className="dashboard-grid">
-        <article className="card chart-card">
-          <header className="card-header">
-            <div><h3>Perkembangan Hafalan</h3><p>Rata-rata capaian juz seluruh santri</p></div>
-            <select aria-label="Periode grafik"><option>6 Bulan Terakhir</option><option>Tahun Ini</option></select>
-          </header>
-          <div className="legend"><span><i className="legend-dot blue" />Target</span><span><i className="legend-dot green" />Tercapai</span></div>
-          <div className="bar-chart">
-            {[{m:"Feb",a:58,b:49},{m:"Mar",a:70,b:62},{m:"Apr",a:65,b:57},{m:"Mei",a:79,b:72},{m:"Jun",a:85,b:78},{m:"Jul",a:92,b:86}].map((x) => (
-              <div className="bar-group" key={x.m}><div className="bars"><span style={{height:`${x.a}%`}} /><span style={{height:`${x.b}%`}} /></div><small>{x.m}</small></div>
-            ))}
-          </div>
-        </article>
-
-        <article className="card activity-card">
-          <header className="card-header"><div><h3>Aktivitas Terbaru</h3><p>Pembaruan hari ini</p></div><button className="text-button">Lihat semua</button></header>
-          <div className="timeline">
-            {[
-              ["green","✓","Setoran diterima","Muhammad Fikri menyetor QS. Al-Mulk","10 menit lalu"],
-              ["blue","Rp","Pembayaran SPP","Pembayaran Juli dari wali Ahmad Fauzan","35 menit lalu"],
-              ["amber","✚","Pemeriksaan kesehatan","Nabil diperiksa karena demam ringan","1 jam lalu"],
-              ["violet","☆","Nilai karakter diperbarui","Ust. Hasan memperbarui 12 rapor","2 jam lalu"],
-            ].map(([tone,icon,title,desc,time]) => (
-              <div className="timeline-item" key={title}><MiniIcon tone={tone}>{icon}</MiniIcon><div><strong>{title}</strong><p>{desc}</p><small>{time}</small></div></div>
-            ))}
-          </div>
-        </article>
+        <article className="card analytics-card"><header className="card-header"><div><h3>Distribusi per Kelas</h3><p>Jumlah santri sesuai filter kamar</p></div></header><div className="horizontal-bars">{classStats.map(item=><div key={item.label}><span>{item.label}</span><i><b style={{width:`${item.value/maxBar*100}%`}} /></i><strong>{item.value}</strong></div>)}{!classStats.length&&<p className="muted">Belum ada data kelas.</p>}</div></article>
+        <article className="card analytics-card"><header className="card-header"><div><h3>Distribusi per Kamar</h3><p>Jumlah santri sesuai filter kelas</p></div></header><div className="horizontal-bars room-bars">{roomStats.map(item=><div key={item.label}><span>{item.label}</span><i><b style={{width:`${item.value/maxBar*100}%`}} /></i><strong>{item.value}</strong></div>)}{!roomStats.length&&<p className="muted">Belum ada data kamar.</p>}</div></article>
       </section>
 
       <section className="dashboard-grid lower">
         <article className="card compact-list">
-          <header className="card-header"><div><h3>Target Tahfidz Kelas</h3><p>Progres bulan Juli 2026</p></div><button className="more">•••</button></header>
-          {[
-            ["Kelas VII A","Juz 30",82,"green"],["Kelas VII B","Juz 30",74,"blue"],["Kelas VIII A","Juz 29",68,"amber"],["Kelas IX A","Juz 28",91,"violet"]
-          ].map(([label,target,value,tone]) => <div className="progress-row" key={String(label)}><div><strong>{label}</strong><small>{target}</small></div><Progress value={Number(value)} tone={String(tone)} /><b>{value}%</b></div>)}
+          <header className="card-header"><div><h3>Ringkasan Periode</h3><p>Aktivitas pada cakupan yang dipilih</p></div></header>
+          {[["Ayat disetorkan",tahfidz.reduce((sum,row)=>sum+Number(row.amount||0),0),"green"],["Catatan kehadiran",attendance.length,"blue"],["Nilai akademik",grades.length,"amber"],["Transaksi masuk",`Rp${money.format(paid)}`,"violet"]].map(([label,value,tone])=><div className="analytics-summary" key={String(label)}><MiniIcon tone={String(tone)}>{String(label).slice(0,1)}</MiniIcon><span>{label}</span><strong>{value}</strong></div>)}
         </article>
         <article className="card announcement-card">
           <header className="card-header"><div><h3>Pengumuman</h3><p>Informasi penting pesantren</p></div><button className="text-button">Semua</button></header>
@@ -359,9 +359,28 @@ function DataActions({ row, onEdit, onDelete }: { row:Row; onEdit:(r:Row)=>void;
   return <div className="row-actions"><button onClick={()=>onEdit(row)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(row)}>Hapus</button></div>;
 }
 
+function AcademicPage({ data, role, edit, remove }: { data:AppData; role:Role; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
+  const average=data.grades.length?Math.round(data.grades.reduce((sum,row)=>sum+Number(row.final_score||0),0)/data.grades.length):0;
+  const passed=data.grades.filter(row=>Number(row.final_score)>=Number(row.minimum_score||75)).length;
+  return <><section className="stats-grid three"><article className="metric-card"><MiniIcon tone="blue">A</MiniIcon><div><span>Rata-rata Nilai</span><strong>{average||"-"}</strong><small>Bobot 30% tugas, 30% PTS, 40% PAS</small></div></article><article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Tuntas</span><strong>{passed}</strong><small>dari {data.grades.length} nilai</small></div></article><article className="metric-card"><MiniIcon tone="violet">▦</MiniIcon><div><span>Mata Pelajaran</span><strong>{data.subjects.length}</strong><small>SMP dan SMK</small></div></article></section>
+    <section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Nilai Akademik</h3><p>Nilai akhir dan predikat dihitung otomatis</p></div><button className="primary-button" onClick={()=>edit("grades")}>+ Input Nilai</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Mata Pelajaran</th><th>Tugas</th><th>PTS</th><th>PAS</th><th>Nilai Akhir</th><th /></tr></thead><tbody>{data.grades.map(row=><tr key={String(row.id)}><td><strong>{row.student_name}</strong></td><td>{row.subject_name}<small className="cell-note">{row.semester} · {row.academic_year}</small></td><td>{row.assignment_score}</td><td>{row.midterm_score}</td><td>{row.exam_score}</td><td><Status tone={Number(row.final_score)>=Number(row.minimum_score||75)?"green":"amber"}>{row.final_score} · {row.predicate}</Status></td><td><DataActions row={row} onEdit={item=>edit("grades",item)} onDelete={item=>remove("grades",item)}/></td></tr>)}{!data.grades.length&&<tr><td colSpan={7} className="muted">Belum ada nilai akademik.</td></tr>}</tbody></table></div></article>
+    <article className="card data-card"><header className="card-header"><div><h3>Master Mata Pelajaran</h3><p>Kurikulum SMP–SMK per kelas</p></div>{role==="Admin"&&<button className="primary-button" onClick={()=>edit("subjects")}>+ Mata Pelajaran</button>}</header><div className="table-wrap"><table><thead><tr><th>Kode</th><th>Mata Pelajaran</th><th>Kelas</th><th>Guru</th><th>KKM</th><th /></tr></thead><tbody>{data.subjects.map(row=><tr key={String(row.id)}><td className="muted">{row.code}</td><td><strong>{row.name}</strong></td><td>{row.education_level} · {row.class_name}</td><td>{row.teacher}</td><td>{row.minimum_score}</td><td>{role==="Admin"&&<DataActions row={row} onEdit={item=>edit("subjects",item)} onDelete={item=>remove("subjects",item)}/>}</td></tr>)}</tbody></table></div></article></section></>;
+}
+
 function AttendancePage({ data, edit, remove, reload, notify }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void; reload:()=>Promise<void>; notify:(message:string)=>void }) {
   const [token,setToken]=useState("");
   const [checking,setChecking]=useState(false);
+  const [attendanceToken,setAttendanceToken]=useState("");
+  const [attendanceStatus,setAttendanceStatus]=useState("Hadir");
+  const [scanning,setScanning]=useState(false);
+  async function scanAttendance() {
+    setScanning(true);
+    const response=await fetch("/api/attendance-qr",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:attendanceToken,status:attendanceStatus})});
+    const result=await response.json() as {error?:string;student?:{name?:string};updated?:boolean};
+    setScanning(false);
+    if(!response.ok){notify(result.error||"Presensi QR gagal.");return;}
+    setAttendanceToken("");notify(`${result.student?.name||"Santri"} ${result.updated?"diperbarui":"tercatat"}: ${attendanceStatus}.`);await reload();
+  }
   async function processRequest(row:Row|undefined,action:"approve"|"reject"|"use") {
     setChecking(true);
     const response=await fetch("/api/guardian-requests",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(row?{id:Number(row.id),action}:{token,action})});
@@ -371,6 +390,7 @@ function AttendancePage({ data, edit, remove, reload, notify }: { data:AppData; 
     setToken(""); notify(action==="approve"?"Permintaan disetujui dan QR diterbitkan.":action==="reject"?"Permintaan ditolak.":"QR valid dan sudah ditandai digunakan."); await reload();
   }
   return <><section className="stats-grid three"><article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Hadir Hari Ini</span><strong>{data.attendance.filter(x=>x.status==="Hadir").length}</strong><small>Catatan tersinkron</small></div></article><article className="metric-card"><MiniIcon tone="amber">◷</MiniIcon><div><span>Izin Aktif</span><strong>{data.permits.filter(x=>x.status==="Disetujui").length}</strong><small>Perlu dipantau</small></div></article><article className="metric-card"><MiniIcon tone="red">!</MiniIcon><div><span>Tanpa Keterangan</span><strong>{data.attendance.filter(x=>x.status==="Alpa").length}</strong><small>Hari ini</small></div></article></section>
+  <section className="card qr-attendance"><MiniIcon tone="blue">QR</MiniIcon><div><h3>Presensi Kartu Santri</h3><p>Scan QR kartu dengan kamera/perangkat pemindai, lalu tempel hasilnya. Satu santri hanya memiliki satu catatan per hari.</p></div><select value={attendanceStatus} onChange={event=>setAttendanceStatus(event.target.value)}><option>Hadir</option><option>Terlambat</option><option>Sakit</option><option>Izin</option><option>Alpa</option></select><input value={attendanceToken} onChange={event=>setAttendanceToken(event.target.value)} placeholder='Hasil scan QR kartu santri' /><button className="primary-button" disabled={scanning||!attendanceToken.trim()} onClick={()=>void scanAttendance()}>{scanning?"Memproses…":"Catat Presensi"}</button></section>
   <section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Absensi Santri</h3><p>Rekap kehadiran terbaru</p></div><button className="primary-button" onClick={()=>edit("attendance")}>+ Catat Absensi</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Tanggal</th><th>Status</th><th>Catatan</th><th /></tr></thead><tbody>{data.attendance.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong></td><td>{x.record_date}</td><td><Status tone={x.status==="Hadir"?"green":x.status==="Alpa"?"red":"amber"}>{x.status}</Status></td><td>{x.note}</td><td><DataActions row={x} onEdit={r=>edit("attendance",r)} onDelete={r=>remove("attendance",r)} /></td></tr>)}</tbody></table></div></article>
   <article className="card data-card"><header className="card-header"><div><h3>Perizinan</h3><p>Izin pulang, sakit, dan keperluan keluarga</p></div><button className="primary-button" onClick={()=>edit("permits")}>+ Ajukan Izin</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Periode</th><th>Status</th><th /></tr></thead><tbody>{data.permits.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong><small className="cell-note">{x.reason}</small></td><td>{x.start_date} – {x.end_date}</td><td><Status tone={x.status==="Disetujui"?"green":"amber"}>{x.status}</Status></td><td><DataActions row={x} onEdit={r=>edit("permits",r)} onDelete={r=>remove("permits",r)} /></td></tr>)}</tbody></table></div></article></section>
   <section className="card data-card guardian-request-admin"><header className="card-header responsive"><div><h3>Kunjungan & Penjemputan</h3><p>Setujui permintaan dan validasi QR sekali pakai di gerbang</p></div><div className="gate-validator"><input value={token} onChange={e=>setToken(e.target.value)} placeholder="Tempel token hasil scan QR" /><button disabled={checking||!token.trim()} className="primary-button" onClick={()=>void processRequest(undefined,"use")}>Validasi QR</button></div></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Jenis & Jadwal</th><th>Penjemput/Pengunjung</th><th>Status</th><th /></tr></thead><tbody>{data.guardianRequests.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong><small className="cell-note">{x.nis}</small></td><td><strong>{x.type}</strong><small className="cell-note">{x.visit_date} · {x.start_time}–{x.end_time}<br/>{x.purpose}</small></td><td>{x.visitor_name}<small className="cell-note">{x.visitor_phone}</small></td><td><Status tone={x.status==="Disetujui"?"green":x.status==="Ditolak"?"red":x.status==="Digunakan"?"blue":"amber"}>{x.status}</Status></td><td><div className="row-actions">{x.status==="Diajukan"&&<><button onClick={()=>void processRequest(x,"approve")}>Setujui</button><button className="danger-link" onClick={()=>void processRequest(x,"reject")}>Tolak</button></>}{x.status==="Disetujui"&&<button onClick={()=>void processRequest(x,"use")}>Tandai Masuk</button>}</div></td></tr>)}{!data.guardianRequests.length&&<tr><td colSpan={5} className="muted">Belum ada permintaan kunjungan atau penjemputan.</td></tr>}</tbody></table></div></section></>;
@@ -612,7 +632,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
   if(!student) return <div className="empty-state guardian-empty"><b>Belum ada santri yang terhubung</b><span>Minta Admin mengisi “Email akun wali” pada data santri menggunakan email akun Anda: {data.user?.email}</span></div>;
 
   const byStudent=(rows:Row[])=>rows.filter(x=>Number(x.student_id)===Number(student.id));
-  const bills=byStudent(data.bills), attendance=byStudent(data.attendance), tahfidz=byStudent(data.tahfidz);
+  const bills=byStudent(data.bills), attendance=byStudent(data.attendance), tahfidz=byStudent(data.tahfidz), grades=byStudent(data.grades);
   const health=byStudent(data.health), characters=byStudent(data.characters), permits=byStudent(data.permits);
   const transactions=byStudent(data.transactions), mutabaah=byStudent(data.mutabaah), messages=byStudent(data.guardianMessages), requests=byStudent(data.guardianRequests);
   const balance=transactions.filter(x=>x.category==="Uang Saku").reduce((total,x)=>total+(x.type==="Keluar"?-1:1)*Number(x.amount||0),0);
@@ -636,6 +656,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
       <article className="card portal-card span-two"><header className="card-header"><div><h3>Jadwal Pelajaran Harian</h3><p>{student.class_name} · pilih hari untuk melihat pelajaran</p></div><select value={day} onChange={e=>setDay(e.target.value)}>{days.map(x=><option key={x}>{x}</option>)}</select></header><div className="portal-schedule">{schedule.length?schedule.map((x,i)=><div key={String(x.id)}><span className={`schedule-time tone-${i%4}`}>{x.start_time}<small>{x.end_time}</small></span><div><Status tone={x.category==="Produktif"?"violet":x.category==="Tahfidz"?"green":"blue"}>{x.category}</Status><strong>{x.title}</strong><small>{x.teacher} · {x.location}</small></div></div>):<div className="portal-empty">Belum ada jadwal pada {day}.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Tagihan & Pembayaran QRIS</h3><p>Rekonsiliasi otomatis dan kuitansi digital</p></div></header><div className="portal-list">{bills.length?bills.map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.invoice_no} · jatuh tempo {x.due_date}{x.paid_at?` · lunas ${x.paid_at}`:""}</small></div><b>Rp{money.format(Number(x.amount))}</b><Status tone={x.status==="Lunas"?"green":"amber"}>{x.status}</Status>{x.status!=="Lunas"?<button className="text-button" onClick={()=>onPayment(x)}>Tampilkan QR</button>:<a className="text-button link-button" href={`/api/receipt?id=${x.id}`}>Kuitansi</a>}</div>):<div className="portal-empty">Tidak ada tagihan.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Tahfidz & Mutaba’ah</h3><p>Perkembangan hafalan dan ibadah</p></div></header><div className="portal-list">{tahfidz.slice(0,4).map(x=><div key={`t-${x.id}`}><div><strong>{tahfidzRange(x)}</strong><small>{x.amount} ayat · {x.teacher} · {x.recorded_at}</small></div><Status tone="green">{x.grade}</Status></div>)}{mutabaah.slice(0,3).map(x=><div key={`m-${x.id}`}><div><strong>{x.activity}</strong><small>{x.record_date}</small></div><Status tone={Number(x.completed)?"green":"amber"}>{Number(x.completed)?"Selesai":"Belum"}</Status></div>)}{!tahfidz.length&&!mutabaah.length&&<div className="portal-empty">Belum ada catatan perkembangan.</div>}</div></article>
+      <article className="card portal-card"><header className="card-header"><div><h3>Rapor Akademik</h3><p>Nilai SMP–SMK terbaru</p></div></header><div className="portal-list">{grades.length?grades.slice(0,8).map(x=><div key={String(x.id)}><div><strong>{x.subject_name}</strong><small>{x.semester} · {x.academic_year} · {x.note||"Tanpa catatan"}</small></div><Status tone={Number(x.final_score)>=Number(x.minimum_score||75)?"green":"amber"}>{x.final_score} · {x.predicate}</Status></div>):<div className="portal-empty">Belum ada nilai akademik.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Rapor Karakter</h3><p>Penilaian pembina terbaru</p></div></header><div className="portal-list">{characters.length?characters.slice(0,5).map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.note} · {x.semester}</small></div><b>{x.score}/100</b></div>):<div className="portal-empty">Belum ada rapor karakter.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Kesehatan Santri</h3><p>Catatan pemeriksaan dan tindak lanjut</p></div></header><div className="portal-list">{health.length?health.slice(0,5).map(x=><div key={String(x.id)}><div><strong>{x.complaint}</strong><small>{x.diagnosis} · {x.treatment}</small></div><Status tone={x.status==="Selesai"||x.status==="Membaik"?"green":"amber"}>{x.status}</Status></div>):<div className="portal-empty">Tidak ada catatan kesehatan.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Absensi & Perizinan</h3><p>Status kehadiran dan permohonan izin</p></div><button className="text-button" onClick={()=>setAction("permit")}>+ Ajukan izin</button></header><div className="portal-list">{permits.slice(0,4).map(x=><div key={`p-${x.id}`}><div><strong>{x.reason}</strong><small>{x.start_date} – {x.end_date}</small></div><Status tone={x.status==="Disetujui"?"green":x.status==="Ditolak"?"red":"amber"}>{x.status}</Status></div>)}{attendance.slice(0,4).map(x=><div key={`a-${x.id}`}><div><strong>Absensi {x.record_date}</strong><small>{x.note||"Tanpa catatan"}</small></div><Status tone={x.status==="Hadir"?"green":x.status==="Alpa"?"red":"amber"}>{x.status}</Status></div>)}{!permits.length&&!attendance.length&&<div className="portal-empty">Belum ada data absensi.</div>}</div></article>
@@ -656,7 +677,7 @@ function IntegrationsPage({ data, onImported, notify }: { data:AppData; onImport
   useEffect(()=>{void (async()=>{try{const response=await fetch("/api/integrations");setStatus(await response.json() as {midtrans?:boolean;xendit?:boolean;whatsapp?:boolean});}catch{setStatus({});}})();},[]);
   async function upload(file:File) { setUploading(true); const form=new FormData(); form.append("file",file); const response=await fetch("/api/import",{method:"POST",body:form}); const result=await response.json() as {error?:string;imported?:number}; setUploading(false); if(!response.ok){notify(result.error||"Impor gagal.");return;} notify(`${result.imported} santri berhasil diimpor.`); await onImported(); }
   async function runReminders(){setReminding(true);const response=await fetch("/api/reminders",{method:"POST"});const result=await response.json() as {error?:string;sent?:number;processed?:number};setReminding(false);if(!response.ok){notify(result.error||"Pengingat gagal dijalankan.");return;}notify(`${result.sent} pengingat dikirim dari ${result.processed} tagihan terjadwal.`);await onImported();}
-  return <><section className="integration-grid">{[["Midtrans / QRIS","Pembayaran, webhook, rekonsiliasi, dan kuitansi",status.midtrans],["Xendit / QRIS","Alternatif kanal pembayaran dan webhook",status.xendit],["WhatsApp Cloud API","Notifikasi otomatis saat data berubah",status.whatsapp]].map((x,i)=><article className="card integration-card" key={String(x[0])}><MiniIcon tone={["blue","violet","green"][i]}>{i===2?"WA":"↗"}</MiniIcon><div><h3>{x[0]}</h3><p>{x[1]}</p></div><Status tone={x[2]?"green":"amber"}>{x[2]?"Terhubung":"Perlu kredensial"}</Status></article>)}</section><section className="dashboard-grid operations-grid"><article className="card utility-card reminder-utility"><div><MiniIcon tone="green">WA</MiniIcon><h3>Pengingat Tagihan Otomatis</h3><p>Mengirim pengingat tagihan yang jatuh tempo dalam tujuh hari. Sistem mencegah pengiriman ganda pada hari yang sama.</p><button className="primary-button" disabled={reminding} onClick={()=>void runReminders()}>{reminding?"Mengirim…":"Jalankan Pengingat"}</button></div></article><article className="card utility-card"><div><MiniIcon tone="blue">⇧</MiniIcon><h3>Impor Excel/CSV</h3><p>Kolom: nama, nis, kelas, kamar, nama_wali, whatsapp, email_wali. Maksimal 500 baris.</p><label className="upload-button">{uploading?"Mengimpor...":"Pilih Berkas"}<input type="file" accept=".xlsx,.xls,.csv" disabled={uploading} onChange={e=>e.target.files?.[0]&&void upload(e.target.files[0])} /></label></div></article></section><section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Riwayat Notifikasi</h3><p>Status pengiriman WhatsApp terbaru</p></div></header><div className="portal-list">{data.notifications.slice(0,8).map(x=><div key={String(x.id)}><div><strong>{x.recipient}</strong><small>{x.message}</small></div><Status tone={x.status==="Terkirim"?"green":x.status==="Gagal"?"red":"amber"}>{x.status}</Status></div>)}</div></article><article className="card utility-card"><div><MiniIcon tone="green">⇩</MiniIcon><h3>Backup Lengkap</h3><p>Unduh seluruh data operasional termasuk pembayaran dan QR akses untuk arsip.</p><a className="primary-button link-button" href="/api/backup">Unduh Backup</a></div></article></section></>;
+  return <><section className="integration-grid">{[["Midtrans / QRIS","Pembayaran, webhook, rekonsiliasi, dan kuitansi",status.midtrans],["Xendit / QRIS","Alternatif kanal pembayaran dan webhook",status.xendit],["WhatsApp Cloud API","Notifikasi otomatis saat data berubah",status.whatsapp]].map((x,i)=><article className="card integration-card" key={String(x[0])}><MiniIcon tone={["blue","violet","green"][i]}>{i===2?"WA":"↗"}</MiniIcon><div><h3>{x[0]}</h3><p>{x[1]}</p></div><Status tone={x[2]?"green":"amber"}>{x[2]?"Terhubung":"Perlu kredensial"}</Status></article>)}</section><section className="card automation-rules"><header className="card-header"><div><h3>Notifikasi WhatsApp Otomatis</h3><p>Wali menerima pembaruan tanpa input pesan manual ketika data berikut berubah.</p></div><Status tone={status.whatsapp?"green":"amber"}>{status.whatsapp?"Aktif":"Mode tautan WhatsApp"}</Status></header><div>{[["Absensi","Sakit, izin, terlambat, atau alpa"],["Tahfidz","Rentang surat, ayat, jumlah, dan nilai setoran"],["Akademik","Nilai akhir dan predikat rapor"],["Karakter","Kategori dan nilai karakter"],["Kesehatan","Keluhan serta status tindak lanjut"],["Pembinaan","Pelanggaran atau prestasi"],["Keuangan","Tagihan baru dan pengingat jatuh tempo"]].map(item=><article key={item[0]}><span>WA</span><div><strong>{item[0]}</strong><small>{item[1]}</small></div><b>Otomatis</b></article>)}</div></section><section className="dashboard-grid operations-grid"><article className="card utility-card reminder-utility"><div><MiniIcon tone="green">WA</MiniIcon><h3>Pengingat Tagihan Otomatis</h3><p>Mengirim pengingat tagihan yang jatuh tempo dalam tujuh hari. Sistem mencegah pengiriman ganda pada hari yang sama.</p><button className="primary-button" disabled={reminding} onClick={()=>void runReminders()}>{reminding?"Mengirim…":"Jalankan Pengingat"}</button></div></article><article className="card utility-card"><div><MiniIcon tone="blue">⇧</MiniIcon><h3>Impor Excel/CSV</h3><p>Kolom: nama, nis, kelas, kamar, nama_wali, whatsapp, email_wali. Maksimal 500 baris.</p><label className="upload-button">{uploading?"Mengimpor...":"Pilih Berkas"}<input type="file" accept=".xlsx,.xls,.csv" disabled={uploading} onChange={e=>e.target.files?.[0]&&void upload(e.target.files[0])} /></label></div></article></section><section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Riwayat Notifikasi</h3><p>Status pengiriman WhatsApp terbaru</p></div></header><div className="portal-list">{data.notifications.slice(0,8).map(x=><div key={String(x.id)}><div><strong>{x.recipient}</strong><small>{x.message}</small></div><Status tone={x.status==="Terkirim"?"green":x.status==="Gagal"?"red":"amber"}>{x.status}</Status></div>)}</div></article><article className="card utility-card"><div><MiniIcon tone="green">⇩</MiniIcon><h3>Backup Lengkap</h3><p>Unduh seluruh data operasional termasuk pembayaran dan QR akses untuk arsip.</p><a className="primary-button link-button" href="/api/backup">Unduh Backup</a></div></article></section></>;
 }
 
 function StudentCardModal({ student, onClose }: { student:Row; onClose:()=>void }) {
@@ -673,6 +694,7 @@ function ReportsPage({ role }: { role:Role }) {
     {key:"tahfidz",title:"Rekap Setoran Tahfidz",copy:"Hafalan dan penilaian per santri",tone:"green",admin:false},
     {key:"mutabaah",title:"Rekap Mutaba’ah",copy:"Kegiatan ibadah harian santri",tone:"violet",admin:false},
     {key:"attendance",title:"Laporan Absensi",copy:"Kehadiran, izin, sakit, dan alpa",tone:"amber",admin:false},
+    {key:"academics",title:"Rapor Akademik SMP–SMK",copy:"Nilai tugas, PTS, PAS, akhir, dan predikat",tone:"green",admin:false},
     {key:"characters",title:"Rapor Karakter",copy:"Nilai karakter dan catatan pembina",tone:"blue",admin:false},
     {key:"health",title:"Rekap Kesehatan",copy:"Keluhan, diagnosis, dan tindak lanjut",tone:"green",admin:false},
     {key:"counseling",title:"Laporan Pembinaan",copy:"Konseling, prestasi, dan pelanggaran",tone:"violet",admin:false},
@@ -697,9 +719,15 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
   ],
   tahfidz: [
     { key:"student_id",label:"Santri",type:"student" },
-    { key:"surah_from",label:"Surat awal (contoh: Al-Baqarah)" },{ key:"verse_from",label:"Ayat awal",type:"number" },
-    { key:"surah_to",label:"Surat akhir (isi sama jika satu surat)" },{ key:"verse_to",label:"Ayat akhir",type:"number" },
+    { key:"surah_from",label:"Surat awal",options:QURAN_SURAHS.map(item=>item.name) },{ key:"verse_from",label:"Ayat awal",type:"number" },
+    { key:"surah_to",label:"Surat akhir",options:QURAN_SURAHS.map(item=>item.name) },{ key:"verse_to",label:"Ayat akhir",type:"number" },
     { key:"amount",label:"Jumlah ayat disetor",type:"number" },{ key:"grade",label:"Penilaian",options:["Mumtaz","Jayyid Jiddan","Jayyid","Mengulang"] },
+  ],
+  subjects: [
+    {key:"code",label:"Kode mata pelajaran"},{key:"name",label:"Nama mata pelajaran"},{key:"education_level",label:"Jenjang",options:["SMP","SMK"]},{key:"class_name",label:"Kelas",options:["VII A","VIII A","IX A","X RPL","XI RPL","XII RPL","X TKJ","XI TKJ","XII TKJ"]},{key:"teacher",label:"Guru/Ustadz"},{key:"semester",label:"Semester",options:["Ganjil","Genap"]},{key:"academic_year",label:"Tahun ajaran"},{key:"minimum_score",label:"KKM",type:"number"},
+  ],
+  grades: [
+    {key:"student_id",label:"Santri",type:"student"},{key:"subject_id",label:"Mata pelajaran",type:"subject"},{key:"assignment_score",label:"Nilai tugas",type:"number"},{key:"midterm_score",label:"Nilai PTS",type:"number"},{key:"exam_score",label:"Nilai PAS",type:"number"},{key:"semester",label:"Semester",options:["Ganjil","Genap"]},{key:"academic_year",label:"Tahun ajaran"},{key:"note",label:"Catatan rapor",type:"textarea"},
   ],
   mutabaah: [
     {key:"student_id",label:"Santri",type:"student"},{key:"activity",label:"Kegiatan/ibadah"},{key:"completed",label:"Status",options:["1","0"]},{key:"record_date",label:"Tanggal",type:"date"},
@@ -726,7 +754,7 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
     { key:"content",label:"Isi pengumuman",type:"textarea" },{ key:"audience",label:"Penerima",options:["Semua","Wali Santri","Ustadz","Admin"] },
   ],
   attendance: [
-    {key:"student_id",label:"Santri",type:"student"},{key:"record_date",label:"Tanggal",type:"date"},{key:"status",label:"Status",options:["Hadir","Sakit","Izin","Alpa"]},{key:"note",label:"Catatan"},
+    {key:"student_id",label:"Santri",type:"student"},{key:"record_date",label:"Tanggal",type:"date"},{key:"status",label:"Status",options:["Hadir","Terlambat","Sakit","Izin","Alpa"]},{key:"note",label:"Catatan"},
   ],
   permits: [
     {key:"student_id",label:"Santri",type:"student"},{key:"start_date",label:"Tanggal mulai",type:"date"},{key:"end_date",label:"Tanggal selesai",type:"date"},{key:"reason",label:"Alasan",type:"textarea"},{key:"status",label:"Status",options:["Diajukan","Disetujui","Ditolak","Selesai"]},
@@ -756,9 +784,10 @@ const resourceNames: Record<Resource,string> = {
   characters:"nilai karakter",inventory:"barang",announcements:"pengumuman",
   attendance:"absensi",permits:"izin",schedules:"jadwal",rooms:"kamar",admissions:"pendaftar",
   counseling:"catatan konseling",bills:"tagihan",users:"pengguna",
+  subjects:"mata pelajaran",grades:"nilai akademik",
 };
 
-function RecordModal({ editor, students, onClose, onSave }: { editor: NonNullable<EditorState>; students: Row[]; onClose: () => void; onSave: (resource: Resource, row: Row | undefined, data: Record<string, unknown>) => Promise<void> }) {
+function RecordModal({ editor, students, subjects, onClose, onSave }: { editor: NonNullable<EditorState>; students: Row[]; subjects:Row[]; onClose: () => void; onSave: (resource: Resource, row: Row | undefined, data: Record<string, unknown>) => Promise<void> }) {
   const [form, setForm] = useState<Record<string, string>>(() => {
     const values: Record<string,string> = {};
     for (const field of formFields[editor.resource]) values[field.key] = String(editor.row?.[field.key] ?? "");
@@ -772,7 +801,7 @@ function RecordModal({ editor, students, onClose, onSave }: { editor: NonNullabl
       if(editor.resource==="tahfidz"&&["surah_from","surah_to","verse_from","verse_to"].includes(key)) {
         const verseFrom=Number(next.verse_from);
         const verseTo=Number(next.verse_to);
-        if(next.surah_from.trim()&&next.surah_from.trim().toLocaleLowerCase("id-ID")===next.surah_to.trim().toLocaleLowerCase("id-ID")&&verseFrom>0&&verseTo>=verseFrom) next.amount=String(verseTo-verseFrom+1);
+        if(next.surah_from&&next.surah_to&&verseFrom>0&&verseTo>0) try{next.amount=String(next.surah_from===next.surah_to?verseTo-verseFrom+1:quranRangeAmount(next.surah_from,verseFrom,next.surah_to,verseTo));}catch{/* server displays the validation message on save */}
       }
       return next;
     });
@@ -781,7 +810,7 @@ function RecordModal({ editor, students, onClose, onSave }: { editor: NonNullabl
     event.preventDefault(); setSaving(true); setError("");
     try {
       const data: Record<string,unknown> = {};
-      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","points","capacity","completed","verse_from","verse_to"].includes(key) ? Number(value) : value;
+      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","subject_id","points","capacity","completed","verse_from","verse_to","minimum_score","assignment_score","midterm_score","exam_score"].includes(key) ? Number(value) : value;
       await onSave(editor.resource,editor.row,data);
     } catch (e) { setError(e instanceof Error?e.message:"Gagal menyimpan."); setSaving(false); }
   }
@@ -792,9 +821,10 @@ function RecordModal({ editor, students, onClose, onSave }: { editor: NonNullabl
     <p>Data akan tersimpan permanen dan langsung memperbarui dashboard.</p>
     <div className="form-grid">{formFields[editor.resource].map(field=><label key={field.key} className={field.type==="textarea"?"wide":""}>{field.label}
       {field.type==="student"?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih santri</option>{students.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.nis}</option>)}</select>
+      :field.type==="subject"?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih mata pelajaran</option>{subjects.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.class_name}</option>)}</select>
       :field.options?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih</option>{field.options.map(o=><option key={o}>{o}</option>)}</select>
       :field.type==="textarea"?<textarea required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />
-      :<input required={!["status","note","room_scope"].includes(field.key)} min={["verse_from","verse_to","amount"].includes(field.key)?1:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
+      :<input required={!["status","note","room_scope"].includes(field.key)} readOnly={editor.resource==="tahfidz"&&field.key==="amount"} min={["verse_from","verse_to","amount"].includes(field.key)?1:undefined} max={["minimum_score","assignment_score","midterm_score","exam_score"].includes(field.key)?100:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
     </label>)}</div>
     {error&&<div className="form-error">{error}</div>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button disabled={saving} className="primary-button">{saving?"Menyimpan...":"Simpan Data"}</button></div>
@@ -918,11 +948,11 @@ export default function DashboardClient() {
     const allowed = role === "Wali Santri"
       ? new Set<PageKey>(["portalwali"])
       : role === "Musyrif"
-        ? new Set<PageKey>(["dashboard","santri","tahfidz","mutabaah","karakter","absensi","kesehatan","pengumuman","konseling"])
+        ? new Set<PageKey>(["dashboard","santri","tahfidz","akademik","mutabaah","karakter","absensi","kesehatan","pengumuman","konseling"])
         : role === "Kepala Asrama"
-          ? new Set<PageKey>(["dashboard","santri","tahfidz","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
+          ? new Set<PageKey>(["dashboard","santri","tahfidz","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
       : role === "Ustadz"
-        ? new Set<PageKey>(["dashboard","santri","tahfidz","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
+        ? new Set<PageKey>(["dashboard","santri","tahfidz","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
         : null;
     return navGroups.map(group => ({...group,items:allowed?group.items.filter(item=>allowed.has(item.key)):group.items})).filter(group=>group.items.length);
   },[role]);
@@ -988,6 +1018,7 @@ export default function DashboardClient() {
       ...data.students.map(row => result(`student:${row.id}`, row.name, `${row.nis || "Tanpa NIS"} · ${row.class_name || "Tanpa kelas"} · ${row.room || "Tanpa kamar"}`, "santri", "♙", `${row.guardian_name} ${row.status}`)),
       ...data.schedules.map(row => result(`schedule:${row.id}`, row.title, `${row.class_name || ""} · ${row.day_name || ""} ${row.start_time || ""}–${row.end_time || ""} · ${row.teacher || ""}`, "jadwal", "▦", `${row.education_level} ${row.location} pelajaran mapel jadwal`)),
       ...data.tahfidz.map(row => result(`tahfidz:${row.id}`, row.student_name, tahfidzRange(row), "tahfidz", "◫", `${row.surah_from} ${row.surah_to} ${row.verse_from} ${row.verse_to} ${row.grade} ${row.status} hafalan setoran`)),
+      ...data.grades.map(row => result(`grade:${row.id}`, row.student_name, `${row.subject_name} · ${row.final_score} (${row.predicate})`, "akademik", "A", `${row.semester} ${row.academic_year} rapor nilai akademik`)),
       ...data.health.map(row => result(`health:${row.id}`, row.student_name, `${row.complaint || row.diagnosis || "Catatan kesehatan"} · ${row.date || ""}`, "kesehatan", "✚", `${row.treatment} ${row.status}`)),
       ...data.transactions.map(row => result(`transaction:${row.id}`, row.student_name || row.description, `${row.type || "Transaksi"} · Rp${money.format(Number(row.amount || 0))}`, "keuangan", "Rp", `${row.category} ${row.date} uang saku transaksi`)),
       ...data.bills.map(row => result(`bill:${row.id}`, row.student_name || row.invoice_no, `${row.category || "Tagihan"} · Rp${money.format(Number(row.amount || 0))} · ${row.status || ""}`, "keuangan", "Rp", `${row.invoice_no} ${row.due_date} spp pembayaran tagihan`)),
@@ -1043,6 +1074,7 @@ export default function DashboardClient() {
       case "dashboard": return <Overview data={data} />;
       case "santri": return <StudentsPage rows={data.students} {...actions("students")} onCard={setCardStudent} />;
       case "tahfidz": return <TahfidzPage rows={data.tahfidz} {...actions("tahfidz")} />;
+      case "akademik": return <AcademicPage data={data} role={role} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "mutabaah": return <MutabaahPage rows={data.mutabaah} {...actions("mutabaah")} />;
       case "kesehatan": return <HealthPage rows={data.health} {...actions("health")} />;
       case "keuangan": return <FinancePage rows={data.transactions} bills={data.bills} onAdd={()=>setEditor({resource:"transactions"})} onBill={()=>setEditor({resource:"bills"})} onNotify={()=>setShowNotification(true)} onPayment={row=>void openPayment(row)} />;
@@ -1184,7 +1216,7 @@ export default function DashboardClient() {
         {(role==="Wali Santri"?[{key:"portalwali" as PageKey,icon:"♙",label:"Portal Wali"}]:[navGroups[0].items[0],navGroups[1].items[0],navGroups[1].items[1],navGroups[2].items[1]]).map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span></button>)}
         <button onClick={()=>setSidebarOpen(true)}><i>•••</i><span>Lainnya</span></button>
       </nav>
-      {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} onClose={()=>setEditor(null)} onSave={saveRecord} />}
+      {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} subjects={data.subjects} onClose={()=>setEditor(null)} onSave={saveRecord} />}
       {cardStudent&&<StudentCardModal student={cardStudent} onClose={()=>setCardStudent(null)} />}
       {showNotification&&<NotificationModal students={data.students} onClose={()=>setShowNotification(false)} onSent={notify} />}
       {paymentBill&&<PaymentQrModal bill={paymentBill} onClose={()=>setPaymentBill(null)} onUpdated={loadData} notify={notify}/>}

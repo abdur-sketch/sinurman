@@ -26,6 +26,8 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL,content TEXT NOT NULL,audience TEXT NOT NULL,published_at TEXT NOT NULL,author TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS notification_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER,channel TEXT NOT NULL,recipient TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL,sent_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS attendance_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,record_date TEXT NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL,recorded_by TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS academic_subjects (id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT NOT NULL UNIQUE,name TEXT NOT NULL,education_level TEXT NOT NULL,class_name TEXT NOT NULL,teacher TEXT NOT NULL,semester TEXT NOT NULL,academic_year TEXT NOT NULL,minimum_score INTEGER NOT NULL DEFAULT 75,created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS academic_grades (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,subject_id INTEGER NOT NULL,assignment_score INTEGER NOT NULL,midterm_score INTEGER NOT NULL,exam_score INTEGER NOT NULL,final_score INTEGER NOT NULL,predicate TEXT NOT NULL,note TEXT NOT NULL,semester TEXT NOT NULL,academic_year TEXT NOT NULL,recorded_by TEXT NOT NULL,recorded_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS leave_permits (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,start_date TEXT NOT NULL,end_date TEXT NOT NULL,reason TEXT NOT NULL,status TEXT NOT NULL,approved_by TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY AUTOINCREMENT,education_level TEXT NOT NULL DEFAULT 'SMP',class_name TEXT NOT NULL DEFAULT 'VII A',title TEXT NOT NULL,category TEXT NOT NULL,teacher TEXT NOT NULL,location TEXT NOT NULL,day_name TEXT NOT NULL,start_time TEXT NOT NULL,end_time TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,capacity INTEGER NOT NULL,supervisor TEXT NOT NULL,status TEXT NOT NULL)",
@@ -132,13 +134,13 @@ export async function ensureUser(request: Request) {
 export function canWrite(role: Role, resource: string) {
   if (role === "Admin") return true;
   if (role === "Kepala Asrama") {
-    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling"].includes(resource);
+    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "grades"].includes(resource);
   }
   if (role === "Musyrif") {
-    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling"].includes(resource);
+    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "grades"].includes(resource);
   }
   if (role === "Ustadz") {
-    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "schedules"].includes(resource);
+    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "schedules", "grades"].includes(resource);
   }
   return false;
 }
@@ -199,6 +201,15 @@ export async function seedIfNeeded() {
       .bind(now.slice(0,10), "Sakit", "Istirahat di klinik", "Ustadz Hasan"),
     db.prepare("INSERT INTO leave_permits (student_id, start_date, end_date, reason, status, approved_by) VALUES (4, ?, ?, ?, ?, ?)")
       .bind(now.slice(0,10), now.slice(0,10), "Pemeriksaan kesehatan", "Disetujui", "Admin"),
+  ]);
+  const subjectCount = await db.prepare("SELECT COUNT(*) AS total FROM academic_subjects").first<{ total:number }>();
+  if (Number(subjectCount?.total ?? 0) === 0) await db.batch([
+    db.prepare("INSERT INTO academic_subjects (code,name,education_level,class_name,teacher,semester,academic_year,minimum_score,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+      .bind("SMP-VII-MTK","Matematika","SMP","VII A","Ibu Nur Aini","Ganjil","2026/2027",75,now),
+    db.prepare("INSERT INTO academic_subjects (code,name,education_level,class_name,teacher,semester,academic_year,minimum_score,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+      .bind("SMP-VIII-IPA","IPA","SMP","VIII A","Bapak Arif","Ganjil","2026/2027",75,now),
+    db.prepare("INSERT INTO academic_subjects (code,name,education_level,class_name,teacher,semester,academic_year,minimum_score,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+      .bind("SMK-X-RPL","Pemrograman Web","SMK","X RPL","Bapak Dimas","Ganjil","2026/2027",78,now),
   ]);
   const scheduleCount = await db.prepare("SELECT COUNT(*) AS total FROM schedules").first<{ total:number }>();
   if (Number(scheduleCount?.total ?? 0) < 50) {

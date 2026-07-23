@@ -33,6 +33,8 @@ export async function GET(request: Request) {
       characters,
       notifications,
       attendance,
+      subjects,
+      grades,
       permits,
       schedules,
       rooms,
@@ -83,6 +85,14 @@ export async function GET(request: Request) {
         ? owned("SELECT a.*, s.name AS student_name FROM attendance_records a JOIN students s ON s.id=a.student_id WHERE lower(s.guardian_email)=? ORDER BY a.id DESC LIMIT 100")
         : staff ? scoped("SELECT a.*,s.name AS student_name FROM attendance_records a JOIN students s ON s.id=a.student_id WHERE s.room=? ORDER BY a.id DESC LIMIT 100")
         : all("SELECT a.*, s.name AS student_name FROM attendance_records a JOIN students s ON s.id=a.student_id ORDER BY a.id DESC LIMIT 100"),
+      guardian
+        ? owned("SELECT a.* FROM academic_subjects a WHERE a.class_name IN (SELECT class_name FROM students WHERE lower(guardian_email)=?) ORDER BY a.class_name,a.name")
+        : staff ? scoped("SELECT a.* FROM academic_subjects a WHERE a.class_name IN (SELECT class_name FROM students WHERE room=?) ORDER BY a.class_name,a.name")
+        : all("SELECT * FROM academic_subjects ORDER BY education_level,class_name,name"),
+      guardian
+        ? owned("SELECT g.*,s.name AS student_name,a.name AS subject_name,a.code AS subject_code,a.minimum_score FROM academic_grades g JOIN students s ON s.id=g.student_id JOIN academic_subjects a ON a.id=g.subject_id WHERE lower(s.guardian_email)=? ORDER BY g.id DESC LIMIT 200")
+        : staff ? scoped("SELECT g.*,s.name AS student_name,a.name AS subject_name,a.code AS subject_code,a.minimum_score FROM academic_grades g JOIN students s ON s.id=g.student_id JOIN academic_subjects a ON a.id=g.subject_id WHERE s.room=? ORDER BY g.id DESC LIMIT 200")
+        : all("SELECT g.*,s.name AS student_name,a.name AS subject_name,a.code AS subject_code,a.minimum_score FROM academic_grades g JOIN students s ON s.id=g.student_id JOIN academic_subjects a ON a.id=g.subject_id ORDER BY g.id DESC LIMIT 300"),
       guardian
         ? owned("SELECT p.*, s.name AS student_name FROM leave_permits p JOIN students s ON s.id=p.student_id WHERE lower(s.guardian_email)=? ORDER BY p.id DESC LIMIT 50")
         : staff ? scoped("SELECT p.*,s.name AS student_name FROM leave_permits p JOIN students s ON s.id=p.student_id WHERE s.room=? ORDER BY p.id DESC LIMIT 50")
@@ -139,6 +149,8 @@ export async function GET(request: Request) {
       characters: characters.results,
       notifications: notifications.results,
       attendance: attendance.results,
+      subjects: subjects.results,
+      grades: grades.results,
       permits: permits.results,
       schedules: schedules.results,
       rooms: rooms.results,
