@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Role = "Admin" | "Ustadz" | "Wali Santri";
-type Resource = "students" | "tahfidz" | "health" | "transactions" | "characters" | "inventory" | "announcements";
+type Resource = "students" | "tahfidz" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users";
 type Row = Record<string, string | number | null>;
 type AppData = {
   user?: { name: string; email: string; role: Role };
@@ -15,12 +15,23 @@ type AppData = {
   inventory: Row[];
   announcements: Row[];
   notifications: Row[];
+  attendance: Row[];
+  permits: Row[];
+  schedules: Row[];
+  rooms: Row[];
+  admissions: Row[];
+  counseling: Row[];
+  bills: Row[];
+  users: Row[];
+  audit: Row[];
 };
 type EditorState = { resource: Resource; row?: Row } | null;
 
 const emptyData: AppData = {
   students: [], tahfidz: [], health: [], transactions: [], characters: [],
   inventory: [], announcements: [], notifications: [],
+  attendance: [], permits: [], schedules: [], rooms: [], admissions: [],
+  counseling: [], bills: [], users: [], audit: [],
 };
 type PageKey =
   | "dashboard"
@@ -32,7 +43,14 @@ type PageKey =
   | "karakter"
   | "inventaris"
   | "pengumuman"
-  | "laporan";
+  | "laporan"
+  | "absensi"
+  | "jadwal"
+  | "penerimaan"
+  | "konseling"
+  | "pengguna"
+  | "integrasi"
+  | "portalwali";
 
 const navGroups: { label: string; items: { key: PageKey; icon: string; label: string }[] }[] = [
   {
@@ -48,6 +66,8 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
       { key: "tahfidz", icon: "◫", label: "Tahfidz" },
       { key: "mutabaah", icon: "✓", label: "Mutaba’ah" },
       { key: "karakter", icon: "☆", label: "Rapor Karakter" },
+      { key: "absensi", icon: "◷", label: "Absensi & Izin" },
+      { key: "jadwal", icon: "▦", label: "Jadwal & Kamar" },
     ],
   },
   {
@@ -56,6 +76,7 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
       { key: "kesehatan", icon: "✚", label: "Kesehatan" },
       { key: "keuangan", icon: "Rp", label: "Keuangan" },
       { key: "inventaris", icon: "◇", label: "Inventaris" },
+      { key: "konseling", icon: "♧", label: "Konseling" },
     ],
   },
   {
@@ -63,6 +84,15 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
     items: [
       { key: "pengumuman", icon: "◉", label: "Pengumuman" },
       { key: "laporan", icon: "▥", label: "Laporan" },
+      { key: "penerimaan", icon: "+", label: "Penerimaan Santri" },
+      { key: "portalwali", icon: "♙", label: "Portal Wali" },
+    ],
+  },
+  {
+    label: "SISTEM",
+    items: [
+      { key: "pengguna", icon: "⚙", label: "Pengguna & Audit" },
+      { key: "integrasi", icon: "↗", label: "Integrasi & Backup" },
     ],
   },
 ];
@@ -78,6 +108,13 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
   inventaris: { title: "Inventaris", subtitle: "Pantau aset, lokasi, kondisi, dan stok pesantren." },
   pengumuman: { title: "Pengumuman", subtitle: "Informasi terbaru untuk santri, wali, dan pengurus." },
   laporan: { title: "Pusat Laporan", subtitle: "Unduh dan tinjau laporan operasional pesantren." },
+  absensi: { title: "Absensi & Perizinan", subtitle: "Catat kehadiran dan proses izin santri secara terpadu." },
+  jadwal: { title: "Jadwal & Kamar", subtitle: "Kelola pelajaran, ustadz, lokasi, dan hunian santri." },
+  penerimaan: { title: "Penerimaan Santri Baru", subtitle: "Pantau pendaftaran, verifikasi, tes, dan kelulusan." },
+  konseling: { title: "Konseling & Pelanggaran", subtitle: "Dokumentasikan pembinaan dan tindak lanjut santri." },
+  pengguna: { title: "Pengguna & Audit", subtitle: "Atur peran dan pantau seluruh aktivitas penting." },
+  integrasi: { title: "Integrasi & Backup", subtitle: "Sambungkan pembayaran, WhatsApp, impor, dan cadangan data." },
+  portalwali: { title: "Portal Wali Santri", subtitle: "Ringkasan perkembangan dan layanan untuk orang tua." },
 };
 
 const students = [
@@ -199,7 +236,7 @@ function TahfidzPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: ()
   );
 }
 
-function StudentsPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void }) {
+function StudentsPage({ rows, onAdd, onEdit, onDelete, onCard }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onCard:(row:Row)=>void }) {
   const [query, setQuery] = useState("");
   const filtered = rows.filter((s) => `${s.name} ${s.nis}`.toLowerCase().includes(query.toLowerCase()));
   return (
@@ -207,7 +244,7 @@ function StudentsPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: (
       <header className="card-header responsive"><div><h3>Daftar Santri</h3><p>{rows.length} santri tersimpan pada tahun ajaran 2026/2027</p></div><div className="header-actions"><a className="secondary-button link-button" href="/api/export?type=students&format=csv">⇩ Excel/CSV</a><button className="primary-button" onClick={onAdd}>+ Tambah Santri</button></div></header>
       <div className="filters"><div className="search-field">⌕ <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cari nama atau NIS..." /></div><select><option>Semua Kelas</option><option>VII</option><option>VIII</option><option>IX</option></select><select><option>Semua Status</option><option>Aktif</option><option>Izin</option></select></div>
       <div className="table-wrap"><table><thead><tr><th>Nama Santri</th><th>NIS</th><th>Kelas</th><th>Kamar</th><th>Status</th><th /></tr></thead>
-        <tbody>{filtered.map(s=><tr key={String(s.id)}><td><div className="person"><span>{String(s.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{s.name}</strong></div></td><td className="muted">{s.nis}</td><td>{s.class_name}</td><td>{s.room}</td><td><Status tone={s.status==="Aktif"?"green":"amber"}>{s.status}</Status></td><td><div className="row-actions"><button onClick={()=>onEdit(s)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(s)}>Hapus</button></div></td></tr>)}</tbody>
+        <tbody>{filtered.map(s=><tr key={String(s.id)}><td><div className="person"><span>{String(s.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{s.name}</strong></div></td><td className="muted">{s.nis}</td><td>{s.class_name}</td><td>{s.room}</td><td><Status tone={s.status==="Aktif"?"green":"amber"}>{s.status}</Status></td><td><div className="row-actions"><button onClick={()=>onCard(s)}>QR</button><button onClick={()=>onEdit(s)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(s)}>Hapus</button></div></td></tr>)}</tbody>
       </table></div>
       <footer className="table-footer"><span>Menampilkan {filtered.length} dari {rows.length} santri</span><div><button>‹</button><button className="active">1</button><button>›</button></div></footer>
     </section>
@@ -247,7 +284,7 @@ function HealthPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () 
   );
 }
 
-function FinancePage({ rows, onAdd, onNotify }: { rows: Row[]; onAdd: () => void; onNotify: () => void }) {
+function FinancePage({ rows, bills, onAdd, onBill, onNotify, onPayment }: { rows: Row[]; bills:Row[]; onAdd: () => void; onBill:()=>void; onNotify: () => void; onPayment:(row:Row)=>void }) {
   const incoming = rows.filter(x=>x.type==="Masuk").reduce((sum,x)=>sum+Number(x.amount||0),0);
   return (
     <>
@@ -261,7 +298,7 @@ function FinancePage({ rows, onAdd, onNotify }: { rows: Row[]; onAdd: () => void
         <article className="card"><header className="card-header"><div><h3>Transaksi Terbaru</h3><p>SPP, uang saku, dan pengeluaran</p></div><a className="text-button link-button" href="/api/export?type=finance&format=csv">Ekspor</a></header>
           {rows.slice(0,5).map((x)=><div className="expense" key={String(x.id)}><div><strong>{x.student_name} · {x.category}</strong><span>Rp {money.format(Number(x.amount||0))}</span></div><Progress value={Math.min(100,Number(x.amount||0)/10000)} tone={x.type==="Masuk"?"green":"amber"} /></div>)}
         </article>
-      </section>
+      </section><section className="card data-card"><header className="card-header"><div><h3>Tagihan Santri</h3><p>Siap dihubungkan ke gateway pembayaran</p></div><button className="primary-button" onClick={onBill}>+ Buat Tagihan</button></header><div className="table-wrap"><table><thead><tr><th>Invoice</th><th>Santri</th><th>Kategori</th><th>Nominal</th><th>Jatuh Tempo</th><th>Status</th><th /></tr></thead><tbody>{bills.map(x=><tr key={String(x.id)}><td className="muted">{x.invoice_no}</td><td><strong>{x.student_name}</strong></td><td>{x.category}</td><td>Rp {money.format(Number(x.amount))}</td><td>{x.due_date}</td><td><Status tone={x.status==="Lunas"?"green":"amber"}>{x.status}</Status></td><td>{x.status!=="Lunas"&&<button className="text-button" onClick={()=>onPayment(x)}>{x.payment_url?"Buka Link":"Buat Link"}</button>}</td></tr>)}</tbody></table></div></section>
     </>
   );
 }
@@ -285,6 +322,51 @@ function InventoryPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: 
 
 function AnnouncementsPage({ rows, onAdd, onEdit, onDelete, onNotify }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onNotify: () => void }) {
   return <section className="card announcements-page"><header className="card-header"><div><h3>Semua Pengumuman</h3><p>Informasi resmi Pondok Pesantren Nurul Iman</p></div><div className="header-actions"><button className="secondary-button" onClick={onNotify}>Kirim WhatsApp</button><button className="primary-button" onClick={onAdd}>+ Buat Pengumuman</button></div></header>{rows.map((x,i)=><article key={String(x.id)}><span className="date-box"><b>{new Date(String(x.published_at)).getDate()}</b>JUL</span><div><Status tone={["blue","green","violet"][i%3]}>{x.category}</Status><h3>{x.title}</h3><p>{x.content}</p><small>Dipublikasikan oleh {x.author} · {x.audience}</small></div><div className="row-actions"><button onClick={()=>onEdit(x)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(x)}>Hapus</button></div></article>)}</section>;
+}
+
+function DataActions({ row, onEdit, onDelete }: { row:Row; onEdit:(r:Row)=>void; onDelete:(r:Row)=>void }) {
+  return <div className="row-actions"><button onClick={()=>onEdit(row)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(row)}>Hapus</button></div>;
+}
+
+function AttendancePage({ data, edit, remove }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
+  return <><section className="stats-grid three"><article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Hadir Hari Ini</span><strong>{data.attendance.filter(x=>x.status==="Hadir").length}</strong><small>Catatan tersinkron</small></div></article><article className="metric-card"><MiniIcon tone="amber">◷</MiniIcon><div><span>Izin Aktif</span><strong>{data.permits.filter(x=>x.status==="Disetujui").length}</strong><small>Perlu dipantau</small></div></article><article className="metric-card"><MiniIcon tone="red">!</MiniIcon><div><span>Tanpa Keterangan</span><strong>{data.attendance.filter(x=>x.status==="Alpa").length}</strong><small>Hari ini</small></div></article></section>
+  <section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Absensi Santri</h3><p>Rekap kehadiran terbaru</p></div><button className="primary-button" onClick={()=>edit("attendance")}>+ Catat Absensi</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Tanggal</th><th>Status</th><th>Catatan</th><th /></tr></thead><tbody>{data.attendance.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong></td><td>{x.record_date}</td><td><Status tone={x.status==="Hadir"?"green":x.status==="Alpa"?"red":"amber"}>{x.status}</Status></td><td>{x.note}</td><td><DataActions row={x} onEdit={r=>edit("attendance",r)} onDelete={r=>remove("attendance",r)} /></td></tr>)}</tbody></table></div></article>
+  <article className="card data-card"><header className="card-header"><div><h3>Perizinan</h3><p>Izin pulang, sakit, dan keperluan keluarga</p></div><button className="primary-button" onClick={()=>edit("permits")}>+ Ajukan Izin</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Periode</th><th>Status</th><th /></tr></thead><tbody>{data.permits.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong><small className="cell-note">{x.reason}</small></td><td>{x.start_date} – {x.end_date}</td><td><Status tone={x.status==="Disetujui"?"green":"amber"}>{x.status}</Status></td><td><DataActions row={x} onEdit={r=>edit("permits",r)} onDelete={r=>remove("permits",r)} /></td></tr>)}</tbody></table></div></article></section></>;
+}
+
+function SchedulePage({ data, edit, remove }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
+  return <section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Jadwal Pesantren</h3><p>Pelajaran dan kegiatan rutin</p></div><button className="primary-button" onClick={()=>edit("schedules")}>+ Jadwal</button></header><div className="schedule-list">{data.schedules.map((x,i)=><div key={String(x.id)}><span className={`schedule-time tone-${i%4}`}>{x.start_time}<small>{x.end_time}</small></span><div><Status tone={i%2?"green":"blue"}>{x.category}</Status><strong>{x.title}</strong><small>{x.day_name} · {x.teacher} · {x.location}</small></div><DataActions row={x} onEdit={r=>edit("schedules",r)} onDelete={r=>remove("schedules",r)} /></div>)}</div></article>
+  <article className="card data-card"><header className="card-header"><div><h3>Kamar & Hunian</h3><p>Kapasitas dan pembina asrama</p></div><button className="primary-button" onClick={()=>edit("rooms")}>+ Kamar</button></header><div className="room-grid">{data.rooms.map(x=><div className="room-card" key={String(x.id)}><span>◇</span><div><strong>{x.name}</strong><small>{x.supervisor}</small><p>Kapasitas {x.capacity} santri</p></div><Status>{x.status}</Status><DataActions row={x} onEdit={r=>edit("rooms",r)} onDelete={r=>remove("rooms",r)} /></div>)}</div></article></section>;
+}
+
+function AdmissionsPage({ rows, edit, remove }: { rows:Row[]; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
+  return <><section className="summary-banner admission-banner"><div><span>PPDB 2026/2027</span><strong>{rows.length} Pendaftar</strong><p>Alur pendaftaran, verifikasi, tes, dan kelulusan dalam satu tempat.</p></div><button className="light-button" onClick={()=>edit("admissions")}>+ Pendaftar Baru</button></section><section className="card data-card"><header className="card-header"><div><h3>Daftar Calon Santri</h3><p>Penerimaan santri baru</p></div><button className="primary-button" onClick={()=>edit("admissions")}>Tambah Pendaftar</button></header><div className="table-wrap"><table><thead><tr><th>No. Pendaftaran</th><th>Nama</th><th>Asal Sekolah</th><th>Nilai</th><th>Tahap</th><th /></tr></thead><tbody>{rows.map(x=><tr key={String(x.id)}><td className="muted">{x.registration_no}</td><td><strong>{x.name}</strong><small className="cell-note">{x.guardian_name} · {x.guardian_phone}</small></td><td>{x.previous_school}</td><td>{x.score}</td><td><Status tone={x.status==="Lulus"?"green":"blue"}>{x.status}</Status></td><td><DataActions row={x} onEdit={r=>edit("admissions",r)} onDelete={r=>remove("admissions",r)} /></td></tr>)}</tbody></table></div></section></>;
+}
+
+function CounselingPage({ rows, edit, remove }: { rows:Row[]; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
+  return <section className="card data-card"><header className="card-header"><div><h3>Catatan Konseling & Pembinaan</h3><p>Data bersifat terbatas untuk pengurus berwenang</p></div><button className="primary-button" onClick={()=>edit("counseling")}>+ Catatan Baru</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Jenis</th><th>Kategori</th><th>Catatan</th><th>Poin</th><th>Status</th><th /></tr></thead><tbody>{rows.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong></td><td><Status tone={x.type==="Prestasi"?"green":x.type==="Pelanggaran"?"red":"blue"}>{x.type}</Status></td><td>{x.category}</td><td>{x.description}</td><td>{x.points}</td><td>{x.status}</td><td><DataActions row={x} onEdit={r=>edit("counseling",r)} onDelete={r=>remove("counseling",r)} /></td></tr>)}</tbody></table></div></section>;
+}
+
+function UsersPage({ data, edit, remove }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
+  return <section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Manajemen Pengguna</h3><p>Hak akses server-side</p></div><button className="primary-button" onClick={()=>edit("users")}>+ Pengguna</button></header><div className="table-wrap"><table><thead><tr><th>Pengguna</th><th>Peran</th><th /></tr></thead><tbody>{data.users.map(x=><tr key={String(x.id)}><td><strong>{x.name}</strong><small className="cell-note">{x.email}</small></td><td><Status tone={x.role==="Admin"?"violet":x.role==="Ustadz"?"blue":"green"}>{x.role}</Status></td><td><DataActions row={x} onEdit={r=>edit("users",r)} onDelete={r=>remove("users",r)} /></td></tr>)}</tbody></table></div></article><article className="card data-card"><header className="card-header"><div><h3>Audit Aktivitas</h3><p>Jejak perubahan terbaru</p></div></header><div className="audit-list">{data.audit.map(x=><div key={String(x.id)}><MiniIcon tone={x.action==="Hapus"?"red":x.action==="Tambah"?"green":"blue"}>{String(x.action).slice(0,1)}</MiniIcon><div><strong>{x.action} · {x.resource}</strong><p>{x.detail}</p><small>{x.user_email} · {new Date(String(x.created_at)).toLocaleString("id-ID")}</small></div></div>)}</div></article></section>;
+}
+
+function GuardianPortal({ data, onNotify, onCard }: { data:AppData; onNotify:()=>void; onCard:(row:Row)=>void }) {
+  const student=data.students[0]; const bills=data.bills.filter(x=>x.student_id===student?.id); const attendance=data.attendance.filter(x=>x.student_id===student?.id); const tahfidz=data.tahfidz.filter(x=>x.student_id===student?.id);
+  return <>{student?<><section className="guardian-hero"><div className="large-avatar">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><span>PORTAL WALI SANTRI</span><h2>{student.name}</h2><p>{student.nis} · {student.class_name} · {student.room}</p></div><div className="header-actions"><button className="secondary-button" onClick={()=>onCard(student)}>Kartu QR</button><button className="primary-button" onClick={onNotify}>Hubungi Pesantren</button></div></section><section className="stats-grid three"><article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Kehadiran</span><strong>{attendance.filter(x=>x.status==="Hadir").length}/{attendance.length||1}</strong><small>Catatan terakhir</small></div></article><article className="metric-card"><MiniIcon tone="blue">◫</MiniIcon><div><span>Setoran Tahfidz</span><strong>{tahfidz.length}</strong><small>Total setoran</small></div></article><article className="metric-card"><MiniIcon tone="amber">Rp</MiniIcon><div><span>Tagihan Aktif</span><strong>{bills.filter(x=>x.status!=="Lunas").length}</strong><small>Perlu dibayar</small></div></article></section><section className="dashboard-grid"><article className="card compact-list"><header className="card-header"><div><h3>Perkembangan Terbaru</h3><p>Tahfidz dan karakter</p></div></header>{tahfidz.slice(0,5).map(x=><div className="progress-row" key={String(x.id)}><div><strong>{x.surah}</strong><small>Ayat {x.verses}</small></div><Progress value={Math.min(100,Number(x.amount)*5)} tone="green" /><b>{x.grade}</b></div>)}</article><article className="card compact-list"><header className="card-header"><div><h3>Tagihan</h3><p>Status pembayaran</p></div></header>{bills.map(x=><div className="announcement-mini" key={String(x.id)}><span>{x.due_date}</span><p>{x.category} · Rp{money.format(Number(x.amount))}</p><Status tone={x.status==="Lunas"?"green":"amber"}>{x.status}</Status></div>)}</article></section></>:<div className="empty-state">Belum ada santri yang terhubung.</div>}</>;
+}
+
+function IntegrationsPage({ onImported, notify }: { onImported:()=>Promise<void>; notify:(s:string)=>void }) {
+  const [status,setStatus]=useState<{midtrans?:boolean;xendit?:boolean;whatsapp?:boolean}>({});
+  const [uploading,setUploading]=useState(false);
+  useEffect(()=>{void (async()=>{try{const response=await fetch("/api/integrations");setStatus(await response.json() as {midtrans?:boolean;xendit?:boolean;whatsapp?:boolean});}catch{setStatus({});}})();},[]);
+  async function upload(file:File) { setUploading(true); const form=new FormData(); form.append("file",file); const response=await fetch("/api/import",{method:"POST",body:form}); const result=await response.json() as {error?:string;imported?:number}; setUploading(false); if(!response.ok){notify(result.error||"Impor gagal.");return;} notify(`${result.imported} santri berhasil diimpor.`); await onImported(); }
+  return <><section className="integration-grid">{[["Midtrans","Pembayaran otomatis dan payment link",status.midtrans],["Xendit","Alternatif kanal pembayaran",status.xendit],["WhatsApp Cloud API","Notifikasi otomatis ke wali",status.whatsapp]].map((x,i)=><article className="card integration-card" key={String(x[0])}><MiniIcon tone={["blue","violet","green"][i]}>{i===2?"WA":"↗"}</MiniIcon><div><h3>{x[0]}</h3><p>{x[1]}</p></div><Status tone={x[2]?"green":"amber"}>{x[2]?"Terhubung":"Perlu kredensial"}</Status></article>)}</section><section className="dashboard-grid operations-grid"><article className="card utility-card"><div><MiniIcon tone="blue">⇧</MiniIcon><h3>Impor Excel/CSV</h3><p>Kolom: nama, nis, kelas, kamar, nama_wali, whatsapp. Maksimal 500 baris.</p><label className="upload-button">{uploading?"Mengimpor...":"Pilih Berkas"}<input type="file" accept=".xlsx,.xls,.csv" disabled={uploading} onChange={e=>e.target.files?.[0]&&void upload(e.target.files[0])} /></label></div></article><article className="card utility-card"><div><MiniIcon tone="green">⇩</MiniIcon><h3>Backup Lengkap</h3><p>Unduh seluruh data operasional sebagai JSON untuk arsip dan pemulihan.</p><a className="primary-button link-button" href="/api/backup">Unduh Backup</a></div></article></section></>;
+}
+
+function StudentCardModal({ student, onClose }: { student:Row; onClose:()=>void }) {
+  const [qr,setQr]=useState(""); useEffect(()=>{void (async()=>{const response=await fetch(`/api/student-card?id=${student.id}`);const result=await response.json() as {qr?:string};setQr(result.qr||"");})();},[student.id]);
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="student-card-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close no-print" onClick={onClose}>×</button><div className="student-id-card"><header><span className="brand-mark">ن</span><div><strong>SINURMAN</strong><small>Pondok Pesantren Nurul Iman</small></div></header><div className="student-card-body"><div><span className="student-photo">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><h3>{student.name}</h3><p>{student.nis}</p><dl><dt>Kelas</dt><dd>{student.class_name}</dd><dt>Kamar</dt><dd>{student.room}</dd><dt>Status</dt><dd>{student.status}</dd></dl></div>{qr?<img src={qr} alt={`QR ${student.name}`} />:<span className="qr-loading">Memuat QR…</span>}</div><footer>Kartu Santri Digital · Tahun Ajaran 2026/2027</footer></div><button className="primary-button print-card no-print" onClick={()=>window.print()}>Cetak Kartu</button></div></div>;
 }
 
 function ReportsPage() {
@@ -323,11 +405,37 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
     { key:"title",label:"Judul" },{ key:"category",label:"Kategori",options:["Akademik","Kunjungan","Kegiatan","Keuangan","Umum"] },
     { key:"content",label:"Isi pengumuman",type:"textarea" },{ key:"audience",label:"Penerima",options:["Semua","Wali Santri","Ustadz","Admin"] },
   ],
+  attendance: [
+    {key:"student_id",label:"Santri",type:"student"},{key:"record_date",label:"Tanggal",type:"date"},{key:"status",label:"Status",options:["Hadir","Sakit","Izin","Alpa"]},{key:"note",label:"Catatan"},
+  ],
+  permits: [
+    {key:"student_id",label:"Santri",type:"student"},{key:"start_date",label:"Tanggal mulai",type:"date"},{key:"end_date",label:"Tanggal selesai",type:"date"},{key:"reason",label:"Alasan",type:"textarea"},{key:"status",label:"Status",options:["Diajukan","Disetujui","Ditolak","Selesai"]},
+  ],
+  schedules: [
+    {key:"title",label:"Nama kegiatan/pelajaran"},{key:"category",label:"Kategori",options:["Pelajaran","Tahfidz","Ibadah","Kegiatan"]},{key:"teacher",label:"Ustadz/Penanggung jawab"},{key:"location",label:"Lokasi"},{key:"day_name",label:"Hari"},{key:"start_time",label:"Mulai",type:"time"},{key:"end_time",label:"Selesai",type:"time"},
+  ],
+  rooms: [
+    {key:"name",label:"Nama kamar"},{key:"capacity",label:"Kapasitas",type:"number"},{key:"supervisor",label:"Musyrif/Pembina"},{key:"status",label:"Status",options:["Aktif","Perawatan","Penuh"]},
+  ],
+  admissions: [
+    {key:"registration_no",label:"Nomor pendaftaran"},{key:"name",label:"Nama calon santri"},{key:"guardian_name",label:"Nama wali"},{key:"guardian_phone",label:"WhatsApp wali",type:"tel"},{key:"previous_school",label:"Asal sekolah"},{key:"status",label:"Tahap",options:["Pendaftaran","Verifikasi","Tes","Lulus","Tidak Lulus"]},{key:"score",label:"Nilai tes",type:"number"},
+  ],
+  counseling: [
+    {key:"student_id",label:"Santri",type:"student"},{key:"type",label:"Jenis",options:["Konseling","Pembinaan","Pelanggaran","Prestasi"]},{key:"category",label:"Kategori"},{key:"description",label:"Catatan kejadian",type:"textarea"},{key:"points",label:"Poin",type:"number"},{key:"status",label:"Status",options:["Baru","Ditindaklanjuti","Selesai"]},
+  ],
+  bills: [
+    {key:"student_id",label:"Santri",type:"student"},{key:"invoice_no",label:"Nomor tagihan"},{key:"category",label:"Kategori",options:["SPP","Daftar Ulang","Kegiatan","Seragam","Lainnya"]},{key:"amount",label:"Nominal",type:"number"},{key:"due_date",label:"Jatuh tempo",type:"date"},{key:"status",label:"Status",options:["Belum Dibayar","Tertunda","Lunas"]},
+  ],
+  users: [
+    {key:"name",label:"Nama pengguna"},{key:"email",label:"Email",type:"email"},{key:"role",label:"Peran",options:["Admin","Ustadz","Wali Santri"]},
+  ],
 };
 
 const resourceNames: Record<Resource,string> = {
   students:"santri",tahfidz:"setoran tahfidz",health:"pemeriksaan",transactions:"transaksi",
   characters:"nilai karakter",inventory:"barang",announcements:"pengumuman",
+  attendance:"absensi",permits:"izin",schedules:"jadwal",rooms:"kamar",admissions:"pendaftar",
+  counseling:"catatan konseling",bills:"tagihan",users:"pengguna",
 };
 
 function RecordModal({ editor, students, onClose, onSave }: { editor: NonNullable<EditorState>; students: Row[]; onClose: () => void; onSave: (resource: Resource, row: Row | undefined, data: Record<string, unknown>) => Promise<void> }) {
@@ -342,7 +450,7 @@ function RecordModal({ editor, students, onClose, onSave }: { editor: NonNullabl
     event.preventDefault(); setSaving(true); setError("");
     try {
       const data: Record<string,unknown> = {};
-      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id"].includes(key) ? Number(value) : value;
+      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","points","capacity"].includes(key) ? Number(value) : value;
       await onSave(editor.resource,editor.row,data);
     } catch (e) { setError(e instanceof Error?e.message:"Gagal menyimpan."); setSaving(false); }
   }
@@ -400,6 +508,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [editor, setEditor] = useState<EditorState>(null);
+  const [cardStudent, setCardStudent] = useState<Row | null>(null);
   const [showNotification, setShowNotification] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -438,19 +547,35 @@ export default function Home() {
     notify("Data berhasil dihapus."); await loadData();
   }
 
+  async function openPayment(row:Row) {
+    if(row.payment_url) { window.open(String(row.payment_url),"_blank","noopener,noreferrer"); return; }
+    const response=await fetch("/api/integrations",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"payment-link",billId:row.id})});
+    const result=await response.json() as {error?:string;paymentUrl?:string};
+    if(!response.ok){notify(result.error||"Link pembayaran gagal dibuat.");return;}
+    if(result.paymentUrl) window.open(result.paymentUrl,"_blank","noopener,noreferrer");
+    notify("Link pembayaran berhasil dibuat."); await loadData();
+  }
+
   const content = useMemo(() => {
     const actions=(resource:Resource)=>({onAdd:()=>setEditor({resource}),onEdit:(row:Row)=>setEditor({resource,row}),onDelete:(row:Row)=>void deleteRecord(resource,row)});
     switch (page) {
       case "dashboard": return <Overview data={data} />;
-      case "santri": return <StudentsPage rows={data.students} {...actions("students")} />;
+      case "santri": return <StudentsPage rows={data.students} {...actions("students")} onCard={setCardStudent} />;
       case "tahfidz": return <TahfidzPage rows={data.tahfidz} {...actions("tahfidz")} />;
       case "mutabaah": return <MutabaahPage />;
       case "kesehatan": return <HealthPage rows={data.health} {...actions("health")} />;
-      case "keuangan": return <FinancePage rows={data.transactions} onAdd={()=>setEditor({resource:"transactions"})} onNotify={()=>setShowNotification(true)} />;
+      case "keuangan": return <FinancePage rows={data.transactions} bills={data.bills} onAdd={()=>setEditor({resource:"transactions"})} onBill={()=>setEditor({resource:"bills"})} onNotify={()=>setShowNotification(true)} onPayment={row=>void openPayment(row)} />;
       case "karakter": return <CharacterPage onAdd={()=>setEditor({resource:"characters"})} />;
       case "inventaris": return <InventoryPage rows={data.inventory} {...actions("inventory")} />;
       case "pengumuman": return <AnnouncementsPage rows={data.announcements} {...actions("announcements")} onNotify={()=>setShowNotification(true)} />;
       case "laporan": return <ReportsPage />;
+      case "absensi": return <AttendancePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
+      case "jadwal": return <SchedulePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
+      case "penerimaan": return <AdmissionsPage rows={data.admissions} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
+      case "konseling": return <CounselingPage rows={data.counseling} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
+      case "pengguna": return <UsersPage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
+      case "integrasi": return <IntegrationsPage onImported={loadData} notify={notify} />;
+      case "portalwali": return <GuardianPortal data={data} onNotify={()=>setShowNotification(true)} onCard={setCardStudent} />;
     }
   }, [page,data]);
 
@@ -501,8 +626,9 @@ export default function Home() {
         <button onClick={()=>setSidebarOpen(true)}><i>•••</i><span>Lainnya</span></button>
       </nav>
       {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} onClose={()=>setEditor(null)} onSave={saveRecord} />}
+      {cardStudent&&<StudentCardModal student={cardStudent} onClose={()=>setCardStudent(null)} />}
       {showNotification&&<NotificationModal students={data.students} onClose={()=>setShowNotification(false)} onSent={notify} />}
-      {showLogin&&<LoginModal onClose={()=>setShowLogin(false)} onLogin={r=>{setRole(r);setShowLogin(false);notify(`Berhasil masuk sebagai ${r}.`)}} />}
+      {showLogin&&<LoginModal onClose={()=>setShowLogin(false)} onLogin={r=>{setRole(r);setShowLogin(false);if(r==="Wali Santri")setPage("portalwali");notify(`Mode tampilan ${r} aktif.`)}} />}
       {toast&&<div className="toast"><span>✓</span>{toast}</div>}
     </div>
   );

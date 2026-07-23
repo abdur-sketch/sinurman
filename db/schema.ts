@@ -100,3 +100,87 @@ export const notificationLogs = sqliteTable("notification_logs", {
   status: text("status").notNull(),
   sentAt: text("sent_at").notNull(),
 });
+
+export const attendanceRecords = sqliteTable("attendance_records", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  recordDate: text("record_date").notNull(),
+  status: text("status").notNull(),
+  note: text("note").notNull(),
+  recordedBy: text("recorded_by").notNull(),
+});
+
+export const leavePermits = sqliteTable("leave_permits", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status").notNull(),
+  approvedBy: text("approved_by").notNull(),
+});
+
+export const schedules = sqliteTable("schedules", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  category: text("category").notNull(),
+  teacher: text("teacher").notNull(),
+  location: text("location").notNull(),
+  dayName: text("day_name").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+});
+
+export const rooms = sqliteTable("rooms", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  capacity: integer("capacity").notNull(),
+  supervisor: text("supervisor").notNull(),
+  status: text("status").notNull(),
+});
+
+export const admissions = sqliteTable("admissions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  registrationNo: text("registration_no").notNull().unique(),
+  name: text("name").notNull(),
+  guardianName: text("guardian_name").notNull(),
+  guardianPhone: text("guardian_phone").notNull(),
+  previousSchool: text("previous_school").notNull(),
+  status: text("status").notNull(),
+  score: integer("score").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});
+
+export const counselingRecords = sqliteTable("counseling_records", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  type: text("type").notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  points: integer("points").notNull().default(0),
+  status: text("status").notNull(),
+  counselor: text("counselor").notNull(),
+  recordedAt: text("recorded_at").notNull(),
+});
+
+export const bills = sqliteTable("bills", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  invoiceNo: text("invoice_no").notNull().unique(),
+  category: text("category").notNull(),
+  amount: integer("amount").notNull(),
+  dueDate: text("due_date").notNull(),
+  status: text("status").notNull(),
+  paymentUrl: text("payment_url").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const auditLogs = sqliteTable("audit_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userEmail: text("user_email").notNull(),
+  action: text("action").notNull(),
+  resource: text("resource").notNull(),
+  recordId: integer("record_id"),
+  detail: text("detail").notNull(),
+  createdAt: text("created_at").notNull(),
+});

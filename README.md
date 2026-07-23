@@ -21,6 +21,16 @@ untuk pengurus, ustadz, dan wali santri.
 - Pencatatan pembayaran SPP dan uang saku
 - Notifikasi wali melalui tautan WhatsApp dengan riwayat pengiriman
 - Ekspor laporan PDF dan Excel/CSV
+- Absensi harian dan perizinan pulang/sakit
+- Jadwal pelajaran, ustadz, kegiatan, dan kamar
+- Portal khusus wali santri
+- Tagihan dan konektor Midtrans/Xendit
+- WhatsApp Cloud API dengan fallback tautan WhatsApp
+- Kartu santri digital dan QR Code siap cetak
+- Penerimaan santri baru
+- Konseling, pembinaan, prestasi, dan pelanggaran
+- Manajemen pengguna berbasis peran
+- Impor Excel/CSV, backup JSON, dan audit aktivitas
 
 ## Pengembangan
 

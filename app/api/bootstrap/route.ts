@@ -14,6 +14,15 @@ export async function GET(request: Request) {
       announcements,
       characters,
       notifications,
+      attendance,
+      permits,
+      schedules,
+      rooms,
+      admissions,
+      counseling,
+      bills,
+      users,
+      audit,
     ] = await Promise.all([
       db.prepare("SELECT * FROM students ORDER BY id DESC").all(),
       db.prepare("SELECT t.*, s.name AS student_name FROM tahfidz_records t JOIN students s ON s.id = t.student_id ORDER BY t.id DESC LIMIT 50").all(),
@@ -23,6 +32,15 @@ export async function GET(request: Request) {
       db.prepare("SELECT * FROM announcements ORDER BY id DESC").all(),
       db.prepare("SELECT c.*, s.name AS student_name FROM character_reports c JOIN students s ON s.id = c.student_id ORDER BY c.id DESC LIMIT 100").all(),
       db.prepare("SELECT * FROM notification_logs ORDER BY id DESC LIMIT 30").all(),
+      db.prepare("SELECT a.*, s.name AS student_name FROM attendance_records a JOIN students s ON s.id=a.student_id ORDER BY a.id DESC LIMIT 100").all(),
+      db.prepare("SELECT p.*, s.name AS student_name FROM leave_permits p JOIN students s ON s.id=p.student_id ORDER BY p.id DESC LIMIT 50").all(),
+      db.prepare("SELECT * FROM schedules ORDER BY day_name, start_time").all(),
+      db.prepare("SELECT * FROM rooms ORDER BY name").all(),
+      db.prepare("SELECT * FROM admissions ORDER BY id DESC").all(),
+      db.prepare("SELECT c.*, s.name AS student_name FROM counseling_records c JOIN students s ON s.id=c.student_id ORDER BY c.id DESC LIMIT 100").all(),
+      db.prepare("SELECT b.*, s.name AS student_name FROM bills b JOIN students s ON s.id=b.student_id ORDER BY b.id DESC LIMIT 100").all(),
+      db.prepare("SELECT id, email, name, role, created_at FROM users ORDER BY id").all(),
+      db.prepare("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100").all(),
     ]);
     return Response.json({
       user,
@@ -34,6 +52,15 @@ export async function GET(request: Request) {
       announcements: announcements.results,
       characters: characters.results,
       notifications: notifications.results,
+      attendance: attendance.results,
+      permits: permits.results,
+      schedules: schedules.results,
+      rooms: rooms.results,
+      admissions: admissions.results,
+      counseling: counseling.results,
+      bills: bills.results,
+      users: users.results,
+      audit: audit.results,
     });
   } catch (error) {
     return Response.json(

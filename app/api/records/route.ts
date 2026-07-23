@@ -36,6 +36,46 @@ const resourceConfig = {
     columns: ["student_id", "category", "score", "note", "semester", "recorded_at"],
     required: ["student_id", "category", "score"],
   },
+  attendance: {
+    table: "attendance_records",
+    columns: ["student_id", "record_date", "status", "note", "recorded_by"],
+    required: ["student_id", "record_date", "status"],
+  },
+  permits: {
+    table: "leave_permits",
+    columns: ["student_id", "start_date", "end_date", "reason", "status", "approved_by"],
+    required: ["student_id", "start_date", "end_date", "reason"],
+  },
+  schedules: {
+    table: "schedules",
+    columns: ["title", "category", "teacher", "location", "day_name", "start_time", "end_time"],
+    required: ["title", "category", "teacher", "location", "day_name", "start_time", "end_time"],
+  },
+  rooms: {
+    table: "rooms",
+    columns: ["name", "capacity", "supervisor", "status"],
+    required: ["name", "capacity", "supervisor"],
+  },
+  admissions: {
+    table: "admissions",
+    columns: ["registration_no", "name", "guardian_name", "guardian_phone", "previous_school", "status", "score", "created_at"],
+    required: ["registration_no", "name", "guardian_name", "guardian_phone", "previous_school"],
+  },
+  counseling: {
+    table: "counseling_records",
+    columns: ["student_id", "type", "category", "description", "points", "status", "counselor", "recorded_at"],
+    required: ["student_id", "type", "category", "description"],
+  },
+  bills: {
+    table: "bills",
+    columns: ["student_id", "invoice_no", "category", "amount", "due_date", "status", "payment_url", "created_at"],
+    required: ["student_id", "invoice_no", "category", "amount", "due_date"],
+  },
+  users: {
+    table: "users",
+    columns: ["email", "name", "role", "created_at"],
+    required: ["email", "name", "role"],
+  },
 } as const;
 
 type Resource = keyof typeof resourceConfig;
@@ -62,6 +102,8 @@ export async function POST(request: Request) {
     if (action === "delete") {
       if (!payload.id) return Response.json({ error: "ID wajib diisi." }, { status: 400 });
       await db.prepare(`DELETE FROM ${config.table} WHERE id = ?`).bind(payload.id).run();
+      await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(user.email, "Hapus", resource, payload.id, `Menghapus data ${resource}`, new Date().toISOString()).run();
       return Response.json({ ok: true });
     }
 
@@ -73,6 +115,8 @@ export async function POST(request: Request) {
       const values = columns.map((column) => source[column]);
       await db.prepare(`UPDATE ${config.table} SET ${columns.map(c => `${c} = ?`).join(", ")} WHERE id = ?`)
         .bind(...values, payload.id).run();
+      await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(user.email, "Ubah", resource, payload.id, `Memperbarui data ${resource}`, new Date().toISOString()).run();
       return Response.json({ ok: true });
     }
 
@@ -94,6 +138,14 @@ export async function POST(request: Request) {
       semester: "Ganjil 2026/2027",
       note: "",
       condition: "Baik",
+      record_date: now.slice(0,10),
+      recorded_by: user.name,
+      approved_by: user.name,
+      counselor: user.name,
+      score: 0,
+      points: 0,
+      payment_url: "",
+      role: "Wali Santri",
     };
     const data = { ...defaults, ...source };
     const columns = config.columns.filter((column) => data[column] !== undefined);
@@ -101,6 +153,8 @@ export async function POST(request: Request) {
     const placeholders = columns.map(() => "?").join(", ");
     const result = await db.prepare(`INSERT INTO ${config.table} (${columns.join(", ")}) VALUES (${placeholders})`)
       .bind(...values).run();
+    await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(user.email, "Tambah", resource, result.meta.last_row_id, `Menambahkan data ${resource}`, now).run();
     return Response.json({ ok: true, id: result.meta.last_row_id }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Tindakan gagal.";

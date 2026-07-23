@@ -46,7 +46,7 @@ export async function ensureUser(request: Request) {
 export function canWrite(role: Role, resource: string) {
   if (role === "Admin") return true;
   if (role === "Ustadz") {
-    return ["tahfidz", "mutabaah", "health", "characters"].includes(resource);
+    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "schedules"].includes(resource);
   }
   return false;
 }
@@ -54,9 +54,8 @@ export function canWrite(role: Role, resource: string) {
 export async function seedIfNeeded() {
   const db = database();
   const count = await db.prepare("SELECT COUNT(*) AS total FROM students").first<{ total: number }>();
-  if (Number(count?.total ?? 0) > 0) return;
   const now = new Date().toISOString();
-  await db.batch([
+  if (Number(count?.total ?? 0) === 0) await db.batch([
     db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
       .bind("Muhammad Fikri", "SN-240181", "VIII A", "Ibnu Sina 03", "Ahmad Hidayat", "6281234567801", "Aktif", now),
     db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
@@ -68,7 +67,7 @@ export async function seedIfNeeded() {
     db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
       .bind("Faris Abdullah", "SN-240212", "IX A", "Ibnu Khaldun 02", "Abdullah Karim", "6281234567805", "Aktif", now),
   ]);
-  await db.batch([
+  if (Number(count?.total ?? 0) === 0) await db.batch([
     db.prepare("INSERT INTO tahfidz_records (student_id, surah, verses, amount, grade, teacher, recorded_at) VALUES (1, ?, ?, ?, ?, ?, ?)")
       .bind("Al-Mulk", "1–15", 15, "Mumtaz", "Ustadz Hasan", now),
     db.prepare("INSERT INTO tahfidz_records (student_id, surah, verses, amount, grade, teacher, recorded_at) VALUES (2, ?, ?, ?, ?, ?, ?)")
@@ -84,7 +83,7 @@ export async function seedIfNeeded() {
     db.prepare("INSERT INTO transactions (student_id, type, category, amount, status, note, recorded_at) VALUES (1, ?, ?, ?, ?, ?, ?)")
       .bind("Masuk", "Uang Saku", 500000, "Berhasil", "Top up wali santri", now),
   ]);
-  await db.batch([
+  if (Number(count?.total ?? 0) === 0) await db.batch([
     db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
       .bind("Ranjang Susun", "Asrama", 248, "unit", "Baik", now),
     db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
@@ -95,5 +94,39 @@ export async function seedIfNeeded() {
       .bind("Jadwal Ujian Tahfidz Semester", "Akademik", "Ujian tahfidz dilaksanakan mulai 29 Juli 2026.", "Semua", now, "Admin"),
     db.prepare("INSERT INTO announcements (title, category, content, audience, published_at, author) VALUES (?, ?, ?, ?, ?, ?)")
       .bind("Jadwal Kunjungan Wali Santri", "Kunjungan", "Kunjungan dibuka pada Ahad pekan pertama dan ketiga.", "Wali Santri", now, "Admin"),
+  ]);
+
+  const attendanceCount = await db.prepare("SELECT COUNT(*) AS total FROM attendance_records").first<{ total:number }>();
+  if (Number(attendanceCount?.total ?? 0) === 0) await db.batch([
+    db.prepare("INSERT INTO attendance_records (student_id, record_date, status, note, recorded_by) VALUES (1, ?, ?, ?, ?)")
+      .bind(now.slice(0,10), "Hadir", "Apel pagi", "Ustadz Hasan"),
+    db.prepare("INSERT INTO attendance_records (student_id, record_date, status, note, recorded_by) VALUES (2, ?, ?, ?, ?)")
+      .bind(now.slice(0,10), "Hadir", "Apel pagi", "Ustadz Hasan"),
+    db.prepare("INSERT INTO attendance_records (student_id, record_date, status, note, recorded_by) VALUES (4, ?, ?, ?, ?)")
+      .bind(now.slice(0,10), "Sakit", "Istirahat di klinik", "Ustadz Hasan"),
+    db.prepare("INSERT INTO leave_permits (student_id, start_date, end_date, reason, status, approved_by) VALUES (4, ?, ?, ?, ?, ?)")
+      .bind(now.slice(0,10), now.slice(0,10), "Pemeriksaan kesehatan", "Disetujui", "Admin"),
+  ]);
+  const scheduleCount = await db.prepare("SELECT COUNT(*) AS total FROM schedules").first<{ total:number }>();
+  if (Number(scheduleCount?.total ?? 0) === 0) await db.batch([
+    db.prepare("INSERT INTO schedules (title, category, teacher, location, day_name, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind("Tahfidz Pagi", "Tahfidz", "Ustadz Hasan", "Masjid Utama", "Senin–Kamis", "05:30", "06:30"),
+    db.prepare("INSERT INTO schedules (title, category, teacher, location, day_name, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind("Fiqih", "Pelajaran", "Ustadz Fauzi", "Kelas VIII A", "Senin", "08:00", "09:30"),
+    db.prepare("INSERT INTO rooms (name, capacity, supervisor, status) VALUES (?, ?, ?, ?)")
+      .bind("Ibnu Sina 03", 24, "Ustadz Rahmat", "Aktif"),
+    db.prepare("INSERT INTO rooms (name, capacity, supervisor, status) VALUES (?, ?, ?, ?)")
+      .bind("Al-Farabi 02", 22, "Ustadz Karim", "Aktif"),
+  ]);
+  const admissionCount = await db.prepare("SELECT COUNT(*) AS total FROM admissions").first<{ total:number }>();
+  if (Number(admissionCount?.total ?? 0) === 0) await db.batch([
+    db.prepare("INSERT INTO admissions (registration_no, name, guardian_name, guardian_phone, previous_school, status, score, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("PSB-260001", "Rafi Akbar", "Budi Akbar", "6281311110001", "SDIT Al-Hikmah", "Verifikasi", 82, now),
+    db.prepare("INSERT INTO admissions (registration_no, name, guardian_name, guardian_phone, previous_school, status, score, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("PSB-260002", "Ilham Ramadhan", "Dedi Ramadhan", "6281311110002", "MI Nurul Falah", "Tes", 76, now),
+    db.prepare("INSERT INTO counseling_records (student_id, type, category, description, points, status, counselor, recorded_at) VALUES (3, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("Pembinaan", "Kedisiplinan", "Terlambat mengikuti apel pagi", 5, "Ditindaklanjuti", "Ustadz Hasan", now),
+    db.prepare("INSERT INTO bills (student_id, invoice_no, category, amount, due_date, status, payment_url, created_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?)")
+      .bind("INV-202607-0001", "SPP Juli", 750000, "2026-07-10", "Lunas", "", now),
   ]);
 }
