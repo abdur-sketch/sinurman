@@ -165,6 +165,31 @@ test("pusat bantuan dan ikon kanan atas memiliki aksi lengkap", async () => {
   assert.match(page, /event\.key==="Escape"/);
 });
 
+test("seluruh laporan mendukung cetak langsung A4, PDF, CSV, dan pembatasan peran", async () => {
+  const [dashboard, printPage, printClient, exportRoute, styles] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/cetak/page.tsx"),
+    file("app/cetak/print-report-client.tsx"),
+    file("app/api/export/route.ts"),
+    file("app/globals.css"),
+  ]);
+  for (const type of ["students","tahfidz","mutabaah","attendance","characters","health","counseling","schedules","finance","inventory","admissions"]) {
+    assert.match(dashboard, new RegExp(`key:"${type}"`));
+    assert.match(exportRoute, new RegExp(`${type}: \\{`));
+  }
+  assert.match(dashboard, /\/cetak\?type=/);
+  assert.match(dashboard, /query\(report\.key,"pdf"\)/);
+  assert.match(dashboard, /query\(report\.key,"csv"\)/);
+  assert.match(printPage, /requireChatGPTUser\("\/cetak"\)/);
+  assert.match(printClient, /window\.print\(\)/);
+  assert.match(printClient, /PONDOK PESANTREN NURUL IMAN/);
+  assert.match(printClient, /Pimpinan Pesantren/);
+  assert.match(exportRoute, /config\.adminOnly&&user\.role!=="Admin"/);
+  assert.match(exportRoute, /user\.role==="Musyrif"\|\|user\.role==="Kepala Asrama"/);
+  assert.match(exportRoute, /config\.scopedQuery/);
+  assert.match(styles, /@page \{ size:A4 landscape/);
+});
+
 test("portal internal memakai login ChatGPT dan halaman PPDB tetap publik", async () => {
   const [root, auth, publicPage, publicApi, lib] = await Promise.all([
     file("app/page.tsx"),

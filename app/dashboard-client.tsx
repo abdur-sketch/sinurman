@@ -653,9 +653,28 @@ function StudentCardModal({ student, onClose }: { student:Row; onClose:()=>void 
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="student-card-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close no-print" onClick={onClose}>×</button><div className="student-id-card"><header><span className="brand-mark">ن</span><div><strong>SINURMAN</strong><small>Pondok Pesantren Nurul Iman</small></div></header><div className="student-card-body"><div><span className="student-photo">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><h3>{student.name}</h3><p>{student.nis}</p><dl><dt>Kelas</dt><dd>{student.class_name}</dd><dt>Kamar</dt><dd>{student.room}</dd><dt>Status</dt><dd>{student.status}</dd></dl></div>{qr?<img src={qr} alt={`QR ${student.name}`} />:<span className="qr-loading">Memuat QR…</span>}</div><footer>Kartu Santri Digital · Tahun Ajaran 2026/2027</footer></div><button className="primary-button print-card no-print" onClick={()=>window.print()}>Cetak Kartu</button></div></div>;
 }
 
-function ReportsPage() {
-  const reports = [["students","Laporan Data Santri","Profil, kelas, dan wali"],["tahfidz","Rekap Setoran Tahfidz","Hafalan per santri"],["finance","Laporan Keuangan","SPP dan uang saku"],["health","Rekap Kesehatan","Kunjungan klinik"]];
-  return <><section className="report-hero"><div><span>PUSAT DATA SINURMAN</span><h2>Laporan pesantren, siap dalam beberapa klik.</h2><p>Unduh data terbaru dalam PDF siap cetak atau CSV yang dapat dibuka di Excel.</p></div><a className="light-button link-button" href="/api/export?type=students&format=pdf">Unduh Laporan Utama →</a></section><section className="report-grid">{reports.map((r,i)=><article className="card report-card" key={r[0]}><MiniIcon tone={["blue","green","violet","amber"][i]}>▥</MiniIcon><div><h3>{r[1]}</h3><p>{r[2]}</p><span>PDF & Excel/CSV · Data langsung</span></div><div className="export-actions"><a href={`/api/export?type=${r[0]}&format=pdf`}>PDF</a><a href={`/api/export?type=${r[0]}&format=csv`}>CSV</a></div></article>)}</section></>;
+function ReportsPage({ role }: { role:Role }) {
+  const today=new Date().toISOString().slice(0,10);
+  const [from,setFrom]=useState(`${today.slice(0,4)}-01-01`);
+  const [to,setTo]=useState(today);
+  const allReports=[
+    {key:"students",title:"Laporan Data Santri",copy:"Profil, kelas, kamar, wali, dan status",tone:"blue",admin:false},
+    {key:"tahfidz",title:"Rekap Setoran Tahfidz",copy:"Hafalan dan penilaian per santri",tone:"green",admin:false},
+    {key:"mutabaah",title:"Rekap Mutaba’ah",copy:"Kegiatan ibadah harian santri",tone:"violet",admin:false},
+    {key:"attendance",title:"Laporan Absensi",copy:"Kehadiran, izin, sakit, dan alpa",tone:"amber",admin:false},
+    {key:"characters",title:"Rapor Karakter",copy:"Nilai karakter dan catatan pembina",tone:"blue",admin:false},
+    {key:"health",title:"Rekap Kesehatan",copy:"Keluhan, diagnosis, dan tindak lanjut",tone:"green",admin:false},
+    {key:"counseling",title:"Laporan Pembinaan",copy:"Konseling, prestasi, dan pelanggaran",tone:"violet",admin:false},
+    {key:"schedules",title:"Jadwal Pelajaran",copy:"Jadwal harian SMP dan SMK",tone:"amber",admin:false},
+    {key:"finance",title:"Laporan Keuangan",copy:"SPP, uang saku, dan transaksi",tone:"blue",admin:true},
+    {key:"inventory",title:"Laporan Inventaris",copy:"Aset, jumlah, lokasi, dan kondisi",tone:"green",admin:true},
+    {key:"admissions",title:"Laporan PPDB",copy:"Pendaftar dan status verifikasi",tone:"violet",admin:true},
+  ];
+  const reports=allReports.filter(report=>role==="Admin"||!report.admin);
+  const query=(key:string,format:string)=>`/api/export?type=${key}&format=${format}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  return <><section className="report-hero"><div><span>PUSAT DATA SINURMAN</span><h2>Laporan pesantren, siap cetak langsung.</h2><p>Pilih periode, cetak dalam format A4 dengan kop dan tanda tangan, atau unduh PDF serta Excel/CSV.</p></div><a className="light-button link-button" target="_blank" rel="noreferrer" href={`/cetak?type=students&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&auto=1`}>Cetak Laporan Utama →</a></section>
+    <section className="card report-toolbar"><div><strong>Periode laporan</strong><small>Filter berlaku pada laporan yang memiliki tanggal transaksi atau kegiatan.</small></div><label>Dari<input type="date" value={from} max={to} onChange={event=>setFrom(event.target.value)}/></label><label>Sampai<input type="date" value={to} min={from} max={today} onChange={event=>setTo(event.target.value)}/></label></section>
+    <section className="report-grid">{reports.map((report)=><article className="card report-card" key={report.key}><MiniIcon tone={report.tone}>▥</MiniIcon><div><h3>{report.title}</h3><p>{report.copy}</p><span>A4 siap cetak · PDF · Excel/CSV</span></div><div className="export-actions"><a className="print-action" target="_blank" rel="noreferrer" href={`/cetak?type=${report.key}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&auto=1`}>Cetak</a><a href={query(report.key,"pdf")}>PDF</a><a href={query(report.key,"csv")}>CSV</a></div></article>)}</section></>;
 }
 
 const formFields: Record<Resource, { key: string; label: string; type?: string; options?: string[] }[]> = {
@@ -1006,7 +1025,7 @@ export default function DashboardClient() {
       case "karakter": return <CharacterPage onAdd={()=>setEditor({resource:"characters"})} />;
       case "inventaris": return <InventoryPage rows={data.inventory} {...actions("inventory")} />;
       case "pengumuman": return <AnnouncementsPage rows={data.announcements} {...actions("announcements")} onNotify={()=>setShowNotification(true)} />;
-      case "laporan": return <ReportsPage />;
+      case "laporan": return <ReportsPage role={role} />;
       case "absensi": return <AttendancePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} reload={loadData} notify={notify} />;
       case "jadwal": return <SchedulePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "penerimaan": return <AdmissionsPage data={data} role={role} reload={loadData} notify={notify} remove={(resource,row)=>void deleteRecord(resource,row)} />;
