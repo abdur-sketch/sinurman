@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Role = "Admin" | "Ustadz" | "Wali Santri";
 type Resource = "students" | "tahfidz" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users";
@@ -26,6 +26,14 @@ type AppData = {
   audit: Row[];
 };
 type EditorState = { resource: Resource; row?: Row } | null;
+type SearchResult = {
+  id: string;
+  title: string;
+  subtitle: string;
+  page: PageKey;
+  icon: string;
+  keywords: string;
+};
 
 const emptyData: AppData = {
   students: [], tahfidz: [], health: [], transactions: [], characters: [],
@@ -116,6 +124,9 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
   integrasi: { title: "Integrasi & Backup", subtitle: "Sambungkan pembayaran, WhatsApp, impor, dan cadangan data." },
   portalwali: { title: "Portal Wali Santri", subtitle: "Ringkasan perkembangan dan layanan untuk orang tua." },
 };
+
+const normalizeSearch = (value: unknown) =>
+  String(value ?? "").toLocaleLowerCase("id-ID").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 const students = [
   { name: "Muhammad Fikri", nis: "SN-240181", class: "VIII A", room: "Ibnu Sina 03", status: "Aktif", avatar: "MF" },
@@ -521,6 +532,10 @@ export default function Home() {
   const [dark, setDark] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchActiveIndex, setSearchActiveIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const title = pageTitles[page];
 
   const loadData = useCallback(async () => {
@@ -537,6 +552,64 @@ export default function Home() {
   },[]);
 
   useEffect(()=>{ void loadData(); },[loadData]);
+
+  useEffect(() => {
+    function openSearch(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+        window.setTimeout(() => searchInputRef.current?.focus(), 0);
+      }
+      if (event.key === "Escape") {
+        setSearchOpen(false);
+        searchInputRef.current?.blur();
+      }
+    }
+    window.addEventListener("keydown", openSearch);
+    return () => window.removeEventListener("keydown", openSearch);
+  }, []);
+
+  const searchIndex = useMemo<SearchResult[]>(() => {
+    const result = (id: string, title: unknown, subtitle: unknown, page: PageKey, icon: string, keywords: unknown = ""): SearchResult => ({
+      id,
+      title: String(title || pageTitles[page].title),
+      subtitle: String(subtitle || pageTitles[page].subtitle),
+      page,
+      icon,
+      keywords: String(keywords || ""),
+    });
+    const menu = navGroups.flatMap(group => group.items.map(item =>
+      result(`menu:${item.key}`, item.label, pageTitles[item.key].subtitle, item.key, item.icon, `${group.label} menu halaman modul`)
+    ));
+    return [
+      ...menu,
+      ...data.students.map(row => result(`student:${row.id}`, row.name, `${row.nis || "Tanpa NIS"} · ${row.class || "Tanpa kelas"} · ${row.room || "Tanpa kamar"}`, "santri", "♙", `${row.guardian_name} ${row.status}`)),
+      ...data.schedules.map(row => result(`schedule:${row.id}`, row.subject, `${row.class_name || row.class || ""} · ${row.day || ""} ${row.start_time || ""}–${row.end_time || ""} · ${row.teacher || ""}`, "jadwal", "▦", `${row.level} ${row.room_name} pelajaran mapel jadwal`)),
+      ...data.tahfidz.map(row => result(`tahfidz:${row.id}`, row.student_name, `${row.surah || row.surat || "Setoran hafalan"} · ${row.verses || row.ayat || ""}`, "tahfidz", "◫", `${row.grade} ${row.status} hafalan setoran`)),
+      ...data.health.map(row => result(`health:${row.id}`, row.student_name, `${row.complaint || row.diagnosis || "Catatan kesehatan"} · ${row.date || ""}`, "kesehatan", "✚", `${row.treatment} ${row.status}`)),
+      ...data.transactions.map(row => result(`transaction:${row.id}`, row.student_name || row.description, `${row.type || "Transaksi"} · Rp${money.format(Number(row.amount || 0))}`, "keuangan", "Rp", `${row.category} ${row.date} uang saku transaksi`)),
+      ...data.bills.map(row => result(`bill:${row.id}`, row.student_name || row.invoice_number, `${row.category || "Tagihan"} · Rp${money.format(Number(row.amount || 0))} · ${row.status || ""}`, "keuangan", "Rp", `${row.invoice_number} ${row.due_date} spp pembayaran tagihan`)),
+      ...data.inventory.map(row => result(`inventory:${row.id}`, row.name, `${row.location || "Lokasi belum diisi"} · ${row.condition || row.status || ""}`, "inventaris", "◇", `${row.category} ${row.quantity} stok aset`)),
+      ...data.announcements.map(row => result(`announcement:${row.id}`, row.title, `${row.category || "Pengumuman"} · ${row.date || ""}`, "pengumuman", "◉", `${row.content} informasi berita`)),
+      ...data.attendance.map(row => result(`attendance:${row.id}`, row.student_name, `${row.date || ""} · ${row.status || "Kehadiran"}`, "absensi", "◷", `${row.note} izin absensi`)),
+      ...data.admissions.map(row => result(`admission:${row.id}`, row.name, `${row.registration_number || "Pendaftar"} · ${row.status || ""}`, "penerimaan", "+", `${row.school_origin} ${row.level} calon santri`)),
+      ...data.counseling.map(row => result(`counseling:${row.id}`, row.student_name, `${row.category || "Konseling"} · ${row.date || ""}`, "konseling", "♧", `${row.description} ${row.follow_up} pembinaan pelanggaran`)),
+    ];
+  }, [data]);
+
+  const searchResults = useMemo(() => {
+    const query = normalizeSearch(searchQuery).trim();
+    if (!query) return searchIndex.filter(item => item.id.startsWith("menu:")).slice(0, 6);
+    const tokens = query.split(/\s+/);
+    return searchIndex.filter(item => {
+      const haystack = normalizeSearch(`${item.title} ${item.subtitle} ${item.keywords} ${pageTitles[item.page].title}`);
+      return tokens.every(token => haystack.includes(token));
+    }).slice(0, 9);
+  }, [searchIndex, searchQuery]);
+
+  useEffect(() => {
+    setSearchActiveIndex(0);
+  }, [searchQuery]);
 
   async function saveRecord(resource: Resource, row: Row | undefined, values: Record<string, unknown>) {
     const response=await fetch("/api/records",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:row?"update":"create",resource,id:row?.id,data:values})});
@@ -590,6 +663,30 @@ export default function Home() {
     setSidebarOpen(false);
   }
 
+  function selectSearchResult(item: SearchResult) {
+    selectPage(item.page);
+    setSearchQuery("");
+    setSearchOpen(false);
+    searchInputRef.current?.blur();
+    notify(`${item.title} dibuka di ${pageTitles[item.page].title}.`);
+  }
+
+  function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSearchActiveIndex(index => Math.min(index + 1, Math.max(searchResults.length - 1, 0)));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSearchActiveIndex(index => Math.max(index - 1, 0));
+    } else if (event.key === "Enter" && searchResults[searchActiveIndex]) {
+      event.preventDefault();
+      selectSearchResult(searchResults[searchActiveIndex]);
+    } else if (event.key === "Escape") {
+      setSearchOpen(false);
+      searchInputRef.current?.blur();
+    }
+  }
+
   function notify(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
@@ -608,7 +705,51 @@ export default function Home() {
       <div className="main-area">
         <header className="topbar">
           <button className="menu-button" onClick={()=>setSidebarOpen(true)} aria-label="Buka menu">☰</button>
-          <div className="top-search">⌕<input placeholder="Cari santri, laporan, atau menu..." /><kbd>⌘ K</kbd></div>
+          <div className={`top-search ${searchOpen ? "is-open" : ""}`}>
+            <span className="search-symbol">⌕</span>
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              placeholder="Cari santri, jadwal, tagihan, atau menu..."
+              onFocus={() => setSearchOpen(true)}
+              onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
+              onChange={event => setSearchQuery(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              role="combobox"
+              aria-label="Pencarian global"
+              aria-expanded={searchOpen}
+              aria-controls="global-search-results"
+              aria-autocomplete="list"
+              aria-activedescendant={searchResults[searchActiveIndex] ? `search-option-${searchActiveIndex}` : undefined}
+            />
+            {searchQuery
+              ? <button className="search-clear" type="button" aria-label="Hapus pencarian" onMouseDown={event => event.preventDefault()} onClick={() => { setSearchQuery(""); searchInputRef.current?.focus(); }}>×</button>
+              : <kbd>⌘ K</kbd>}
+            {searchOpen && <div id="global-search-results" className="search-panel" role="listbox">
+              <div className="search-panel-header">
+                <span>{searchQuery ? "HASIL PENCARIAN" : "AKSES CEPAT"}</span>
+                {searchQuery && <small>{searchResults.length} ditemukan</small>}
+              </div>
+              <div className="search-results">
+                {searchResults.map((item, index) => <button
+                  type="button"
+                  role="option"
+                  aria-selected={index === searchActiveIndex}
+                  id={`search-option-${index}`}
+                  className={index === searchActiveIndex ? "active" : ""}
+                  key={item.id}
+                  onMouseEnter={() => setSearchActiveIndex(index)}
+                  onMouseDown={event => { event.preventDefault(); selectSearchResult(item); }}
+                >
+                  <i>{item.icon}</i>
+                  <span><strong>{item.title}</strong><small>{item.subtitle}</small></span>
+                  <em>{pageTitles[item.page].title}</em>
+                </button>)}
+                {!searchResults.length && <div className="search-empty"><b>⌕</b><strong>Tidak ada hasil</strong><span>Coba nama santri, kelas, mata pelajaran, tagihan, atau nama menu.</span></div>}
+              </div>
+              {!!searchResults.length && <div className="search-panel-footer"><span>↑↓ Pilih</span><span>Enter Buka</span><span>Esc Tutup</span></div>}
+            </div>}
+          </div>
           <div className="top-actions">
             <button onClick={()=>setDark(!dark)} aria-label="Ubah tema">{dark?"☀":"☾"}</button>
             <button className="notification" onClick={()=>notify("Tidak ada notifikasi baru.")} aria-label="Notifikasi">♢<i /></button>
