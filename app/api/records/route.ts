@@ -1,4 +1,5 @@
 import { canWrite, database, ensureUser } from "../_lib";
+import { notifyRecordChange } from "../_notifications";
 
 const resourceConfig = {
   students: {
@@ -68,7 +69,7 @@ const resourceConfig = {
   },
   bills: {
     table: "bills",
-    columns: ["student_id", "invoice_no", "category", "amount", "due_date", "status", "payment_url", "created_at"],
+    columns: ["student_id", "invoice_no", "category", "amount", "due_date", "status", "payment_url", "payment_method", "payment_reference", "paid_at", "created_at"],
     required: ["student_id", "invoice_no", "category", "amount", "due_date"],
   },
   users: {
@@ -117,6 +118,10 @@ export async function POST(request: Request) {
         .bind(...values, payload.id).run();
       await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(user.email, "Ubah", resource, payload.id, `Memperbarui data ${resource}`, new Date().toISOString()).run();
+      if(["permits"].includes(resource)) {
+        const updated=await db.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(payload.id).first<Record<string,unknown>>();
+        if(updated) try{await notifyRecordChange(resource,updated);}catch{/* notification must not block the record */}
+      }
       return Response.json({ ok: true });
     }
 
@@ -155,6 +160,9 @@ export async function POST(request: Request) {
       .bind(...values).run();
     await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(user.email, "Tambah", resource, result.meta.last_row_id, `Menambahkan data ${resource}`, now).run();
+    if(["attendance","tahfidz","health","bills"].includes(resource)) {
+      try{await notifyRecordChange(resource,data);}catch{/* notification must not block the record */}
+    }
     return Response.json({ ok: true, id: result.meta.last_row_id }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Tindakan gagal.";

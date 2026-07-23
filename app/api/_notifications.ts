@@ -1,0 +1,46 @@
+import { env } from "cloudflare:workers";
+import { database } from "./_lib";
+
+export async function sendWhatsappNotification(input: {
+  studentId?: number | null;
+  recipient: string;
+  message: string;
+  channel?: string;
+}) {
+  const phone=input.recipient.replace(/\D/g,"").replace(/^0/,"62");
+  const whatsappUrl=`https://wa.me/${phone}?text=${encodeURIComponent(input.message)}`;
+  let status="Disiapkan";
+  let automatic=false;
+  if(env.WHATSAPP_TOKEN&&env.WHATSAPP_PHONE_NUMBER_ID) {
+    const response=await fetch(`https://graph.facebook.com/v22.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`,{
+      method:"POST",
+      headers:{"authorization":`Bearer ${env.WHATSAPP_TOKEN}`,"content-type":"application/json"},
+      body:JSON.stringify({messaging_product:"whatsapp",to:phone,type:"text",text:{body:input.message}}),
+    });
+    automatic=response.ok;
+    status=response.ok?"Terkirim":"Gagal";
+  }
+  await database().prepare("INSERT INTO notification_logs (student_id, channel, recipient, message, status, sent_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(input.studentId??null,input.channel??"WhatsApp",input.recipient,input.message,status,new Date().toISOString()).run();
+  return {whatsappUrl,automatic,status};
+}
+
+export async function notifyGuardian(studentId:number,message:string) {
+  const student=await database().prepare("SELECT guardian_phone FROM students WHERE id=?").bind(studentId).first<{guardian_phone:string}>();
+  if(!student?.guardian_phone) return null;
+  return sendWhatsappNotification({studentId,recipient:student.guardian_phone,message});
+}
+
+export async function notifyRecordChange(resource:string,row:Record<string,unknown>) {
+  const studentId=Number(row.student_id);
+  if(!studentId) return;
+  const student=await database().prepare("SELECT name FROM students WHERE id=?").bind(studentId).first<{name:string}>();
+  if(!student) return;
+  let message="";
+  if(resource==="attendance"&&row.status!=="Hadir") message=`SINURMAN: ${student.name} tercatat ${row.status} pada ${row.record_date}. ${row.note||""}`;
+  if(resource==="tahfidz") message=`SINURMAN: Setoran tahfidz ${student.name} diperbarui: ${row.surah} ayat ${row.verses}, nilai ${row.grade}.`;
+  if(resource==="health") message=`SINURMAN: Catatan kesehatan ${student.name}: ${row.complaint}. Status ${row.status}.`;
+  if(resource==="bills") message=`SINURMAN: Tagihan baru ${row.category} untuk ${student.name} sebesar Rp${Number(row.amount||0).toLocaleString("id-ID")}, jatuh tempo ${row.due_date}.`;
+  if(resource==="permits"&&["Disetujui","Ditolak"].includes(String(row.status))) message=`SINURMAN: Pengajuan izin ${student.name} telah ${String(row.status).toLowerCase()}.`;
+  if(message) await notifyGuardian(studentId,message);
+}

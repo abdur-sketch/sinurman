@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import QRCode from "qrcode";
 import { database, ensureUser } from "../_lib";
 
 export async function GET(request: Request) {
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
   } else {
     return Response.json({ error:"Kredensial Midtrans atau Xendit belum dikonfigurasi pada hosting." },{status:503});
   }
-  await database().prepare("UPDATE bills SET payment_url=? WHERE id=?").bind(paymentUrl,payload.billId).run();
-  return Response.json({paymentUrl});
+  await database().prepare("UPDATE bills SET payment_url=?, payment_method=? WHERE id=?").bind(paymentUrl,env.MIDTRANS_SERVER_KEY?"Midtrans QRIS":"Xendit QRIS",payload.billId).run();
+  const qrDataUrl=await QRCode.toDataURL(paymentUrl,{width:360,margin:1,color:{dark:"#183153",light:"#ffffff"}});
+  return Response.json({paymentUrl,qrDataUrl});
 }

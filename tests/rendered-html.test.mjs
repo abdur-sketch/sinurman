@@ -46,3 +46,39 @@ test("pembayaran wali memeriksa kepemilikan tagihan", async () => {
   assert.match(payment, /b\.id=\? AND lower\(s\.guardian_email\)=lower\(\?\)/);
   assert.match(payment, /Midtrans|Xendit/);
 });
+
+test("notifikasi otomatis terhubung ke perubahan data dan pengingat tagihan", async () => {
+  const [records, notifications, reminders] = await Promise.all([
+    file("app/api/records/route.ts"),
+    file("app/api/_notifications.ts"),
+    file("app/api/reminders/route.ts"),
+  ]);
+  assert.match(records, /notifyRecordChange/);
+  assert.match(notifications, /WHATSAPP_PHONE_NUMBER_ID/);
+  assert.match(notifications, /notification_logs/);
+  assert.match(reminders, /date\(\?, '\+7 day'\)/);
+});
+
+test("pembayaran memiliki webhook rekonsiliasi dan kuitansi", async () => {
+  const [webhook, receipt, migration] = await Promise.all([
+    file("app/api/payments/webhook/route.ts"),
+    file("app/api/receipt/route.ts"),
+    file("drizzle/0004_plain_kang.sql"),
+  ]);
+  assert.match(webhook, /signature_key/);
+  assert.match(webhook, /UPDATE bills SET status='Lunas'/);
+  assert.match(receipt, /KUITANSI PEMBAYARAN/);
+  assert.match(migration, /ADD `payment_reference`/);
+});
+
+test("kunjungan dan penjemputan memakai QR sekali pakai", async () => {
+  const [requestRoute, qrRoute, page] = await Promise.all([
+    file("app/api/guardian-requests/route.ts"),
+    file("app/api/guardian-requests/qr/route.ts"),
+    file("app/page.tsx"),
+  ]);
+  assert.match(requestRoute, /crypto\.randomUUID/);
+  assert.match(requestRoute, /status='Digunakan'/);
+  assert.match(qrRoute, /SINURMAN:REQUEST:/);
+  assert.match(page, /Validasi QR/);
+});

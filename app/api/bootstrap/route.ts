@@ -30,6 +30,7 @@ export async function GET(request: Request) {
       users,
       audit,
       guardianMessages,
+      guardianRequests,
     ] = await Promise.all([
       guardian
         ? owned("SELECT * FROM students WHERE lower(guardian_email) = ? ORDER BY id")
@@ -88,6 +89,9 @@ export async function GET(request: Request) {
       guardian
         ? owned("SELECT g.*, s.name AS student_name FROM guardian_messages g JOIN students s ON s.id=g.student_id WHERE lower(g.sender_email)=? ORDER BY g.id DESC LIMIT 50")
         : all("SELECT g.*, s.name AS student_name FROM guardian_messages g JOIN students s ON s.id=g.student_id ORDER BY g.id DESC LIMIT 100"),
+      guardian
+        ? owned("SELECT g.*,s.name AS student_name,s.nis FROM guardian_requests g JOIN students s ON s.id=g.student_id WHERE lower(s.guardian_email)=? ORDER BY g.id DESC LIMIT 50")
+        : all("SELECT g.*,s.name AS student_name,s.nis FROM guardian_requests g JOIN students s ON s.id=g.student_id ORDER BY g.id DESC LIMIT 100"),
     ]);
 
     return Response.json({
@@ -111,6 +115,7 @@ export async function GET(request: Request) {
       users: users.results,
       audit: audit.results,
       guardianMessages: guardianMessages.results,
+      guardianRequests: guardianRequests.results,
     });
   } catch (error) {
     return Response.json(

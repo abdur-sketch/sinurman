@@ -29,6 +29,13 @@
       "when": 1784792136487,
       "tag": "0003_new_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1784793026977,
+      "tag": "0004_plain_kang",
+      "breakpoints": true
     }
   ]
 }

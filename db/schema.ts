@@ -175,6 +175,9 @@ export const bills = sqliteTable("bills", {
   dueDate: text("due_date").notNull(),
   status: text("status").notNull(),
   paymentUrl: text("payment_url").notNull(),
+  paymentMethod: text("payment_method").notNull().default(""),
+  paymentReference: text("payment_reference").notNull().default(""),
+  paidAt: text("paid_at").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
 
@@ -188,6 +191,24 @@ export const guardianMessages = sqliteTable("guardian_messages", {
   reply: text("reply").notNull().default(""),
   createdAt: text("created_at").notNull(),
   repliedAt: text("replied_at").notNull().default(""),
+});
+
+export const guardianRequests = sqliteTable("guardian_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  requesterEmail: text("requester_email").notNull(),
+  type: text("type", { enum: ["Kunjungan", "Penjemputan"] }).notNull(),
+  visitDate: text("visit_date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  purpose: text("purpose").notNull(),
+  visitorName: text("visitor_name").notNull(),
+  visitorPhone: text("visitor_phone").notNull(),
+  status: text("status").notNull().default("Diajukan"),
+  qrToken: text("qr_token").notNull().unique(),
+  usedAt: text("used_at").notNull().default(""),
+  approvedBy: text("approved_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
 });
 
 export const auditLogs = sqliteTable("audit_logs", {

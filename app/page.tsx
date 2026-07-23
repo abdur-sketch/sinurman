@@ -26,6 +26,7 @@ type AppData = {
   users: Row[];
   audit: Row[];
   guardianMessages: Row[];
+  guardianRequests: Row[];
 };
 type EditorState = { resource: Resource; row?: Row } | null;
 type SearchResult = {
@@ -41,7 +42,7 @@ const emptyData: AppData = {
   students: [], tahfidz: [], mutabaah: [], health: [], transactions: [], characters: [],
   inventory: [], announcements: [], notifications: [],
   attendance: [], permits: [], schedules: [], rooms: [], admissions: [],
-  counseling: [], bills: [], users: [], audit: [], guardianMessages: [],
+  counseling: [], bills: [], users: [], audit: [], guardianMessages: [], guardianRequests: [],
 };
 type PageKey =
   | "dashboard"
@@ -311,7 +312,7 @@ function FinancePage({ rows, bills, onAdd, onBill, onNotify, onPayment }: { rows
         <article className="card"><header className="card-header"><div><h3>Transaksi Terbaru</h3><p>SPP, uang saku, dan pengeluaran</p></div><a className="text-button link-button" href="/api/export?type=finance&format=csv">Ekspor</a></header>
           {rows.slice(0,5).map((x)=><div className="expense" key={String(x.id)}><div><strong>{x.student_name} · {x.category}</strong><span>Rp {money.format(Number(x.amount||0))}</span></div><Progress value={Math.min(100,Number(x.amount||0)/10000)} tone={x.type==="Masuk"?"green":"amber"} /></div>)}
         </article>
-      </section><section className="card data-card"><header className="card-header"><div><h3>Tagihan Santri</h3><p>Siap dihubungkan ke gateway pembayaran</p></div><button className="primary-button" onClick={onBill}>+ Buat Tagihan</button></header><div className="table-wrap"><table><thead><tr><th>Invoice</th><th>Santri</th><th>Kategori</th><th>Nominal</th><th>Jatuh Tempo</th><th>Status</th><th /></tr></thead><tbody>{bills.map(x=><tr key={String(x.id)}><td className="muted">{x.invoice_no}</td><td><strong>{x.student_name}</strong></td><td>{x.category}</td><td>Rp {money.format(Number(x.amount))}</td><td>{x.due_date}</td><td><Status tone={x.status==="Lunas"?"green":"amber"}>{x.status}</Status></td><td>{x.status!=="Lunas"&&<button className="text-button" onClick={()=>onPayment(x)}>{x.payment_url?"Buka Link":"Buat Link"}</button>}</td></tr>)}</tbody></table></div></section>
+      </section><section className="card data-card"><header className="card-header"><div><h3>Tagihan Santri</h3><p>QRIS, rekonsiliasi otomatis, dan kuitansi digital</p></div><button className="primary-button" onClick={onBill}>+ Buat Tagihan</button></header><div className="table-wrap"><table><thead><tr><th>Invoice</th><th>Santri</th><th>Kategori</th><th>Nominal</th><th>Jatuh Tempo</th><th>Status</th><th /></tr></thead><tbody>{bills.map(x=><tr key={String(x.id)}><td className="muted">{x.invoice_no}</td><td><strong>{x.student_name}</strong></td><td>{x.category}</td><td>Rp {money.format(Number(x.amount))}</td><td>{x.due_date}</td><td><Status tone={x.status==="Lunas"?"green":"amber"}>{x.status}</Status></td><td>{x.status!=="Lunas"?<button className="text-button" onClick={()=>onPayment(x)}>QR Bayar</button>:<a className="text-button link-button" href={`/api/receipt?id=${x.id}`}>Kuitansi</a>}</td></tr>)}</tbody></table></div></section>
     </>
   );
 }
@@ -341,10 +342,21 @@ function DataActions({ row, onEdit, onDelete }: { row:Row; onEdit:(r:Row)=>void;
   return <div className="row-actions"><button onClick={()=>onEdit(row)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(row)}>Hapus</button></div>;
 }
 
-function AttendancePage({ data, edit, remove }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
+function AttendancePage({ data, edit, remove, reload, notify }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void; reload:()=>Promise<void>; notify:(message:string)=>void }) {
+  const [token,setToken]=useState("");
+  const [checking,setChecking]=useState(false);
+  async function processRequest(row:Row|undefined,action:"approve"|"reject"|"use") {
+    setChecking(true);
+    const response=await fetch("/api/guardian-requests",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(row?{id:Number(row.id),action}:{token,action})});
+    const result=await response.json() as {error?:string};
+    setChecking(false);
+    if(!response.ok){notify(result.error||"Permintaan gagal diproses.");return;}
+    setToken(""); notify(action==="approve"?"Permintaan disetujui dan QR diterbitkan.":action==="reject"?"Permintaan ditolak.":"QR valid dan sudah ditandai digunakan."); await reload();
+  }
   return <><section className="stats-grid three"><article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Hadir Hari Ini</span><strong>{data.attendance.filter(x=>x.status==="Hadir").length}</strong><small>Catatan tersinkron</small></div></article><article className="metric-card"><MiniIcon tone="amber">◷</MiniIcon><div><span>Izin Aktif</span><strong>{data.permits.filter(x=>x.status==="Disetujui").length}</strong><small>Perlu dipantau</small></div></article><article className="metric-card"><MiniIcon tone="red">!</MiniIcon><div><span>Tanpa Keterangan</span><strong>{data.attendance.filter(x=>x.status==="Alpa").length}</strong><small>Hari ini</small></div></article></section>
   <section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Absensi Santri</h3><p>Rekap kehadiran terbaru</p></div><button className="primary-button" onClick={()=>edit("attendance")}>+ Catat Absensi</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Tanggal</th><th>Status</th><th>Catatan</th><th /></tr></thead><tbody>{data.attendance.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong></td><td>{x.record_date}</td><td><Status tone={x.status==="Hadir"?"green":x.status==="Alpa"?"red":"amber"}>{x.status}</Status></td><td>{x.note}</td><td><DataActions row={x} onEdit={r=>edit("attendance",r)} onDelete={r=>remove("attendance",r)} /></td></tr>)}</tbody></table></div></article>
-  <article className="card data-card"><header className="card-header"><div><h3>Perizinan</h3><p>Izin pulang, sakit, dan keperluan keluarga</p></div><button className="primary-button" onClick={()=>edit("permits")}>+ Ajukan Izin</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Periode</th><th>Status</th><th /></tr></thead><tbody>{data.permits.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong><small className="cell-note">{x.reason}</small></td><td>{x.start_date} – {x.end_date}</td><td><Status tone={x.status==="Disetujui"?"green":"amber"}>{x.status}</Status></td><td><DataActions row={x} onEdit={r=>edit("permits",r)} onDelete={r=>remove("permits",r)} /></td></tr>)}</tbody></table></div></article></section></>;
+  <article className="card data-card"><header className="card-header"><div><h3>Perizinan</h3><p>Izin pulang, sakit, dan keperluan keluarga</p></div><button className="primary-button" onClick={()=>edit("permits")}>+ Ajukan Izin</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Periode</th><th>Status</th><th /></tr></thead><tbody>{data.permits.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong><small className="cell-note">{x.reason}</small></td><td>{x.start_date} – {x.end_date}</td><td><Status tone={x.status==="Disetujui"?"green":"amber"}>{x.status}</Status></td><td><DataActions row={x} onEdit={r=>edit("permits",r)} onDelete={r=>remove("permits",r)} /></td></tr>)}</tbody></table></div></article></section>
+  <section className="card data-card guardian-request-admin"><header className="card-header responsive"><div><h3>Kunjungan & Penjemputan</h3><p>Setujui permintaan dan validasi QR sekali pakai di gerbang</p></div><div className="gate-validator"><input value={token} onChange={e=>setToken(e.target.value)} placeholder="Tempel token hasil scan QR" /><button disabled={checking||!token.trim()} className="primary-button" onClick={()=>void processRequest(undefined,"use")}>Validasi QR</button></div></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Jenis & Jadwal</th><th>Penjemput/Pengunjung</th><th>Status</th><th /></tr></thead><tbody>{data.guardianRequests.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong><small className="cell-note">{x.nis}</small></td><td><strong>{x.type}</strong><small className="cell-note">{x.visit_date} · {x.start_time}–{x.end_time}<br/>{x.purpose}</small></td><td>{x.visitor_name}<small className="cell-note">{x.visitor_phone}</small></td><td><Status tone={x.status==="Disetujui"?"green":x.status==="Ditolak"?"red":x.status==="Digunakan"?"blue":"amber"}>{x.status}</Status></td><td><div className="row-actions">{x.status==="Diajukan"&&<><button onClick={()=>void processRequest(x,"approve")}>Setujui</button><button className="danger-link" onClick={()=>void processRequest(x,"reject")}>Tolak</button></>}{x.status==="Disetujui"&&<button onClick={()=>void processRequest(x,"use")}>Tandai Masuk</button>}</div></td></tr>)}{!data.guardianRequests.length&&<tr><td colSpan={5} className="muted">Belum ada permintaan kunjungan atau penjemputan.</td></tr>}</tbody></table></div></section></>;
 }
 
 function SchedulePage({ data, edit, remove }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
@@ -369,6 +381,55 @@ function CounselingPage({ rows, edit, remove }: { rows:Row[]; edit:(r:Resource,r
 function UsersPage({ data, edit, remove, reply }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void; reply:(row:Row)=>void }) {
   return <><section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Manajemen Pengguna</h3><p>Hak akses server-side</p></div><button className="primary-button" onClick={()=>edit("users")}>+ Pengguna</button></header><div className="table-wrap"><table><thead><tr><th>Pengguna</th><th>Peran</th><th /></tr></thead><tbody>{data.users.map(x=><tr key={String(x.id)}><td><strong>{x.name}</strong><small className="cell-note">{x.email}</small></td><td><Status tone={x.role==="Admin"?"violet":x.role==="Ustadz"?"blue":"green"}>{x.role}</Status></td><td><DataActions row={x} onEdit={r=>edit("users",r)} onDelete={r=>remove("users",r)} /></td></tr>)}</tbody></table></div></article><article className="card data-card"><header className="card-header"><div><h3>Audit Aktivitas</h3><p>Jejak perubahan terbaru</p></div></header><div className="audit-list">{data.audit.map(x=><div key={String(x.id)}><MiniIcon tone={x.action==="Hapus"?"red":x.action==="Tambah"?"green":"blue"}>{String(x.action).slice(0,1)}</MiniIcon><div><strong>{x.action} · {x.resource}</strong><p>{x.detail}</p><small>{x.user_email} · {new Date(String(x.created_at)).toLocaleString("id-ID")}</small></div></div>)}</div></article></section>
   <section className="card data-card guardian-inbox"><header className="card-header"><div><h3>Pesan dari Wali Santri</h3><p>Pertanyaan dari Portal Wali yang menunggu tindak lanjut</p></div><Status tone={data.guardianMessages.some(x=>x.status==="Baru")?"amber":"green"}>{data.guardianMessages.filter(x=>x.status==="Baru").length} baru</Status></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Subjek & Pesan</th><th>Pengirim</th><th>Status</th><th /></tr></thead><tbody>{data.guardianMessages.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong></td><td><strong>{x.subject}</strong><small className="cell-note">{x.message}{x.reply?` · Balasan: ${x.reply}`:""}</small></td><td className="muted">{x.sender_email}</td><td><Status tone={x.status==="Dibalas"?"green":"amber"}>{x.status}</Status></td><td><button className="text-button" onClick={()=>reply(x)}>{x.status==="Dibalas"?"Balas lagi":"Balas"}</button></td></tr>)}{!data.guardianMessages.length&&<tr><td colSpan={5} className="muted">Belum ada pesan dari wali santri.</td></tr>}</tbody></table></div></section></>;
+}
+
+function PaymentQrModal({ bill, onClose, onUpdated, notify }: { bill:Row; onClose:()=>void; onUpdated:()=>Promise<void>; notify:(message:string)=>void }) {
+  const [qr,setQr]=useState("");
+  const [paymentUrl,setPaymentUrl]=useState(String(bill.payment_url||""));
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  useEffect(()=>{void (async()=>{
+    try {
+      let response=await fetch(`/api/payment-qr?id=${bill.id}`);
+      let result=await response.json() as {error?:string;qr?:string;paymentUrl?:string;needsLink?:boolean;qrDataUrl?:string};
+      if(response.status===409&&result.needsLink) {
+        response=await fetch("/api/integrations",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"payment-link",billId:Number(bill.id)})});
+        result=await response.json() as typeof result;
+      }
+      if(!response.ok) throw new Error(result.error||"QR pembayaran gagal dibuat.");
+      setQr(result.qr||result.qrDataUrl||""); setPaymentUrl(result.paymentUrl||String(bill.payment_url||"")); await onUpdated();
+    } catch(e) { setError(e instanceof Error?e.message:"QR pembayaran gagal dibuat."); }
+    finally { setLoading(false); }
+  })();},[bill.id,bill.payment_url,onUpdated]);
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal payment-qr-modal" onMouseDown={e=>e.stopPropagation()}>
+    <button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">PEMBAYARAN AMAN</span><h2>Bayar {bill.category}</h2><p>{bill.invoice_no} · Rp{money.format(Number(bill.amount))}. Pindai QR atau buka kanal pembayaran untuk memilih QRIS.</p>
+    {loading?<div className="qr-placeholder">Menyiapkan QR pembayaran…</div>:error?<div className="form-error">{error}</div>:<div className="payment-qr-content"><img src={qr} alt={`QR pembayaran ${bill.invoice_no}`} /><div><Status tone="amber">Menunggu pembayaran</Status><strong>Rp{money.format(Number(bill.amount))}</strong><small>Rekonsiliasi dilakukan otomatis setelah gateway mengirim konfirmasi.</small></div></div>}
+    <div className="modal-actions"><button className="secondary-button" onClick={()=>{void onUpdated();notify("Status pembayaran diperbarui.");}}>Perbarui Status</button>{paymentUrl&&<a className="primary-button link-button" href={paymentUrl} target="_blank" rel="noreferrer">Buka Pembayaran →</a>}</div>
+  </div></div>;
+}
+
+function GuardianRequestModal({ student, onClose, onDone }: { student:Row; onClose:()=>void; onDone:(message:string)=>Promise<void> }) {
+  const today=new Date().toISOString().slice(0,10);
+  const [form,setForm]=useState({type:"Kunjungan",visitDate:today,startTime:"09:00",endTime:"11:00",purpose:"",visitorName:"",visitorPhone:""});
+  const [saving,setSaving]=useState(false); const [error,setError]=useState("");
+  async function submit(event:React.FormEvent) {
+    event.preventDefault();setSaving(true);setError("");
+    const response=await fetch("/api/guardian-requests",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,studentId:Number(student.id)})});
+    const result=await response.json() as {error?:string};
+    if(!response.ok){setError(result.error||"Permintaan gagal dikirim.");setSaving(false);return;}
+    await onDone("Permintaan berhasil dikirim dan menunggu persetujuan.");onClose();
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><form className="record-modal" onSubmit={submit} onMouseDown={e=>e.stopPropagation()}>
+    <button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">AKSES PESANTREN</span><h2>Ajukan Kunjungan / Penjemputan</h2><p>QR sekali pakai akan tersedia setelah pengurus menyetujui permintaan.</p>
+    <div className="form-grid"><label>Jenis<select value={form.type} onChange={e=>setForm({...form,type:e.target.value})}><option>Kunjungan</option><option>Penjemputan</option></select></label><label>Tanggal<input required type="date" min={today} value={form.visitDate} onChange={e=>setForm({...form,visitDate:e.target.value})}/></label><label>Jam mulai<input required type="time" value={form.startTime} onChange={e=>setForm({...form,startTime:e.target.value})}/></label><label>Jam selesai<input required type="time" value={form.endTime} onChange={e=>setForm({...form,endTime:e.target.value})}/></label><label>Nama pengunjung/penjemput<input required value={form.visitorName} onChange={e=>setForm({...form,visitorName:e.target.value})}/></label><label>Nomor WhatsApp<input required type="tel" value={form.visitorPhone} onChange={e=>setForm({...form,visitorPhone:e.target.value})}/></label><label className="wide">Keperluan<textarea required value={form.purpose} onChange={e=>setForm({...form,purpose:e.target.value})}/></label></div>
+    {error&&<div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button disabled={saving} className="primary-button">{saving?"Mengirim…":"Kirim Permintaan"}</button></div>
+  </form></div>;
+}
+
+function GuardianRequestQrModal({ request, onClose }: { request:Row; onClose:()=>void }) {
+  const [result,setResult]=useState<{qr?:string;token?:string;error?:string}>({});
+  useEffect(()=>{void (async()=>{const response=await fetch(`/api/guardian-requests/qr?id=${request.id}`);const data=await response.json() as typeof result;setResult(response.ok?data:{error:data.error||"QR gagal dimuat."});})();},[request.id]);
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal request-qr-modal" onMouseDown={e=>e.stopPropagation()}><button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">QR SEKALI PAKAI</span><h2>{request.type} · {request.student_name}</h2><p>{request.visit_date} · {request.start_time}–{request.end_time}. Tunjukkan QR ini kepada petugas gerbang.</p>{result.error?<div className="form-error">{result.error}</div>:result.qr?<div className="request-qr-content"><img src={result.qr} alt={`QR ${request.type}`} /><code>{result.token}</code><small>QR tidak dapat digunakan kembali setelah divalidasi petugas.</small></div>:<div className="qr-placeholder">Menyiapkan QR akses…</div>}</div></div>;
 }
 
 function GuardianActionModal({ type, student, onClose, onDone }: { type:"contact"|"permit"; student:Row; onClose:()=>void; onDone:(message:string)=>Promise<void> }) {
@@ -411,13 +472,15 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
   const [selectedId,setSelectedId]=useState(String(data.students[0]?.id??""));
   const [day,setDay]=useState(()=>{const current=new Intl.DateTimeFormat("id-ID",{weekday:"long"}).format(new Date());return current==="Minggu"?"Senin":current;});
   const [action,setAction]=useState<"contact"|"permit"|null>(null);
+  const [requestOpen,setRequestOpen]=useState(false);
+  const [qrRequest,setQrRequest]=useState<Row|null>(null);
   const student=data.students.find(x=>String(x.id)===selectedId)??data.students[0];
   if(!student) return <div className="empty-state guardian-empty"><b>Belum ada santri yang terhubung</b><span>Minta Admin mengisi “Email akun wali” pada data santri menggunakan email akun Anda: {data.user?.email}</span></div>;
 
   const byStudent=(rows:Row[])=>rows.filter(x=>Number(x.student_id)===Number(student.id));
   const bills=byStudent(data.bills), attendance=byStudent(data.attendance), tahfidz=byStudent(data.tahfidz);
   const health=byStudent(data.health), characters=byStudent(data.characters), permits=byStudent(data.permits);
-  const transactions=byStudent(data.transactions), mutabaah=byStudent(data.mutabaah), messages=byStudent(data.guardianMessages);
+  const transactions=byStudent(data.transactions), mutabaah=byStudent(data.mutabaah), messages=byStudent(data.guardianMessages), requests=byStudent(data.guardianRequests);
   const balance=transactions.filter(x=>x.category==="Uang Saku").reduce((total,x)=>total+(x.type==="Keluar"?-1:1)*Number(x.amount||0),0);
   const attendanceRate=attendance.length?Math.round(attendance.filter(x=>x.status==="Hadir").length/attendance.length*100):0;
   const schedule=data.schedules.filter(x=>x.class_name===student.class_name&&x.day_name===day);
@@ -427,7 +490,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
 
   return <div className="guardian-portal">
     {data.students.length>1&&<section className="student-switcher card"><span>Pilih santri</span>{data.students.map(x=><button key={String(x.id)} className={String(x.id)===String(student.id)?"active":""} onClick={()=>setSelectedId(String(x.id))}>{x.name}<small>{x.class_name}</small></button>)}</section>}
-    <section className="guardian-hero"><div className="large-avatar">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><span>PORTAL WALI SANTRI · DATA TERLINDUNGI</span><h2>{student.name}</h2><p>{student.nis} · {student.class_name} · {student.room}</p></div><div className="header-actions"><button className="secondary-button" onClick={()=>onCard(student)}>Kartu QR</button><button className="secondary-button" onClick={()=>setAction("permit")}>Ajukan Izin</button><button className="primary-button" onClick={()=>setAction("contact")}>Hubungi Pesantren</button></div></section>
+    <section className="guardian-hero"><div className="large-avatar">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><span>PORTAL WALI SANTRI · DATA TERLINDUNGI</span><h2>{student.name}</h2><p>{student.nis} · {student.class_name} · {student.room}</p></div><div className="header-actions"><button className="secondary-button" onClick={()=>onCard(student)}>Kartu QR</button><button className="secondary-button" onClick={()=>setAction("permit")}>Ajukan Izin</button><button className="secondary-button" onClick={()=>setRequestOpen(true)}>Kunjungan / Jemput</button><button className="primary-button" onClick={()=>setAction("contact")}>Hubungi Pesantren</button></div></section>
     <section className="stats-grid four guardian-stats">
       <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Kehadiran</span><strong>{attendanceRate}%</strong><small>{attendance.filter(x=>x.status==="Hadir").length} dari {attendance.length} catatan</small></div></article>
       <article className="metric-card"><MiniIcon tone="blue">◫</MiniIcon><div><span>Setoran Tahfidz</span><strong>{tahfidz.length}</strong><small>{tahfidz[0]?.surah?`Terakhir ${tahfidz[0].surah}`:"Belum ada setoran"}</small></div></article>
@@ -437,24 +500,29 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
 
     <section className="guardian-grid">
       <article className="card portal-card span-two"><header className="card-header"><div><h3>Jadwal Pelajaran Harian</h3><p>{student.class_name} · pilih hari untuk melihat pelajaran</p></div><select value={day} onChange={e=>setDay(e.target.value)}>{days.map(x=><option key={x}>{x}</option>)}</select></header><div className="portal-schedule">{schedule.length?schedule.map((x,i)=><div key={String(x.id)}><span className={`schedule-time tone-${i%4}`}>{x.start_time}<small>{x.end_time}</small></span><div><Status tone={x.category==="Produktif"?"violet":x.category==="Tahfidz"?"green":"blue"}>{x.category}</Status><strong>{x.title}</strong><small>{x.teacher} · {x.location}</small></div></div>):<div className="portal-empty">Belum ada jadwal pada {day}.</div>}</div></article>
-      <article className="card portal-card"><header className="card-header"><div><h3>Tagihan & Pembayaran</h3><p>SPP dan tagihan pesantren</p></div></header><div className="portal-list">{bills.length?bills.map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.invoice_no} · jatuh tempo {x.due_date}</small></div><b>Rp{money.format(Number(x.amount))}</b><Status tone={x.status==="Lunas"?"green":"amber"}>{x.status}</Status>{x.status!=="Lunas"&&<button className="text-button" onClick={()=>onPayment(x)}>{x.payment_url?"Bayar":"Buat link bayar"}</button>}</div>):<div className="portal-empty">Tidak ada tagihan.</div>}</div></article>
+      <article className="card portal-card"><header className="card-header"><div><h3>Tagihan & Pembayaran QRIS</h3><p>Rekonsiliasi otomatis dan kuitansi digital</p></div></header><div className="portal-list">{bills.length?bills.map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.invoice_no} · jatuh tempo {x.due_date}{x.paid_at?` · lunas ${x.paid_at}`:""}</small></div><b>Rp{money.format(Number(x.amount))}</b><Status tone={x.status==="Lunas"?"green":"amber"}>{x.status}</Status>{x.status!=="Lunas"?<button className="text-button" onClick={()=>onPayment(x)}>Tampilkan QR</button>:<a className="text-button link-button" href={`/api/receipt?id=${x.id}`}>Kuitansi</a>}</div>):<div className="portal-empty">Tidak ada tagihan.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Tahfidz & Mutaba’ah</h3><p>Perkembangan hafalan dan ibadah</p></div></header><div className="portal-list">{tahfidz.slice(0,4).map(x=><div key={`t-${x.id}`}><div><strong>{x.surah} · Ayat {x.verses}</strong><small>{x.teacher} · {x.recorded_at}</small></div><Status tone="green">{x.grade}</Status></div>)}{mutabaah.slice(0,3).map(x=><div key={`m-${x.id}`}><div><strong>{x.activity}</strong><small>{x.record_date}</small></div><Status tone={Number(x.completed)?"green":"amber"}>{Number(x.completed)?"Selesai":"Belum"}</Status></div>)}{!tahfidz.length&&!mutabaah.length&&<div className="portal-empty">Belum ada catatan perkembangan.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Rapor Karakter</h3><p>Penilaian pembina terbaru</p></div></header><div className="portal-list">{characters.length?characters.slice(0,5).map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.note} · {x.semester}</small></div><b>{x.score}/100</b></div>):<div className="portal-empty">Belum ada rapor karakter.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Kesehatan Santri</h3><p>Catatan pemeriksaan dan tindak lanjut</p></div></header><div className="portal-list">{health.length?health.slice(0,5).map(x=><div key={String(x.id)}><div><strong>{x.complaint}</strong><small>{x.diagnosis} · {x.treatment}</small></div><Status tone={x.status==="Selesai"||x.status==="Membaik"?"green":"amber"}>{x.status}</Status></div>):<div className="portal-empty">Tidak ada catatan kesehatan.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Absensi & Perizinan</h3><p>Status kehadiran dan permohonan izin</p></div><button className="text-button" onClick={()=>setAction("permit")}>+ Ajukan izin</button></header><div className="portal-list">{permits.slice(0,4).map(x=><div key={`p-${x.id}`}><div><strong>{x.reason}</strong><small>{x.start_date} – {x.end_date}</small></div><Status tone={x.status==="Disetujui"?"green":x.status==="Ditolak"?"red":"amber"}>{x.status}</Status></div>)}{attendance.slice(0,4).map(x=><div key={`a-${x.id}`}><div><strong>Absensi {x.record_date}</strong><small>{x.note||"Tanpa catatan"}</small></div><Status tone={x.status==="Hadir"?"green":x.status==="Alpa"?"red":"amber"}>{x.status}</Status></div>)}{!permits.length&&!attendance.length&&<div className="portal-empty">Belum ada data absensi.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Pengumuman</h3><p>Informasi resmi untuk wali santri</p></div></header><div className="portal-list">{announcements.length?announcements.map(x=><div key={String(x.id)}><div><strong>{x.title}</strong><small>{x.content}</small></div><Status tone="blue">{x.category}</Status></div>):<div className="portal-empty">Belum ada pengumuman.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Pesan ke Pesantren</h3><p>Riwayat pertanyaan dan balasan pengurus</p></div><button className="text-button" onClick={()=>setAction("contact")}>+ Pesan</button></header><div className="portal-list">{messages.length?messages.slice(0,5).map(x=><div key={String(x.id)}><div><strong>{x.subject}</strong><small>{x.message}{x.reply?` · Balasan: ${x.reply}`:""}</small></div><Status tone={x.status==="Dibalas"?"green":"amber"}>{x.status}</Status></div>):<div className="portal-empty">Belum ada pesan.</div>}</div></article>
+      <article className="card portal-card span-two"><header className="card-header"><div><h3>Kunjungan & Penjemputan QR</h3><p>QR akses sekali pakai setelah disetujui pengurus</p></div><button className="text-button" onClick={()=>setRequestOpen(true)}>+ Ajukan</button></header><div className="portal-list request-list">{requests.length?requests.slice(0,6).map(x=><div key={String(x.id)}><div><strong>{x.type} · {x.visit_date}</strong><small>{x.start_time}–{x.end_time} · {x.visitor_name} · {x.purpose}</small></div><Status tone={x.status==="Disetujui"?"green":x.status==="Ditolak"?"red":x.status==="Digunakan"?"blue":"amber"}>{x.status}</Status>{x.status==="Disetujui"&&<button className="text-button" onClick={()=>setQrRequest(x)}>Lihat QR</button>}</div>):<div className="portal-empty">Belum ada permintaan kunjungan atau penjemputan.</div>}</div></article>
     </section>
     {action&&<GuardianActionModal type={action} student={student} onClose={()=>setAction(null)} onDone={done} />}
+    {requestOpen&&<GuardianRequestModal student={student} onClose={()=>setRequestOpen(false)} onDone={done}/>}
+    {qrRequest&&<GuardianRequestQrModal request={qrRequest} onClose={()=>setQrRequest(null)}/>}
   </div>;
 }
 
-function IntegrationsPage({ onImported, notify }: { onImported:()=>Promise<void>; notify:(s:string)=>void }) {
+function IntegrationsPage({ data, onImported, notify }: { data:AppData; onImported:()=>Promise<void>; notify:(s:string)=>void }) {
   const [status,setStatus]=useState<{midtrans?:boolean;xendit?:boolean;whatsapp?:boolean}>({});
   const [uploading,setUploading]=useState(false);
+  const [reminding,setReminding]=useState(false);
   useEffect(()=>{void (async()=>{try{const response=await fetch("/api/integrations");setStatus(await response.json() as {midtrans?:boolean;xendit?:boolean;whatsapp?:boolean});}catch{setStatus({});}})();},[]);
   async function upload(file:File) { setUploading(true); const form=new FormData(); form.append("file",file); const response=await fetch("/api/import",{method:"POST",body:form}); const result=await response.json() as {error?:string;imported?:number}; setUploading(false); if(!response.ok){notify(result.error||"Impor gagal.");return;} notify(`${result.imported} santri berhasil diimpor.`); await onImported(); }
-  return <><section className="integration-grid">{[["Midtrans","Pembayaran otomatis dan payment link",status.midtrans],["Xendit","Alternatif kanal pembayaran",status.xendit],["WhatsApp Cloud API","Notifikasi otomatis ke wali",status.whatsapp]].map((x,i)=><article className="card integration-card" key={String(x[0])}><MiniIcon tone={["blue","violet","green"][i]}>{i===2?"WA":"↗"}</MiniIcon><div><h3>{x[0]}</h3><p>{x[1]}</p></div><Status tone={x[2]?"green":"amber"}>{x[2]?"Terhubung":"Perlu kredensial"}</Status></article>)}</section><section className="dashboard-grid operations-grid"><article className="card utility-card"><div><MiniIcon tone="blue">⇧</MiniIcon><h3>Impor Excel/CSV</h3><p>Kolom: nama, nis, kelas, kamar, nama_wali, whatsapp, email_wali. Maksimal 500 baris.</p><label className="upload-button">{uploading?"Mengimpor...":"Pilih Berkas"}<input type="file" accept=".xlsx,.xls,.csv" disabled={uploading} onChange={e=>e.target.files?.[0]&&void upload(e.target.files[0])} /></label></div></article><article className="card utility-card"><div><MiniIcon tone="green">⇩</MiniIcon><h3>Backup Lengkap</h3><p>Unduh seluruh data operasional sebagai JSON untuk arsip dan pemulihan.</p><a className="primary-button link-button" href="/api/backup">Unduh Backup</a></div></article></section></>;
+  async function runReminders(){setReminding(true);const response=await fetch("/api/reminders",{method:"POST"});const result=await response.json() as {error?:string;sent?:number;processed?:number};setReminding(false);if(!response.ok){notify(result.error||"Pengingat gagal dijalankan.");return;}notify(`${result.sent} pengingat dikirim dari ${result.processed} tagihan terjadwal.`);await onImported();}
+  return <><section className="integration-grid">{[["Midtrans / QRIS","Pembayaran, webhook, rekonsiliasi, dan kuitansi",status.midtrans],["Xendit / QRIS","Alternatif kanal pembayaran dan webhook",status.xendit],["WhatsApp Cloud API","Notifikasi otomatis saat data berubah",status.whatsapp]].map((x,i)=><article className="card integration-card" key={String(x[0])}><MiniIcon tone={["blue","violet","green"][i]}>{i===2?"WA":"↗"}</MiniIcon><div><h3>{x[0]}</h3><p>{x[1]}</p></div><Status tone={x[2]?"green":"amber"}>{x[2]?"Terhubung":"Perlu kredensial"}</Status></article>)}</section><section className="dashboard-grid operations-grid"><article className="card utility-card reminder-utility"><div><MiniIcon tone="green">WA</MiniIcon><h3>Pengingat Tagihan Otomatis</h3><p>Mengirim pengingat tagihan yang jatuh tempo dalam tujuh hari. Sistem mencegah pengiriman ganda pada hari yang sama.</p><button className="primary-button" disabled={reminding} onClick={()=>void runReminders()}>{reminding?"Mengirim…":"Jalankan Pengingat"}</button></div></article><article className="card utility-card"><div><MiniIcon tone="blue">⇧</MiniIcon><h3>Impor Excel/CSV</h3><p>Kolom: nama, nis, kelas, kamar, nama_wali, whatsapp, email_wali. Maksimal 500 baris.</p><label className="upload-button">{uploading?"Mengimpor...":"Pilih Berkas"}<input type="file" accept=".xlsx,.xls,.csv" disabled={uploading} onChange={e=>e.target.files?.[0]&&void upload(e.target.files[0])} /></label></div></article></section><section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Riwayat Notifikasi</h3><p>Status pengiriman WhatsApp terbaru</p></div></header><div className="portal-list">{data.notifications.slice(0,8).map(x=><div key={String(x.id)}><div><strong>{x.recipient}</strong><small>{x.message}</small></div><Status tone={x.status==="Terkirim"?"green":x.status==="Gagal"?"red":"amber"}>{x.status}</Status></div>)}</div></article><article className="card utility-card"><div><MiniIcon tone="green">⇩</MiniIcon><h3>Backup Lengkap</h3><p>Unduh seluruh data operasional termasuk pembayaran dan QR akses untuk arsip.</p><a className="primary-button link-button" href="/api/backup">Unduh Backup</a></div></article></section></>;
 }
 
 function StudentCardModal({ student, onClose }: { student:Row; onClose:()=>void }) {
@@ -604,6 +672,7 @@ export default function Home() {
   const [editor, setEditor] = useState<EditorState>(null);
   const [cardStudent, setCardStudent] = useState<Row | null>(null);
   const [showNotification, setShowNotification] = useState(false);
+  const [paymentBill,setPaymentBill]=useState<Row|null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [dark, setDark] = useState(false);
@@ -712,14 +781,7 @@ export default function Home() {
     notify("Data berhasil dihapus."); await loadData();
   }
 
-  async function openPayment(row:Row) {
-    if(row.payment_url) { window.open(String(row.payment_url),"_blank","noopener,noreferrer"); return; }
-    const response=await fetch("/api/integrations",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"payment-link",billId:row.id})});
-    const result=await response.json() as {error?:string;paymentUrl?:string};
-    if(!response.ok){notify(result.error||"Link pembayaran gagal dibuat.");return;}
-    if(result.paymentUrl) window.open(result.paymentUrl,"_blank","noopener,noreferrer");
-    notify("Link pembayaran berhasil dibuat."); await loadData();
-  }
+  function openPayment(row:Row) { setPaymentBill(row); }
 
   async function replyGuardianMessage(row:Row) {
     const reply=window.prompt(`Balasan untuk ${row.student_name}:`,String(row.reply||""));
@@ -743,12 +805,12 @@ export default function Home() {
       case "inventaris": return <InventoryPage rows={data.inventory} {...actions("inventory")} />;
       case "pengumuman": return <AnnouncementsPage rows={data.announcements} {...actions("announcements")} onNotify={()=>setShowNotification(true)} />;
       case "laporan": return <ReportsPage />;
-      case "absensi": return <AttendancePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
+      case "absensi": return <AttendancePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} reload={loadData} notify={notify} />;
       case "jadwal": return <SchedulePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "penerimaan": return <AdmissionsPage rows={data.admissions} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "konseling": return <CounselingPage rows={data.counseling} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "pengguna": return <UsersPage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} reply={row=>void replyGuardianMessage(row)} />;
-      case "integrasi": return <IntegrationsPage onImported={loadData} notify={notify} />;
+      case "integrasi": return <IntegrationsPage data={data} onImported={loadData} notify={notify} />;
       case "portalwali": return <GuardianPortal data={data} onCard={setCardStudent} onPayment={row=>void openPayment(row)} reload={loadData} notify={notify} />;
     }
   }, [page,data]);
@@ -870,6 +932,7 @@ export default function Home() {
       {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} onClose={()=>setEditor(null)} onSave={saveRecord} />}
       {cardStudent&&<StudentCardModal student={cardStudent} onClose={()=>setCardStudent(null)} />}
       {showNotification&&<NotificationModal students={data.students} onClose={()=>setShowNotification(false)} onSent={notify} />}
+      {paymentBill&&<PaymentQrModal bill={paymentBill} onClose={()=>setPaymentBill(null)} onUpdated={loadData} notify={notify}/>}
       {showLogin&&<LoginModal onClose={()=>setShowLogin(false)} onLogin={r=>{setRole(r);setShowLogin(false);if(r==="Wali Santri")setPage("portalwali");notify(`Mode tampilan ${r} aktif.`)}} />}
       {toast&&<div className="toast"><span>✓</span>{toast}</div>}
     </div>
