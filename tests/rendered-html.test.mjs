@@ -147,4 +147,6 @@ test("dashboard menginisialisasi database dan dapat dibuka semua peran", async (
   assert.match(lib, /identity\.email\.toLowerCase\(\) === ownerEmail/);
   assert.match(bootstrap, /const safe = async/);
   assert.match(page, /setRole\("Admin"\)/);
+  assert.match(page, /Admin aktif/);
+  assert.doesNotMatch(page, /Pratinjau peran demo/);
 });

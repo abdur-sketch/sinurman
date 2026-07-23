@@ -771,21 +771,6 @@ function NotificationModal({ students, onClose, onSent }: { students: Row[]; onC
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal notification-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">NOTIFIKASI WALI</span><h2>Kirim melalui WhatsApp</h2><p>Pesan dicatat sebagai riwayat, lalu dibuka di WhatsApp untuk konfirmasi pengiriman.</p><label>Santri<select value={studentId} onChange={e=>setStudentId(e.target.value)}>{students.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.guardian_name}</option>)}</select></label><label>Pesan<textarea value={message} onChange={e=>setMessage(e.target.value)} /></label><div className="recipient-preview"><span>Tujuan</span><strong>{student?.guardian_name} · +{student?.guardian_phone}</strong></div><div className="modal-actions"><button className="secondary-button" onClick={onClose}>Batal</button><button className="whatsapp-button" disabled={sending} onClick={send}>{sending?"Menyiapkan...":"Buka WhatsApp →"}</button></div></div></div>;
 }
 
-function LoginModal({ onClose, onLogin }: { onClose: () => void; onLogin: (role: Role) => void }) {
-  const [selected, setSelected] = useState<Role>("Admin");
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="login-modal" onMouseDown={e=>e.stopPropagation()}>
-    <button className="modal-close" onClick={onClose}>×</button>
-    <div className="login-brand"><span>ن</span><div><strong>SINURMAN</strong><small>Sistem Informasi Nurul Iman</small></div></div>
-    <h2>Selamat datang kembali</h2><p>Masuk ke akun demo sesuai peran Anda.</p>
-    <div className="role-picker">{(["Admin","Ustadz","Wali Santri"] as Role[]).map(r=><button key={r} className={selected===r?"active":""} onClick={()=>setSelected(r)}><span>{r==="Admin"?"A":r==="Ustadz"?"U":"W"}</span>{r}</button>)}</div>
-    <label>Email atau username<input defaultValue={selected==="Admin"?"admin@sinurman.id":selected==="Ustadz"?"ustadz.hasan":"wali.fikri"} /></label>
-    <label>Kata sandi<div className="password"><input type="password" defaultValue="sinurman2026" /><button>◉</button></div></label>
-    <div className="login-options"><label><input type="checkbox" defaultChecked /> Ingat saya</label><button>Lupa kata sandi?</button></div>
-    <button className="login-button" onClick={()=>onLogin(selected)}>Masuk sebagai {selected} →</button>
-    <small className="demo-note">Akun ini hanya untuk keperluan demonstrasi.</small>
-  </div></div>;
-}
-
 function HelpModal({ role, onClose, onNavigate, onRefresh }: { role:Role; onClose:()=>void; onNavigate:(page:PageKey)=>void; onRefresh:()=>Promise<void> }) {
   const guides=role==="Wali Santri"
     ? [["Pembayaran","Buka Portal Wali, pilih tagihan, lalu tekan Tampilkan QR."],["Izin & Kunjungan","Ajukan izin atau akses kunjungan dari profil santri."],["Data anak","Pastikan email akun wali sama dengan email pada Data Santri."]]
@@ -810,7 +795,6 @@ export default function Home() {
   const [showNotification, setShowNotification] = useState(false);
   const [paymentBill,setPaymentBill]=useState<Row|null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [showLogin, setShowLogin] = useState(false);
   const [showHelp,setShowHelp]=useState(false);
   const [dark, setDark] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -1051,7 +1035,7 @@ export default function Home() {
             <button className="notification" onClick={()=>notify("Tidak ada notifikasi baru.")} aria-label="Notifikasi">♢<i /></button>
             <span className="divider" />
             <div className="profile-wrap"><button className="profile-button" onClick={()=>setProfileOpen(!profileOpen)}><span>{(data.user?.name||"Ahmad Hidayat").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{data.user?.name||"Ahmad Hidayat"}</strong><small>{role}</small></div><i>⌄</i></button>
-              {profileOpen&&<div className="profile-menu">{data.user?.role==="Admin"&&<button onClick={()=>{setShowLogin(true);setProfileOpen(false)}}>⇄ Pratinjau peran demo</button>}<button onClick={()=>notify("Profil pengguna dibuka.")}>♙ Profil saya</button><button onClick={()=>notify("Pengaturan dibuka.")}>⚙ Pengaturan</button></div>}
+              {profileOpen&&<div className="profile-menu"><button onClick={()=>notify("Anda masuk sebagai Administrator SINURMAN.")}>✓ Admin aktif</button><button onClick={()=>notify("Profil pengguna dibuka.")}>♙ Profil saya</button><button onClick={()=>notify("Pengaturan dibuka.")}>⚙ Pengaturan</button></div>}
             </div>
           </div>
         </header>
@@ -1072,7 +1056,6 @@ export default function Home() {
       {cardStudent&&<StudentCardModal student={cardStudent} onClose={()=>setCardStudent(null)} />}
       {showNotification&&<NotificationModal students={data.students} onClose={()=>setShowNotification(false)} onSent={notify} />}
       {paymentBill&&<PaymentQrModal bill={paymentBill} onClose={()=>setPaymentBill(null)} onUpdated={loadData} notify={notify}/>}
-      {showLogin&&<LoginModal onClose={()=>setShowLogin(false)} onLogin={r=>{setRole(r);setShowLogin(false);setPage("dashboard");notify(`Mode tampilan ${r} aktif.`)}} />}
       {showHelp&&<HelpModal role={role} onClose={()=>setShowHelp(false)} onNavigate={selectPage} onRefresh={async()=>{await loadData();notify("Data berhasil disinkronkan.");}}/>}
       {toast&&<div className="toast"><span>✓</span>{toast}</div>}
     </div>
