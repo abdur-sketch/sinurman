@@ -38,7 +38,14 @@ export async function notifyRecordChange(resource:string,row:Record<string,unkno
   if(!student) return;
   let message="";
   if(resource==="attendance"&&row.status!=="Hadir") message=`SINURMAN: ${student.name} tercatat ${row.status} pada ${row.record_date}. ${row.note||""}`;
-  if(resource==="tahfidz") message=`SINURMAN: Setoran tahfidz ${student.name} diperbarui: ${row.surah} ayat ${row.verses}, nilai ${row.grade}.`;
+  if(resource==="tahfidz") {
+    const surahFrom=String(row.surah_from||row.surah||"");
+    const surahTo=String(row.surah_to||row.surah||surahFrom);
+    const verseFrom=String(row.verse_from||String(row.verses||"").match(/\d+/)?.[0]||"");
+    const verseTo=String(row.verse_to||String(row.verses||"").match(/\d+/g)?.[1]||verseFrom);
+    const range=surahFrom.toLocaleLowerCase("id-ID")===surahTo.toLocaleLowerCase("id-ID")?`${surahFrom} ayat ${verseFrom}-${verseTo}`:`${surahFrom} ayat ${verseFrom} sampai ${surahTo} ayat ${verseTo}`;
+    message=`SINURMAN: Setoran tahfidz ${student.name} diperbarui: ${range}, jumlah ${row.amount} ayat, nilai ${row.grade}.`;
+  }
   if(resource==="health") message=`SINURMAN: Catatan kesehatan ${student.name}: ${row.complaint}. Status ${row.status}.`;
   if(resource==="bills") message=`SINURMAN: Tagihan baru ${row.category} untuk ${student.name} sebesar Rp${Number(row.amount||0).toLocaleString("id-ID")}, jatuh tempo ${row.due_date}.`;
   if(resource==="permits"&&["Disetujui","Ditolak"].includes(String(row.status))) message=`SINURMAN: Pengajuan izin ${student.name} telah ${String(row.status).toLowerCase()}.`;

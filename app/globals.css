@@ -220,6 +220,7 @@ td.muted { color:var(--muted); }
 .person { display:flex; align-items:center; gap:9px; }
 .person>span { width:29px; height:29px; border-radius:50%; background:rgba(44,123,229,.12); color:var(--blue); display:grid; place-items:center; font-size:8px; font-weight:700; }
 .person strong { font-size:10px; color:var(--navy); }
+.tahfidz-range { color:var(--navy); font-size:9px; font-weight:700; line-height:1.45; }
 .table-footer { padding:13px 18px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--line); color:var(--muted); font-size:9px; }
 .table-footer div { display:flex; gap:4px; }
 .table-footer button { border:1px solid var(--line); color:var(--muted); background:var(--card); border-radius:5px; min-width:27px; height:26px; font-size:9px; }

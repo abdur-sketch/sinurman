@@ -9,8 +9,8 @@ const resourceConfig = {
   },
   tahfidz: {
     table: "tahfidz_records",
-    columns: ["student_id", "surah", "verses", "amount", "grade", "teacher", "recorded_at"],
-    required: ["student_id", "surah", "verses", "amount", "grade"],
+    columns: ["student_id", "surah", "verses", "surah_from", "surah_to", "verse_from", "verse_to", "amount", "grade", "teacher", "recorded_at"],
+    required: ["student_id", "surah_from", "surah_to", "verse_from", "verse_to", "amount", "grade"],
   },
   mutabaah: {
     table: "mutabaah_records",
@@ -127,7 +127,18 @@ export async function POST(request: Request) {
       return Response.json({ ok: true });
     }
 
-    const source = payload.data ?? {};
+    const source:Record<string,unknown> = { ...(payload.data ?? {}) };
+    if (resource === "tahfidz") {
+      const surahFrom=String(source.surah_from??"").trim();
+      const surahTo=String(source.surah_to??"").trim();
+      const verseFrom=Number(source.verse_from??0);
+      const verseTo=Number(source.verse_to??0);
+      if(!surahFrom||!surahTo) return Response.json({error:"Surat awal dan surat akhir wajib diisi."},{status:400});
+      if(!Number.isInteger(verseFrom)||!Number.isInteger(verseTo)||verseFrom<1||verseTo<1) return Response.json({error:"Ayat awal dan ayat akhir harus berupa angka mulai dari 1."},{status:400});
+      if(surahFrom.toLocaleLowerCase("id-ID")===surahTo.toLocaleLowerCase("id-ID")&&verseTo<verseFrom) return Response.json({error:"Ayat akhir tidak boleh lebih kecil dari ayat awal pada surat yang sama."},{status:400});
+      source.surah=surahFrom===surahTo?surahFrom:`${surahFrom} s.d. ${surahTo}`;
+      source.verses=`${verseFrom}-${verseTo}`;
+    }
     if (action === "update") {
       if (!payload.id) return Response.json({ error: "ID wajib diisi." }, { status: 400 });
       const columns = config.columns.filter((column) => source[column] !== undefined);
@@ -137,7 +148,7 @@ export async function POST(request: Request) {
         .bind(...values, payload.id).run();
       await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(user.email, "Ubah", resource, payload.id, `Memperbarui data ${resource}`, new Date().toISOString()).run();
-      if(["permits"].includes(resource)) {
+      if(["permits","attendance","tahfidz","health","bills"].includes(resource)) {
         const updated=await db.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(payload.id).first<Record<string,unknown>>();
         if(updated) try{await notifyRecordChange(resource,updated);}catch{/* notification must not block the record */}
       }

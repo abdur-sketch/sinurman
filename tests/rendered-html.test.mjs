@@ -190,6 +190,32 @@ test("seluruh laporan mendukung cetak langsung A4, PDF, CSV, dan pembatasan pera
   assert.match(styles, /@page \{ size:A4 landscape/);
 });
 
+test("setoran tahfidz menyimpan rentang surat dan ayat secara lengkap", async () => {
+  const [dashboard, records, notifications, exportRoute, migration, schema, runtime] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/records/route.ts"),
+    file("app/api/_notifications.ts"),
+    file("app/api/export/route.ts"),
+    file("drizzle/0007_real_caretaker.sql"),
+    file("db/schema.ts"),
+    file("app/api/_lib.ts"),
+  ]);
+  for (const field of ["surah_from","surah_to","verse_from","verse_to"]) {
+    assert.match(dashboard, new RegExp(field));
+    assert.match(records, new RegExp(field));
+    assert.match(exportRoute, new RegExp(field));
+    assert.match(migration, new RegExp(field));
+  }
+  assert.match(dashboard, /function tahfidzRange/);
+  assert.match(dashboard, /Ayat awal/);
+  assert.match(dashboard, /Ayat akhir/);
+  assert.match(dashboard, /verseTo-verseFrom\+1/);
+  assert.match(records, /Ayat akhir tidak boleh lebih kecil/);
+  assert.match(notifications, /sampai/);
+  assert.match(schema, /surahFrom: text\("surah_from"\)/);
+  assert.match(runtime, /UPDATE tahfidz_records SET surah_from=surah/);
+});
+
 test("portal internal memakai login ChatGPT dan halaman PPDB tetap publik", async () => {
   const [root, auth, publicPage, publicApi, lib] = await Promise.all([
     file("app/page.tsx"),

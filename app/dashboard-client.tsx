@@ -133,6 +133,17 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
 const normalizeSearch = (value: unknown) =>
   String(value ?? "").toLocaleLowerCase("id-ID").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
+function tahfidzRange(row:Row) {
+  const legacyVerses=String(row.verses??"").match(/\d+/g)??[];
+  const surahFrom=String(row.surah_from||row.surah||"Surat belum diisi");
+  const surahTo=String(row.surah_to||row.surah||surahFrom);
+  const verseFrom=Number(row.verse_from||legacyVerses[0]||0);
+  const verseTo=Number(row.verse_to||legacyVerses[1]||legacyVerses[0]||0);
+  return surahFrom.toLocaleLowerCase("id-ID")===surahTo.toLocaleLowerCase("id-ID")
+    ? `${surahFrom}, ayat ${verseFrom}-${verseTo}`
+    : `${surahFrom} ayat ${verseFrom} s.d. ${surahTo} ayat ${verseTo}`;
+}
+
 const students = [
   { name: "Muhammad Fikri", nis: "SN-240181", class: "VIII A", room: "Ibnu Sina 03", status: "Aktif", avatar: "MF" },
   { name: "Ahmad Fauzan", nis: "SN-240182", class: "VIII A", room: "Ibnu Sina 03", status: "Aktif", avatar: "AF" },
@@ -249,7 +260,7 @@ function TahfidzPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: ()
       <section className="card data-card">
         <header className="card-header"><div><h3>Setoran Hafalan Terbaru</h3><p>Daftar setoran tersimpan dan telah diperiksa ustadz</p></div><button className="primary-button" onClick={onAdd}>+ Input Setoran</button></header>
         <div className="table-wrap"><table><thead><tr><th>Santri</th><th>Surat / Ayat</th><th>Jumlah</th><th>Penilaian</th><th>Waktu</th><th /></tr></thead>
-          <tbody>{rows.map((r,i)=><tr key={String(r.id)}><td><div className="person"><span>{String(r.student_name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{r.student_name}</strong></div></td><td>{r.surah}: {r.verses}</td><td>{r.amount} ayat</td><td><Status tone={i===2?"amber":"green"}>{r.grade}</Status></td><td className="muted">{new Date(String(r.recorded_at)).toLocaleDateString("id-ID")}</td><td><div className="row-actions"><button onClick={()=>onEdit(r)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(r)}>Hapus</button></div></td></tr>)}</tbody>
+          <tbody>{rows.map((r,i)=><tr key={String(r.id)}><td><div className="person"><span>{String(r.student_name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{r.student_name}</strong></div></td><td><strong className="tahfidz-range">{tahfidzRange(r)}</strong></td><td>{r.amount} ayat</td><td><Status tone={i===2?"amber":"green"}>{r.grade}</Status></td><td className="muted">{new Date(String(r.recorded_at)).toLocaleDateString("id-ID")}</td><td><div className="row-actions"><button onClick={()=>onEdit(r)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(r)}>Hapus</button></div></td></tr>)}</tbody>
         </table></div>
       </section>
     </>
@@ -616,7 +627,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
     <section className="guardian-hero"><div className="large-avatar">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><span>PORTAL WALI SANTRI · DATA TERLINDUNGI</span><h2>{student.name}</h2><p>{student.nis} · {student.class_name} · {student.room}</p></div><div className="header-actions"><button className="secondary-button" onClick={()=>onCard(student)}>Kartu QR</button><button className="secondary-button" onClick={()=>setAction("permit")}>Ajukan Izin</button><button className="secondary-button" onClick={()=>setRequestOpen(true)}>Kunjungan / Jemput</button><button className="primary-button" onClick={()=>setAction("contact")}>Hubungi Pesantren</button></div></section>
     <section className="stats-grid four guardian-stats">
       <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Kehadiran</span><strong>{attendanceRate}%</strong><small>{attendance.filter(x=>x.status==="Hadir").length} dari {attendance.length} catatan</small></div></article>
-      <article className="metric-card"><MiniIcon tone="blue">◫</MiniIcon><div><span>Setoran Tahfidz</span><strong>{tahfidz.length}</strong><small>{tahfidz[0]?.surah?`Terakhir ${tahfidz[0].surah}`:"Belum ada setoran"}</small></div></article>
+      <article className="metric-card"><MiniIcon tone="blue">◫</MiniIcon><div><span>Setoran Tahfidz</span><strong>{tahfidz.length}</strong><small>{tahfidz[0]?`Terakhir ${tahfidzRange(tahfidz[0])}`:"Belum ada setoran"}</small></div></article>
       <article className="metric-card"><MiniIcon tone="violet">Rp</MiniIcon><div><span>Saldo Uang Saku</span><strong>Rp{money.format(balance)}</strong><small>{transactions.filter(x=>x.category==="Uang Saku").length} transaksi</small></div></article>
       <article className="metric-card"><MiniIcon tone="amber">!</MiniIcon><div><span>Tagihan Aktif</span><strong>{bills.filter(x=>x.status!=="Lunas").length}</strong><small>Perlu ditindaklanjuti</small></div></article>
     </section>
@@ -624,7 +635,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
     <section className="guardian-grid">
       <article className="card portal-card span-two"><header className="card-header"><div><h3>Jadwal Pelajaran Harian</h3><p>{student.class_name} · pilih hari untuk melihat pelajaran</p></div><select value={day} onChange={e=>setDay(e.target.value)}>{days.map(x=><option key={x}>{x}</option>)}</select></header><div className="portal-schedule">{schedule.length?schedule.map((x,i)=><div key={String(x.id)}><span className={`schedule-time tone-${i%4}`}>{x.start_time}<small>{x.end_time}</small></span><div><Status tone={x.category==="Produktif"?"violet":x.category==="Tahfidz"?"green":"blue"}>{x.category}</Status><strong>{x.title}</strong><small>{x.teacher} · {x.location}</small></div></div>):<div className="portal-empty">Belum ada jadwal pada {day}.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Tagihan & Pembayaran QRIS</h3><p>Rekonsiliasi otomatis dan kuitansi digital</p></div></header><div className="portal-list">{bills.length?bills.map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.invoice_no} · jatuh tempo {x.due_date}{x.paid_at?` · lunas ${x.paid_at}`:""}</small></div><b>Rp{money.format(Number(x.amount))}</b><Status tone={x.status==="Lunas"?"green":"amber"}>{x.status}</Status>{x.status!=="Lunas"?<button className="text-button" onClick={()=>onPayment(x)}>Tampilkan QR</button>:<a className="text-button link-button" href={`/api/receipt?id=${x.id}`}>Kuitansi</a>}</div>):<div className="portal-empty">Tidak ada tagihan.</div>}</div></article>
-      <article className="card portal-card"><header className="card-header"><div><h3>Tahfidz & Mutaba’ah</h3><p>Perkembangan hafalan dan ibadah</p></div></header><div className="portal-list">{tahfidz.slice(0,4).map(x=><div key={`t-${x.id}`}><div><strong>{x.surah} · Ayat {x.verses}</strong><small>{x.teacher} · {x.recorded_at}</small></div><Status tone="green">{x.grade}</Status></div>)}{mutabaah.slice(0,3).map(x=><div key={`m-${x.id}`}><div><strong>{x.activity}</strong><small>{x.record_date}</small></div><Status tone={Number(x.completed)?"green":"amber"}>{Number(x.completed)?"Selesai":"Belum"}</Status></div>)}{!tahfidz.length&&!mutabaah.length&&<div className="portal-empty">Belum ada catatan perkembangan.</div>}</div></article>
+      <article className="card portal-card"><header className="card-header"><div><h3>Tahfidz & Mutaba’ah</h3><p>Perkembangan hafalan dan ibadah</p></div></header><div className="portal-list">{tahfidz.slice(0,4).map(x=><div key={`t-${x.id}`}><div><strong>{tahfidzRange(x)}</strong><small>{x.amount} ayat · {x.teacher} · {x.recorded_at}</small></div><Status tone="green">{x.grade}</Status></div>)}{mutabaah.slice(0,3).map(x=><div key={`m-${x.id}`}><div><strong>{x.activity}</strong><small>{x.record_date}</small></div><Status tone={Number(x.completed)?"green":"amber"}>{Number(x.completed)?"Selesai":"Belum"}</Status></div>)}{!tahfidz.length&&!mutabaah.length&&<div className="portal-empty">Belum ada catatan perkembangan.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Rapor Karakter</h3><p>Penilaian pembina terbaru</p></div></header><div className="portal-list">{characters.length?characters.slice(0,5).map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.note} · {x.semester}</small></div><b>{x.score}/100</b></div>):<div className="portal-empty">Belum ada rapor karakter.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Kesehatan Santri</h3><p>Catatan pemeriksaan dan tindak lanjut</p></div></header><div className="portal-list">{health.length?health.slice(0,5).map(x=><div key={String(x.id)}><div><strong>{x.complaint}</strong><small>{x.diagnosis} · {x.treatment}</small></div><Status tone={x.status==="Selesai"||x.status==="Membaik"?"green":"amber"}>{x.status}</Status></div>):<div className="portal-empty">Tidak ada catatan kesehatan.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Absensi & Perizinan</h3><p>Status kehadiran dan permohonan izin</p></div><button className="text-button" onClick={()=>setAction("permit")}>+ Ajukan izin</button></header><div className="portal-list">{permits.slice(0,4).map(x=><div key={`p-${x.id}`}><div><strong>{x.reason}</strong><small>{x.start_date} – {x.end_date}</small></div><Status tone={x.status==="Disetujui"?"green":x.status==="Ditolak"?"red":"amber"}>{x.status}</Status></div>)}{attendance.slice(0,4).map(x=><div key={`a-${x.id}`}><div><strong>Absensi {x.record_date}</strong><small>{x.note||"Tanpa catatan"}</small></div><Status tone={x.status==="Hadir"?"green":x.status==="Alpa"?"red":"amber"}>{x.status}</Status></div>)}{!permits.length&&!attendance.length&&<div className="portal-empty">Belum ada data absensi.</div>}</div></article>
@@ -685,8 +696,10 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
     { key:"status",label:"Status",options:["Aktif","Izin","Nonaktif"] },
   ],
   tahfidz: [
-    { key:"student_id",label:"Santri",type:"student" },{ key:"surah",label:"Surat" },{ key:"verses",label:"Ayat" },
-    { key:"amount",label:"Jumlah ayat",type:"number" },{ key:"grade",label:"Penilaian",options:["Mumtaz","Jayyid Jiddan","Jayyid","Mengulang"] },
+    { key:"student_id",label:"Santri",type:"student" },
+    { key:"surah_from",label:"Surat awal (contoh: Al-Baqarah)" },{ key:"verse_from",label:"Ayat awal",type:"number" },
+    { key:"surah_to",label:"Surat akhir (isi sama jika satu surat)" },{ key:"verse_to",label:"Ayat akhir",type:"number" },
+    { key:"amount",label:"Jumlah ayat disetor",type:"number" },{ key:"grade",label:"Penilaian",options:["Mumtaz","Jayyid Jiddan","Jayyid","Mengulang"] },
   ],
   mutabaah: [
     {key:"student_id",label:"Santri",type:"student"},{key:"activity",label:"Kegiatan/ibadah"},{key:"completed",label:"Status",options:["1","0"]},{key:"record_date",label:"Tanggal",type:"date"},
@@ -753,11 +766,22 @@ function RecordModal({ editor, students, onClose, onSave }: { editor: NonNullabl
   });
   const [saving,setSaving] = useState(false);
   const [error,setError] = useState("");
+  function updateFormField(key:string,value:string) {
+    setForm(current=>{
+      const next={...current,[key]:value};
+      if(editor.resource==="tahfidz"&&["surah_from","surah_to","verse_from","verse_to"].includes(key)) {
+        const verseFrom=Number(next.verse_from);
+        const verseTo=Number(next.verse_to);
+        if(next.surah_from.trim()&&next.surah_from.trim().toLocaleLowerCase("id-ID")===next.surah_to.trim().toLocaleLowerCase("id-ID")&&verseFrom>0&&verseTo>=verseFrom) next.amount=String(verseTo-verseFrom+1);
+      }
+      return next;
+    });
+  }
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError("");
     try {
       const data: Record<string,unknown> = {};
-      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","points","capacity","completed"].includes(key) ? Number(value) : value;
+      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","points","capacity","completed","verse_from","verse_to"].includes(key) ? Number(value) : value;
       await onSave(editor.resource,editor.row,data);
     } catch (e) { setError(e instanceof Error?e.message:"Gagal menyimpan."); setSaving(false); }
   }
@@ -767,10 +791,10 @@ function RecordModal({ editor, students, onClose, onSave }: { editor: NonNullabl
     <h2>{editor.row?"Ubah":"Tambah"} {resourceNames[editor.resource]}</h2>
     <p>Data akan tersimpan permanen dan langsung memperbarui dashboard.</p>
     <div className="form-grid">{formFields[editor.resource].map(field=><label key={field.key} className={field.type==="textarea"?"wide":""}>{field.label}
-      {field.type==="student"?<select required value={form[field.key]} onChange={e=>setForm({...form,[field.key]:e.target.value})}><option value="">Pilih santri</option>{students.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.nis}</option>)}</select>
-      :field.options?<select required value={form[field.key]} onChange={e=>setForm({...form,[field.key]:e.target.value})}><option value="">Pilih</option>{field.options.map(o=><option key={o}>{o}</option>)}</select>
-      :field.type==="textarea"?<textarea required value={form[field.key]} onChange={e=>setForm({...form,[field.key]:e.target.value})} />
-      :<input required={!["status","note","room_scope"].includes(field.key)} type={field.type||"text"} value={form[field.key]} onChange={e=>setForm({...form,[field.key]:e.target.value})} />}
+      {field.type==="student"?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih santri</option>{students.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.nis}</option>)}</select>
+      :field.options?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih</option>{field.options.map(o=><option key={o}>{o}</option>)}</select>
+      :field.type==="textarea"?<textarea required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />
+      :<input required={!["status","note","room_scope"].includes(field.key)} min={["verse_from","verse_to","amount"].includes(field.key)?1:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
     </label>)}</div>
     {error&&<div className="form-error">{error}</div>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button disabled={saving} className="primary-button">{saving?"Menyimpan...":"Simpan Data"}</button></div>
@@ -963,7 +987,7 @@ export default function DashboardClient() {
       ...menu,
       ...data.students.map(row => result(`student:${row.id}`, row.name, `${row.nis || "Tanpa NIS"} · ${row.class_name || "Tanpa kelas"} · ${row.room || "Tanpa kamar"}`, "santri", "♙", `${row.guardian_name} ${row.status}`)),
       ...data.schedules.map(row => result(`schedule:${row.id}`, row.title, `${row.class_name || ""} · ${row.day_name || ""} ${row.start_time || ""}–${row.end_time || ""} · ${row.teacher || ""}`, "jadwal", "▦", `${row.education_level} ${row.location} pelajaran mapel jadwal`)),
-      ...data.tahfidz.map(row => result(`tahfidz:${row.id}`, row.student_name, `${row.surah || row.surat || "Setoran hafalan"} · ${row.verses || row.ayat || ""}`, "tahfidz", "◫", `${row.grade} ${row.status} hafalan setoran`)),
+      ...data.tahfidz.map(row => result(`tahfidz:${row.id}`, row.student_name, tahfidzRange(row), "tahfidz", "◫", `${row.surah_from} ${row.surah_to} ${row.verse_from} ${row.verse_to} ${row.grade} ${row.status} hafalan setoran`)),
       ...data.health.map(row => result(`health:${row.id}`, row.student_name, `${row.complaint || row.diagnosis || "Catatan kesehatan"} · ${row.date || ""}`, "kesehatan", "✚", `${row.treatment} ${row.status}`)),
       ...data.transactions.map(row => result(`transaction:${row.id}`, row.student_name || row.description, `${row.type || "Transaksi"} · Rp${money.format(Number(row.amount || 0))}`, "keuangan", "Rp", `${row.category} ${row.date} uang saku transaksi`)),
       ...data.bills.map(row => result(`bill:${row.id}`, row.student_name || row.invoice_no, `${row.category || "Tagihan"} · Rp${money.format(Number(row.amount || 0))} · ${row.status || ""}`, "keuangan", "Rp", `${row.invoice_no} ${row.due_date} spp pembayaran tagihan`)),

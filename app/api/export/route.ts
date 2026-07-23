@@ -23,9 +23,9 @@ const exports:Record<string,ExportDefinition> = {
   tahfidz: {
     title:"Rekap Setoran Tahfidz",
     description:"Setoran hafalan, jumlah ayat, penilaian, dan pembimbing.",
-    query:"SELECT s.name AS santri,t.surah,t.verses,t.amount,t.grade,t.teacher,t.recorded_at FROM tahfidz_records t JOIN students s ON s.id=t.student_id ORDER BY t.id DESC",
-    scopedQuery:"SELECT s.name AS santri,t.surah,t.verses,t.amount,t.grade,t.teacher,t.recorded_at FROM tahfidz_records t JOIN students s ON s.id=t.student_id WHERE s.room=? ORDER BY t.id DESC",
-    columns:[{key:"santri",label:"Santri",weight:1.6},{key:"surah",label:"Surat"},{key:"verses",label:"Ayat"},{key:"amount",label:"Jumlah"},{key:"grade",label:"Nilai"},{key:"teacher",label:"Pembimbing",weight:1.2},{key:"recorded_at",label:"Tanggal",weight:1.2}],
+    query:"SELECT s.name AS santri,t.surah_from,t.verse_from,t.surah_to,t.verse_to,t.amount,t.grade,t.teacher,t.recorded_at FROM tahfidz_records t JOIN students s ON s.id=t.student_id ORDER BY t.id DESC",
+    scopedQuery:"SELECT s.name AS santri,t.surah_from,t.verse_from,t.surah_to,t.verse_to,t.amount,t.grade,t.teacher,t.recorded_at FROM tahfidz_records t JOIN students s ON s.id=t.student_id WHERE s.room=? ORDER BY t.id DESC",
+    columns:[{key:"santri",label:"Santri",weight:1.5},{key:"surah_from",label:"Surat Awal",weight:1.1},{key:"verse_from",label:"Ayat Awal"},{key:"surah_to",label:"Surat Akhir",weight:1.1},{key:"verse_to",label:"Ayat Akhir"},{key:"amount",label:"Jumlah"},{key:"grade",label:"Nilai"},{key:"teacher",label:"Pembimbing",weight:1.2},{key:"recorded_at",label:"Tanggal",weight:1.1}],
     dateKey:"recorded_at",
   },
   mutabaah: {

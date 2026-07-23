@@ -17,7 +17,7 @@ export function ensureDatabaseSchema() {
     const definitions = [
       "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,role TEXT NOT NULL,room_scope TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,nis TEXT NOT NULL UNIQUE,class_name TEXT NOT NULL,room TEXT NOT NULL,guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,guardian_email TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS tahfidz_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,surah TEXT NOT NULL,verses TEXT NOT NULL,amount INTEGER NOT NULL,grade TEXT NOT NULL,teacher TEXT NOT NULL,recorded_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS tahfidz_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,surah TEXT NOT NULL,verses TEXT NOT NULL,surah_from TEXT NOT NULL DEFAULT '',surah_to TEXT NOT NULL DEFAULT '',verse_from INTEGER NOT NULL DEFAULT 0,verse_to INTEGER NOT NULL DEFAULT 0,amount INTEGER NOT NULL,grade TEXT NOT NULL,teacher TEXT NOT NULL,recorded_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS mutabaah_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,activity TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,record_date TEXT NOT NULL,recorded_by TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS health_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,complaint TEXT NOT NULL,diagnosis TEXT NOT NULL,treatment TEXT NOT NULL,status TEXT NOT NULL,recorded_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,type TEXT NOT NULL,category TEXT NOT NULL,amount INTEGER NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL,recorded_at TEXT NOT NULL)",
@@ -42,6 +42,12 @@ export function ensureDatabaseSchema() {
     const upgrades: Record<string, Record<string, string>> = {
       users: { room_scope: "TEXT NOT NULL DEFAULT ''" },
       students: { guardian_email: "TEXT NOT NULL DEFAULT ''" },
+      tahfidz_records: {
+        surah_from: "TEXT NOT NULL DEFAULT ''",
+        surah_to: "TEXT NOT NULL DEFAULT ''",
+        verse_from: "INTEGER NOT NULL DEFAULT 0",
+        verse_to: "INTEGER NOT NULL DEFAULT 0",
+      },
       schedules: { education_level: "TEXT NOT NULL DEFAULT 'SMP'", class_name: "TEXT NOT NULL DEFAULT 'VII A'" },
       bills: {
         payment_method: "TEXT NOT NULL DEFAULT ''",
@@ -70,6 +76,10 @@ export function ensureDatabaseSchema() {
         await db.batch(missing.map(([name, definition]) => db.prepare(`ALTER TABLE ${table} ADD ${name} ${definition}`)));
       }
     }
+    await db.prepare("UPDATE tahfidz_records SET surah_from=surah WHERE surah_from=''").run();
+    await db.prepare("UPDATE tahfidz_records SET surah_to=surah WHERE surah_to=''").run();
+    await db.prepare("UPDATE tahfidz_records SET verse_from=CASE WHEN instr(replace(verses,'–','-'),'-')>0 THEN CAST(substr(replace(verses,'–','-'),1,instr(replace(verses,'–','-'),'-')-1) AS INTEGER) ELSE CAST(verses AS INTEGER) END WHERE verse_from=0").run();
+    await db.prepare("UPDATE tahfidz_records SET verse_to=CASE WHEN instr(replace(verses,'–','-'),'-')>0 THEN CAST(substr(replace(verses,'–','-'),instr(replace(verses,'–','-'),'-')+1) AS INTEGER) ELSE CAST(verses AS INTEGER) END WHERE verse_to=0").run();
   })().catch((error) => {
     schemaReady = null;
     throw error;
