@@ -21,6 +21,7 @@ html { background: var(--bg); }
 body { margin: 0; color: var(--text); font-family: var(--font-geist-sans), Arial, sans-serif; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
+.fi { display:inline-flex; align-items:center; justify-content:center; line-height:1; }
 
 .app-shell { min-height: 100vh; background: var(--bg); transition: .2s ease; }
 .app-shell.dark { --bg:#101c2c; --card:#17273b; --text:#dce7f4; --muted:#92a4b8; --line:#2b3b4e; --navy:#e2eaf3; --navy-2:#f1f5f9; --shadow:0 8px 20px rgba(0,0,0,.16); }
@@ -266,7 +267,7 @@ td.muted { color:var(--muted); }
 .report-card { min-height:105px; padding:18px; display:flex; align-items:center; gap:14px; }.report-card .mini-icon { position:static; min-width:39px; }
 .report-card>div { flex:1; }.report-card h3 { margin:0 0 4px; color:var(--navy); font-size:11px; }.report-card p { margin:0 0 8px; color:var(--muted); font-size:9px; }.report-card div span { color:#98a7b8; font-size:8px; }
 .report-card>button { width:31px; height:31px; border:1px solid var(--line); background:var(--card); color:var(--blue); border-radius:7px; }
-.page-footer { display:flex; justify-content:space-between; padding:24px 2px 4px; color:#99a7b7; font-size:8px; }.page-footer div { display:flex; gap:15px; }.page-footer button { border:0; background:transparent; color:#99a7b7; font-size:8px; }
+.page-footer { display:flex; justify-content:space-between; padding:24px 2px 4px; color:#99a7b7; font-size:8px; }.page-footer div { display:flex; gap:15px; }.page-footer button { border:0; background:transparent; color:#99a7b7; font-size:8px; }.page-footer a { color:inherit; text-decoration:none; }.page-footer a:hover { color:var(--blue); text-decoration:underline; }
 
 .modal-backdrop { position:fixed; inset:0; z-index:100; display:grid; place-items:center; padding:20px; background:rgba(10,25,44,.62); backdrop-filter:blur(4px); }
 .login-modal { width:min(450px,100%); max-height:95vh; overflow-y:auto; position:relative; padding:29px; border-radius:15px; background:var(--card); box-shadow:0 25px 60px rgba(0,0,0,.3); }

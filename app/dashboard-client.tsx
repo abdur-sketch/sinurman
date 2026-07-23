@@ -73,44 +73,44 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
   {
     label: "UTAMA",
     items: [
-      { key: "dashboard", icon: "⌂", label: "Dashboard" },
-      { key: "santri", icon: "♙", label: "Data Santri" },
+      { key: "dashboard", icon: "fi-rr-apps", label: "Dashboard" },
+      { key: "santri", icon: "fi-rr-users", label: "Data Santri" },
     ],
   },
   {
     label: "AKADEMIK & PEMBINAAN",
     items: [
-      { key: "tahfidz", icon: "◫", label: "Tahfidz" },
-      { key: "akademik", icon: "A", label: "Akademik & Rapor" },
-      { key: "mutabaah", icon: "✓", label: "Mutaba’ah" },
-      { key: "karakter", icon: "☆", label: "Rapor Karakter" },
-      { key: "absensi", icon: "◷", label: "Absensi & Izin" },
-      { key: "jadwal", icon: "▦", label: "Jadwal & Kamar" },
+      { key: "tahfidz", icon: "fi-rr-book-quran", label: "Tahfidz" },
+      { key: "akademik", icon: "fi-rr-graduation-cap", label: "Akademik & Rapor" },
+      { key: "mutabaah", icon: "fi-rr-praying-hands", label: "Mutaba’ah" },
+      { key: "karakter", icon: "fi-rr-shield-check", label: "Rapor Karakter" },
+      { key: "absensi", icon: "fi-rr-clipboard-check", label: "Absensi & Izin" },
+      { key: "jadwal", icon: "fi-rr-calendar", label: "Jadwal & Kamar" },
     ],
   },
   {
     label: "LAYANAN SANTRI",
     items: [
-      { key: "kesehatan", icon: "✚", label: "Kesehatan" },
-      { key: "keuangan", icon: "Rp", label: "Keuangan" },
-      { key: "inventaris", icon: "◇", label: "Inventaris" },
-      { key: "konseling", icon: "♧", label: "Konseling" },
+      { key: "kesehatan", icon: "fi-rr-stethoscope", label: "Kesehatan" },
+      { key: "keuangan", icon: "fi-rr-wallet", label: "Keuangan" },
+      { key: "inventaris", icon: "fi-rr-boxes", label: "Inventaris" },
+      { key: "konseling", icon: "fi-rr-comments", label: "Konseling" },
     ],
   },
   {
     label: "INFORMASI",
     items: [
-      { key: "pengumuman", icon: "◉", label: "Pengumuman" },
-      { key: "laporan", icon: "▥", label: "Laporan" },
-      { key: "penerimaan", icon: "+", label: "Penerimaan Santri" },
-      { key: "portalwali", icon: "♙", label: "Portal Wali" },
+      { key: "pengumuman", icon: "fi-rr-megaphone", label: "Pengumuman" },
+      { key: "laporan", icon: "fi-rr-file-chart-line", label: "Laporan" },
+      { key: "penerimaan", icon: "fi-rr-user-add", label: "Penerimaan Santri" },
+      { key: "portalwali", icon: "fi-rr-home-heart", label: "Portal Wali" },
     ],
   },
   {
     label: "SISTEM",
     items: [
-      { key: "pengguna", icon: "⚙", label: "Pengguna & Audit" },
-      { key: "integrasi", icon: "↗", label: "Integrasi & Backup" },
+      { key: "pengguna", icon: "fi-rr-user-gear", label: "Pengguna & Audit" },
+      { key: "integrasi", icon: "fi-rr-settings-sliders", label: "Integrasi & Backup" },
     ],
   },
 ];
@@ -160,8 +160,24 @@ const students = [
 
 const money = new Intl.NumberFormat("id-ID");
 
+const legacyToolIcons: Record<string, string> = {
+  "⌂":"fi-rr-apps", "♙":"fi-rr-student", "◫":"fi-rr-book-quran", "✓":"fi-rr-check",
+  "Rp":"fi-rr-wallet", "✚":"fi-rr-stethoscope", "!":"fi-rr-triangle-warning",
+  "A":"fi-rr-graduation-cap", "▦":"fi-rr-calendar", "◷":"fi-rr-clock", "☆":"fi-rr-star",
+  "◇":"fi-rr-boxes", "◉":"fi-rr-megaphone", "▥":"fi-rr-file-chart-line",
+  "+":"fi-rr-user-add", "♧":"fi-rr-comments", "⚙":"fi-rr-settings", "↗":"fi-rr-plug",
+  "WA":"fi-rr-comments", "⇧":"fi-rr-cloud-upload", "⇩":"fi-rr-cloud-download",
+  "QR":"fi-rr-qr-scan", "C":"fi-rr-clipboard-check", "N":"fi-rr-chart-histogram",
+  "T":"fi-rr-wallet",
+};
+
+function ToolIcon({ name }: { name: string }) {
+  const icon = name.startsWith("fi-") ? name : legacyToolIcons[name] || "fi-rr-apps";
+  return <i className={`fi ${icon}`} aria-hidden="true" />;
+}
+
 function MiniIcon({ children, tone = "blue" }: { children: React.ReactNode; tone?: string }) {
-  return <span className={`mini-icon ${tone}`}>{children}</span>;
+  return <span className={`mini-icon ${tone}`}>{typeof children === "string" ? <ToolIcon name={children} /> : children}</span>;
 }
 
 function Sparkline({ values, color = "blue" }: { values: number[]; color?: string }) {
@@ -1136,7 +1152,7 @@ export default function DashboardClient() {
     <div className={`app-shell ${dark ? "dark" : ""}`}>
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="brand"><button className="brand-home" aria-label={role==="Wali Santri"?"Kembali ke Portal Wali":"Kembali ke dashboard"} onClick={()=>selectPage(role==="Wali Santri"?"portalwali":"dashboard")}><span className="brand-mark">ن</span><span><strong>SINURMAN</strong><small>Nurul Iman</small></span></button><button className="close-sidebar" onClick={()=>setSidebarOpen(false)}>×</button></div>
-        <nav>{visibleNavGroups.map(group=><div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span>{item.key==="pengumuman"&&<b>3</b>}</button>)}</div>)}</nav>
+        <nav>{visibleNavGroups.map(group=><div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><ToolIcon name={item.icon} /><span>{item.label}</span>{item.key==="pengumuman"&&<b>3</b>}</button>)}</div>)}</nav>
         <button type="button" className="sidebar-help" aria-haspopup="dialog" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}><span>?</span><span><strong>Butuh bantuan?</strong><small>Buka pusat bantuan</small></span></button>
         <div className="sidebar-footer"><span>© 2026 SINURMAN</span><button type="button" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}>Bantuan · v1.3</button></div>
       </aside>
@@ -1182,7 +1198,7 @@ export default function DashboardClient() {
                   onMouseEnter={() => setSearchActiveIndex(index)}
                   onMouseDown={event => { event.preventDefault(); selectSearchResult(item); }}
                 >
-                  <i>{item.icon}</i>
+                  <ToolIcon name={item.icon} />
                   <span><strong>{item.title}</strong><small>{item.subtitle}</small></span>
                   <em>{pageTitles[item.page].title}</em>
                 </button>)}
@@ -1209,11 +1225,11 @@ export default function DashboardClient() {
           {loading&&<div className="sync-banner">Menyinkronkan data SINURMAN…</div>}
           {loadError&&<div className="sync-banner error">Data online belum tersedia: {loadError} <button onClick={()=>void loadData()}>Coba lagi</button></div>}
           {content}
-          <footer className="page-footer"><span>© 2026 Pondok Pesantren Nurul Iman</span><div><button type="button" onClick={()=>notify("Data akun dan operasional hanya digunakan untuk layanan SINURMAN.")}>Kebijakan Privasi</button><button type="button" onClick={()=>setShowHelp(true)}>Bantuan</button></div></footer>
+          <footer className="page-footer"><span>© 2026 Pondok Pesantren Nurul Iman · <a href="https://www.flaticon.com/uicons" target="_blank" rel="noreferrer">UIcons by Flaticon</a></span><div><button type="button" onClick={()=>notify("Data akun dan operasional hanya digunakan untuk layanan SINURMAN.")}>Kebijakan Privasi</button><button type="button" onClick={()=>setShowHelp(true)}>Bantuan</button></div></footer>
         </main>
       </div>
       <nav className={`mobile-nav ${role==="Wali Santri"?"guardian-mobile-nav":""}`}>
-        {(role==="Wali Santri"?[{key:"portalwali" as PageKey,icon:"♙",label:"Portal Wali"}]:[navGroups[0].items[0],navGroups[1].items[0],navGroups[1].items[1],navGroups[2].items[1]]).map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><i>{item.icon}</i><span>{item.label}</span></button>)}
+        {(role==="Wali Santri"?[{key:"portalwali" as PageKey,icon:"fi-rr-home-heart",label:"Portal Wali"}]:[navGroups[0].items[0],navGroups[1].items[0],navGroups[1].items[1],navGroups[2].items[1]]).map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><ToolIcon name={item.icon} /><span>{item.label}</span></button>)}
         <button onClick={()=>setSidebarOpen(true)}><i>•••</i><span>Lainnya</span></button>
       </nav>
       {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} subjects={data.subjects} onClose={()=>setEditor(null)} onSave={saveRecord} />}
