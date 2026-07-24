@@ -32,6 +32,11 @@ type AppData = {
   audit: Row[];
   guardianMessages: Row[];
   guardianRequests: Row[];
+  walletAccounts: Row[];
+  walletEntries: Row[];
+  canteenProducts: Row[];
+  canteenSales: Row[];
+  canteenSaleItems: Row[];
 };
 type EditorState = { resource: Resource; row?: Row } | null;
 type SearchResult = {
@@ -48,6 +53,7 @@ const emptyData: AppData = {
   inventory: [], announcements: [], notifications: [],
   attendance: [], subjects: [], grades: [], permits: [], schedules: [], rooms: [], admissions: [], admissionDocuments: [],
   counseling: [], bills: [], users: [], audit: [], guardianMessages: [], guardianRequests: [],
+  walletAccounts: [], walletEntries: [], canteenProducts: [], canteenSales: [], canteenSaleItems: [],
 };
 type PageKey =
   | "dashboard"
@@ -57,6 +63,7 @@ type PageKey =
   | "mutabaah"
   | "kesehatan"
   | "keuangan"
+  | "sinurpay"
   | "karakter"
   | "inventaris"
   | "pengumuman"
@@ -93,6 +100,7 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
     items: [
       { key: "kesehatan", icon: "fi-rr-stethoscope", label: "Kesehatan" },
       { key: "keuangan", icon: "fi-rr-wallet", label: "Keuangan" },
+      { key: "sinurpay", icon: "fi-rr-cash-register", label: "SINURPAY" },
       { key: "inventaris", icon: "fi-rr-boxes", label: "Inventaris" },
       { key: "konseling", icon: "fi-rr-comments", label: "Konseling" },
     ],
@@ -123,6 +131,7 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
   mutabaah: { title: "Mutaba’ah Ibadah", subtitle: "Rekap pelaksanaan ibadah dan kegiatan harian." },
   kesehatan: { title: "Kesehatan Santri", subtitle: "Catatan pemeriksaan, keluhan, dan tindak lanjut kesehatan." },
   keuangan: { title: "Keuangan", subtitle: "Kelola SPP, uang saku, dan riwayat transaksi." },
+  sinurpay: { title: "SINURPAY", subtitle: "Buku tabungan santri dan kasir kantin tanpa uang tunai." },
   karakter: { title: "Rapor Karakter", subtitle: "Evaluasi adab, kedisiplinan, kemandirian, dan tanggung jawab." },
   inventaris: { title: "Inventaris", subtitle: "Pantau aset, lokasi, kondisi, dan stok pesantren." },
   pengumuman: { title: "Pengumuman", subtitle: "Informasi terbaru untuk santri, wali, dan pengurus." },
@@ -329,6 +338,178 @@ function HealthPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () 
         </tbody></table></div></section>
     </>
   );
+}
+
+type SinurpayPayload = {
+  accounts:Row[];
+  entries:Row[];
+  products:Row[];
+  sales:Row[];
+  saleItems:Row[];
+  stats:{totalBalance:number;todayRevenue:number;todayTransactions:number;lowStock:number};
+};
+
+function SinurpayPage({ notify }: { notify:(message:string)=>void }) {
+  const [data,setData]=useState<SinurpayPayload>({accounts:[],entries:[],products:[],sales:[],saleItems:[],stats:{totalBalance:0,todayRevenue:0,todayTransactions:0,lowStock:0}});
+  const [tab,setTab]=useState<"cashier"|"savings"|"products"|"reports">("cashier");
+  const [loading,setLoading]=useState(true);
+  const [working,setWorking]=useState(false);
+  const [scan,setScan]=useState("");
+  const [cart,setCart]=useState<Record<string,number>>({});
+  const [adjustment,setAdjustment]=useState({studentId:"",direction:"deposit",amount:"",note:""});
+  const [product,setProduct]=useState({id:"",sku:"",name:"",category:"Makanan",price:"",stock:"",status:"Aktif"});
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    try {
+      const response=await fetch("/api/sinurpay",{cache:"no-store"});
+      const result=await response.json() as SinurpayPayload&{error?:string};
+      if(!response.ok) throw new Error(result.error||"SINURPAY tidak dapat dimuat.");
+      setData(result);
+      setAdjustment(current=>({...current,studentId:current.studentId||String(result.accounts[0]?.student_id??"")}));
+    } catch(error) { notify(error instanceof Error?error.message:"SINURPAY tidak dapat dimuat."); }
+    finally { setLoading(false); }
+  },[notify]);
+  useEffect(()=>{void load();},[load]);
+
+  const scannedAccount=useMemo(()=>{
+    const raw=scan.trim();
+    if(!raw) return undefined;
+    let token=raw,id="",nis=raw;
+    try {
+      const parsed=JSON.parse(raw) as {walletToken?:string;id?:number;nis?:string};
+      token=String(parsed.walletToken||""); id=String(parsed.id||""); nis=String(parsed.nis||"");
+    } catch { /* scanner may provide a raw card token or NIS */ }
+    return data.accounts.find(account=>String(account.card_token)===token||String(account.student_id)===id||String(account.nis).toLowerCase()===nis.toLowerCase());
+  },[scan,data.accounts]);
+  const cartLines=data.products.filter(item=>cart[String(item.id)]).map(item=>({...item,quantity:cart[String(item.id)]}));
+  const cartTotal=cartLines.reduce((sum,item)=>sum+Number(item.price)*item.quantity,0);
+
+  function changeQuantity(id:unknown,delta:number) {
+    const key=String(id);
+    const item=data.products.find(row=>String(row.id)===key);
+    setCart(current=>{
+      const quantity=Math.max(0,Math.min(Number(item?.stock||0),Number(current[key]||0)+delta));
+      const next={...current};
+      if(quantity) next[key]=quantity; else delete next[key];
+      return next;
+    });
+  }
+
+  async function post(payload:Record<string,unknown>) {
+    setWorking(true);
+    try {
+      const response=await fetch("/api/sinurpay",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
+      const result=await response.json() as {error?:string;receipt?:{receiptNo:string;balanceAfter:number}};
+      if(!response.ok) throw new Error(result.error||"Tindakan SINURPAY gagal.");
+      return result;
+    } finally { setWorking(false); }
+  }
+
+  async function checkout() {
+    try {
+      const result=await post({action:"checkout",scan,cart:cartLines.map(item=>({productId:Number(item.id),quantity:item.quantity}))});
+      notify(`Pembayaran berhasil · ${result.receipt?.receiptNo} · saldo Rp${money.format(Number(result.receipt?.balanceAfter||0))}.`);
+      setCart({});setScan("");await load();
+    } catch(error) { notify(error instanceof Error?error.message:"Pembayaran gagal."); }
+  }
+
+  async function adjustWallet(event:React.FormEvent) {
+    event.preventDefault();
+    try {
+      await post({action:"wallet-adjust",studentId:Number(adjustment.studentId),direction:adjustment.direction,amount:Number(adjustment.amount),note:adjustment.note});
+      notify(adjustment.direction==="deposit"?"Setoran berhasil dicatat.":"Penarikan berhasil dicatat.");
+      setAdjustment(current=>({...current,amount:"",note:""}));await load();
+    } catch(error) { notify(error instanceof Error?error.message:"Perubahan saldo gagal."); }
+  }
+
+  async function updateAccount(account:Row) {
+    const limit=window.prompt(`Limit belanja harian ${account.student_name}:`,String(account.daily_limit||50000));
+    if(limit===null) return;
+    const block=window.confirm(`Klik OK untuk ${account.status==="Aktif"?"memblokir":"mengaktifkan"} kartu ${account.student_name}. Klik Batal untuk hanya mengubah limit.`);
+    const status=block?(account.status==="Aktif"?"Diblokir":"Aktif"):String(account.status);
+    try {
+      await post({action:"update-account",studentId:Number(account.student_id),dailyLimit:Number(limit),status});
+      notify(`Rekening ${account.student_name} diperbarui.`);await load();
+    } catch(error) { notify(error instanceof Error?error.message:"Rekening gagal diperbarui."); }
+  }
+
+  async function saveProduct(event:React.FormEvent) {
+    event.preventDefault();
+    try {
+      await post({action:"product-save",product:{...product,id:Number(product.id||0),price:Number(product.price),stock:Number(product.stock)}});
+      notify("Produk kantin berhasil disimpan.");
+      setProduct({id:"",sku:"",name:"",category:"Makanan",price:"",stock:"",status:"Aktif"});await load();
+    } catch(error) { notify(error instanceof Error?error.message:"Produk gagal disimpan."); }
+  }
+
+  async function reverseSale(sale:Row) {
+    if(!window.confirm(`Batalkan transaksi ${sale.receipt_no}? Saldo dan stok akan dikembalikan.`)) return;
+    try { await post({action:"reverse-sale",saleId:Number(sale.id)});notify("Transaksi dibatalkan dan dana dikembalikan.");await load(); }
+    catch(error) { notify(error instanceof Error?error.message:"Pembatalan gagal."); }
+  }
+
+  return <div className="sinurpay-page">
+    <section className="sinurpay-hero">
+      <div><span>SINURPAY · KANTIN CASHLESS</span><h2>Belanja aman tanpa uang tunai.</h2><p>Scan kartu santri, proses pembayaran, dan pantau buku tabungan dalam satu sistem.</p></div>
+      <div className="sinurpay-live"><i /><span>Sistem kasir</span><strong>{loading?"Menyinkronkan":"Siap digunakan"}</strong></div>
+    </section>
+    <section className="stats-grid four">
+      <article className="metric-card"><MiniIcon tone="blue">Rp</MiniIcon><div><span>Total Saldo Santri</span><strong>Rp{money.format(data.stats.totalBalance)}</strong><small>{data.accounts.length} rekening aktif</small></div></article>
+      <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Omzet Hari Ini</span><strong>Rp{money.format(data.stats.todayRevenue)}</strong><small>{data.stats.todayTransactions} transaksi berhasil</small></div></article>
+      <article className="metric-card"><MiniIcon tone="violet">QR</MiniIcon><div><span>Kartu Aktif</span><strong>{data.accounts.filter(row=>row.status==="Aktif").length}</strong><small>Barcode siap dipindai</small></div></article>
+      <article className="metric-card"><MiniIcon tone="amber">!</MiniIcon><div><span>Stok Menipis</span><strong>{data.stats.lowStock}</strong><small>Produk perlu ditambah</small></div></article>
+    </section>
+    <nav className="sinurpay-tabs" aria-label="Menu SINURPAY">
+      {([["cashier","Kasir Kantin","fi-rr-cash-register"],["savings","Buku Tabungan","fi-rr-money-check-edit"],["products","Produk & Stok","fi-rr-boxes"],["reports","Transaksi & Laporan","fi-rr-receipt"]] as const).map(item=><button key={item[0]} className={tab===item[0]?"active":""} onClick={()=>setTab(item[0])}><ToolIcon name={item[2]}/><span>{item[1]}</span></button>)}
+    </nav>
+
+    {tab==="cashier"&&<section className="sinurpay-pos">
+      <div className="card pos-catalog">
+        <header><div><span>LANGKAH 1</span><h3>Scan kartu santri</h3><p>Fokus otomatis cocok untuk scanner USB; QR kartu juga dapat ditempel dari hasil pemindaian kamera.</p></div><ToolIcon name="fi-rr-qr-scan"/></header>
+        <div className={`card-scanner ${scannedAccount?"verified":""}`}>
+          <ToolIcon name={scannedAccount?"fi-rr-badge-check":"fi-rr-credit-card"}/>
+          <input autoFocus value={scan} onChange={event=>setScan(event.target.value)} placeholder="Scan kartu atau masukkan NIS…" aria-label="Scan kartu santri"/>
+          {scan&&<button type="button" onClick={()=>setScan("")}>×</button>}
+        </div>
+        {scannedAccount?<div className="scanned-student"><span>{String(scannedAccount.student_name).split(" ").map(value=>value[0]).slice(0,2).join("")}</span><div><strong>{scannedAccount.student_name}</strong><small>{scannedAccount.nis} · {scannedAccount.class_name} · {scannedAccount.room}</small></div><div><small>Saldo tersedia</small><strong>Rp{money.format(Number(scannedAccount.balance))}</strong><Status tone={scannedAccount.status==="Aktif"?"green":"red"}>{scannedAccount.status}</Status></div></div>:<div className="scan-helper">Kartu belum dipindai. Kasir tetap dapat menyiapkan keranjang.</div>}
+        <header className="product-heading"><div><span>LANGKAH 2</span><h3>Pilih produk</h3></div><small>{data.products.filter(row=>row.status==="Aktif").length} produk tersedia</small></header>
+        <div className="product-grid">{data.products.filter(row=>row.status==="Aktif").map((item,index)=><button key={String(item.id)} disabled={Number(item.stock)<1} onClick={()=>changeQuantity(item.id,1)}>
+          <span className={`product-symbol tone-${index%4}`}><ToolIcon name={item.category==="Minuman"?"fi-rr-drink-alt":item.category==="Alat Tulis"?"fi-rr-pencil":"fi-rr-hamburger"}/></span>
+          <strong>{item.name}</strong><small>{item.category} · stok {item.stock}</small><b>Rp{money.format(Number(item.price))}</b>{cart[String(item.id)]&&<em>{cart[String(item.id)]}</em>}
+        </button>)}</div>
+      </div>
+      <aside className="card pos-cart">
+        <header><div><span>LANGKAH 3</span><h3>Keranjang Belanja</h3></div><b>{cartLines.reduce((sum,item)=>sum+item.quantity,0)} item</b></header>
+        <div className="cart-lines">{cartLines.length?cartLines.map(item=><article key={String(item.id)}><div><strong>{item.name}</strong><small>Rp{money.format(Number(item.price))} × {item.quantity}</small></div><div className="quantity-control"><button onClick={()=>changeQuantity(item.id,-1)}>−</button><span>{item.quantity}</span><button onClick={()=>changeQuantity(item.id,1)}>+</button></div><b>Rp{money.format(Number(item.price)*item.quantity)}</b></article>):<div className="cart-empty"><ToolIcon name="fi-rr-shopping-basket"/><strong>Keranjang masih kosong</strong><span>Pilih produk dari katalog kantin.</span></div>}</div>
+        <dl><div><dt>Subtotal</dt><dd>Rp{money.format(cartTotal)}</dd></div><div><dt>Biaya layanan</dt><dd>Rp0</dd></div><div><dt>Total</dt><dd>Rp{money.format(cartTotal)}</dd></div></dl>
+        <button className="checkout-button" disabled={working||!scannedAccount||!cartLines.length||scannedAccount.status!=="Aktif"} onClick={()=>void checkout()}><ToolIcon name="fi-rr-shield-check"/>{working?"Memproses transaksi…":"Bayar dengan Saldo"}</button>
+        <small className="checkout-note">Transaksi tercatat otomatis dan notifikasi WhatsApp dikirim kepada wali.</small>
+      </aside>
+    </section>}
+
+    {tab==="savings"&&<section className="sinurpay-management">
+      <form className="card wallet-adjust" onSubmit={adjustWallet}><span className="section-kicker">BUKU TABUNGAN</span><h3>Setoran atau penarikan</h3><p>Saldo hanya berubah melalui transaksi yang tercatat di buku besar.</p>
+        <label>Santri<select required value={adjustment.studentId} onChange={event=>setAdjustment({...adjustment,studentId:event.target.value})}>{data.accounts.map(account=><option key={String(account.student_id)} value={String(account.student_id)}>{account.student_name} · {account.nis}</option>)}</select></label>
+        <div className="direction-switch"><button type="button" className={adjustment.direction==="deposit"?"active":""} onClick={()=>setAdjustment({...adjustment,direction:"deposit"})}>Setoran</button><button type="button" className={adjustment.direction==="withdraw"?"active":""} onClick={()=>setAdjustment({...adjustment,direction:"withdraw"})}>Penarikan</button></div>
+        <label>Nominal<input required min="1000" step="1000" type="number" value={adjustment.amount} onChange={event=>setAdjustment({...adjustment,amount:event.target.value})} placeholder="Contoh: 100000"/></label>
+        <label>Catatan<input required value={adjustment.note} onChange={event=>setAdjustment({...adjustment,note:event.target.value})} placeholder="Sumber setoran atau keperluan penarikan"/></label>
+        <button disabled={working} className="primary-button">{working?"Menyimpan…":"Simpan Transaksi"}</button>
+      </form>
+      <article className="card data-card wallet-accounts"><header className="card-header"><div><h3>Rekening Santri</h3><p>Saldo, limit harian, dan status kartu</p></div></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Saldo</th><th>Limit Harian</th><th>Kartu</th><th /></tr></thead><tbody>{data.accounts.map(account=><tr key={String(account.id)}><td><strong>{account.student_name}</strong><small className="cell-note">{account.nis} · {account.class_name}</small></td><td><strong>Rp{money.format(Number(account.balance))}</strong></td><td>Rp{money.format(Number(account.daily_limit))}</td><td><Status tone={account.status==="Aktif"?"green":"red"}>{account.status}</Status></td><td><button className="text-button" onClick={()=>void updateAccount(account)}>Atur</button></td></tr>)}</tbody></table></div></article>
+      <article className="card data-card wallet-ledger"><header className="card-header"><div><h3>Mutasi Terbaru</h3><p>Jejak saldo yang tidak dapat diedit langsung</p></div></header><div className="portal-list">{data.entries.slice(0,12).map(entry=><div key={String(entry.id)}><div><strong>{entry.student_name} · {entry.entry_type}</strong><small>{entry.reference} · {String(entry.created_at).slice(0,16).replace("T"," ")}<br/>{entry.note}</small></div><b className={Number(entry.amount)>=0?"amount-in":"amount-out"}>{Number(entry.amount)>=0?"+":"−"}Rp{money.format(Math.abs(Number(entry.amount)))}</b><small>Saldo Rp{money.format(Number(entry.balance_after))}</small></div>)}</div></article>
+    </section>}
+
+    {tab==="products"&&<section className="sinurpay-management">
+      <form className="card product-form" onSubmit={saveProduct}><span className="section-kicker">KATALOG KANTIN</span><h3>{product.id?"Ubah produk":"Tambah produk"}</h3><p>Stok otomatis berkurang setelah pembayaran berhasil.</p>
+        <div className="form-grid"><label>SKU<input required value={product.sku} onChange={event=>setProduct({...product,sku:event.target.value})}/></label><label>Nama produk<input required value={product.name} onChange={event=>setProduct({...product,name:event.target.value})}/></label><label>Kategori<select value={product.category} onChange={event=>setProduct({...product,category:event.target.value})}><option>Makanan</option><option>Minuman</option><option>Alat Tulis</option><option>Kebutuhan Harian</option></select></label><label>Harga<input required min="1" type="number" value={product.price} onChange={event=>setProduct({...product,price:event.target.value})}/></label><label>Stok<input required min="0" type="number" value={product.stock} onChange={event=>setProduct({...product,stock:event.target.value})}/></label><label>Status<select value={product.status} onChange={event=>setProduct({...product,status:event.target.value})}><option>Aktif</option><option>Nonaktif</option></select></label></div>
+        <div className="header-actions">{product.id&&<button type="button" className="secondary-button" onClick={()=>setProduct({id:"",sku:"",name:"",category:"Makanan",price:"",stock:"",status:"Aktif"})}>Batal</button>}<button disabled={working} className="primary-button">Simpan Produk</button></div>
+      </form>
+      <article className="card data-card product-table"><header className="card-header"><div><h3>Produk & Stok</h3><p>{data.products.length} produk terdaftar</p></div></header><div className="table-wrap"><table><thead><tr><th>SKU</th><th>Produk</th><th>Harga</th><th>Stok</th><th>Status</th><th /></tr></thead><tbody>{data.products.map(item=><tr key={String(item.id)}><td className="muted">{item.sku}</td><td><strong>{item.name}</strong><small className="cell-note">{item.category}</small></td><td>Rp{money.format(Number(item.price))}</td><td><Status tone={Number(item.stock)<=10?"amber":"green"}>{item.stock} unit</Status></td><td>{item.status}</td><td><button className="text-button" onClick={()=>setProduct({id:String(item.id),sku:String(item.sku),name:String(item.name),category:String(item.category),price:String(item.price),stock:String(item.stock),status:String(item.status)})}>Ubah</button></td></tr>)}</tbody></table></div></article>
+    </section>}
+
+    {tab==="reports"&&<section className="card data-card sinurpay-sales"><header className="card-header"><div><h3>Transaksi Kantin</h3><p>Riwayat pembayaran, pembatalan, kasir, dan referensi</p></div><a className="secondary-button link-button" href="/api/sinurpay?format=csv">Ekspor CSV</a></header><div className="table-wrap"><table><thead><tr><th>Referensi</th><th>Santri</th><th>Waktu</th><th>Belanja</th><th>Total</th><th>Status</th><th /></tr></thead><tbody>{data.sales.map(sale=>{const items=data.saleItems.filter(item=>Number(item.sale_id)===Number(sale.id));return <tr key={String(sale.id)}><td className="muted">{sale.receipt_no}</td><td><strong>{sale.student_name}</strong><small className="cell-note">{sale.nis}</small></td><td>{String(sale.created_at).slice(0,16).replace("T"," ")}</td><td>{items.map(item=>`${item.product_name} ×${item.quantity}`).join(", ")||"-"}</td><td><strong>Rp{money.format(Number(sale.total))}</strong></td><td><Status tone={sale.status==="Berhasil"?"green":"red"}>{sale.status}</Status></td><td>{sale.status==="Berhasil"&&<button className="danger-link" onClick={()=>void reverseSale(sale)}>Batalkan</button>}</td></tr>})}{!data.sales.length&&<tr><td colSpan={7} className="muted">Belum ada transaksi kantin.</td></tr>}</tbody></table></div></section>}
+  </div>;
 }
 
 function FinancePage({ rows, bills, onAdd, onBill, onNotify, onPayment }: { rows: Row[]; bills:Row[]; onAdd: () => void; onBill:()=>void; onNotify: () => void; onPayment:(row:Row)=>void }) {
@@ -651,7 +832,9 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
   const bills=byStudent(data.bills), attendance=byStudent(data.attendance), tahfidz=byStudent(data.tahfidz), grades=byStudent(data.grades);
   const health=byStudent(data.health), characters=byStudent(data.characters), permits=byStudent(data.permits);
   const transactions=byStudent(data.transactions), mutabaah=byStudent(data.mutabaah), messages=byStudent(data.guardianMessages), requests=byStudent(data.guardianRequests);
-  const balance=transactions.filter(x=>x.category==="Uang Saku").reduce((total,x)=>total+(x.type==="Keluar"?-1:1)*Number(x.amount||0),0);
+  const wallet=data.walletAccounts.find(x=>Number(x.student_id)===Number(student.id));
+  const walletEntries=byStudent(data.walletEntries), canteenSales=byStudent(data.canteenSales);
+  const balance=Number(wallet?.balance??transactions.filter(x=>x.category==="Uang Saku").reduce((total,x)=>total+(x.type==="Keluar"?-1:1)*Number(x.amount||0),0));
   const attendanceRate=attendance.length?Math.round(attendance.filter(x=>x.status==="Hadir").length/attendance.length*100):0;
   const schedule=data.schedules.filter(x=>x.class_name===student.class_name&&x.day_name===day);
   const days=["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
@@ -664,13 +847,14 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
     <section className="stats-grid four guardian-stats">
       <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Kehadiran</span><strong>{attendanceRate}%</strong><small>{attendance.filter(x=>x.status==="Hadir").length} dari {attendance.length} catatan</small></div></article>
       <article className="metric-card"><MiniIcon tone="blue">◫</MiniIcon><div><span>Setoran Tahfidz</span><strong>{tahfidz.length}</strong><small>{tahfidz[0]?`Terakhir ${tahfidzRange(tahfidz[0])}`:"Belum ada setoran"}</small></div></article>
-      <article className="metric-card"><MiniIcon tone="violet">Rp</MiniIcon><div><span>Saldo Uang Saku</span><strong>Rp{money.format(balance)}</strong><small>{transactions.filter(x=>x.category==="Uang Saku").length} transaksi</small></div></article>
+      <article className="metric-card"><MiniIcon tone="violet">Rp</MiniIcon><div><span>Saldo SINURPAY</span><strong>Rp{money.format(balance)}</strong><small>Limit harian Rp{money.format(Number(wallet?.daily_limit||0))}</small></div></article>
       <article className="metric-card"><MiniIcon tone="amber">!</MiniIcon><div><span>Tagihan Aktif</span><strong>{bills.filter(x=>x.status!=="Lunas").length}</strong><small>Perlu ditindaklanjuti</small></div></article>
     </section>
 
     <section className="guardian-grid">
       <article className="card portal-card span-two"><header className="card-header"><div><h3>Jadwal Pelajaran Harian</h3><p>{student.class_name} · pilih hari untuk melihat pelajaran</p></div><select value={day} onChange={e=>setDay(e.target.value)}>{days.map(x=><option key={x}>{x}</option>)}</select></header><div className="portal-schedule">{schedule.length?schedule.map((x,i)=><div key={String(x.id)}><span className={`schedule-time tone-${i%4}`}>{x.start_time}<small>{x.end_time}</small></span><div><Status tone={x.category==="Produktif"?"violet":x.category==="Tahfidz"?"green":"blue"}>{x.category}</Status><strong>{x.title}</strong><small>{x.teacher} · {x.location}</small></div></div>):<div className="portal-empty">Belum ada jadwal pada {day}.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Tagihan & Pembayaran QRIS</h3><p>Rekonsiliasi otomatis dan kuitansi digital</p></div></header><div className="portal-list">{bills.length?bills.map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.invoice_no} · jatuh tempo {x.due_date}{x.paid_at?` · lunas ${x.paid_at}`:""}</small></div><b>Rp{money.format(Number(x.amount))}</b><Status tone={x.status==="Lunas"?"green":"amber"}>{x.status}</Status>{x.status!=="Lunas"?<button className="text-button" onClick={()=>onPayment(x)}>Tampilkan QR</button>:<a className="text-button link-button" href={`/api/receipt?id=${x.id}`}>Kuitansi</a>}</div>):<div className="portal-empty">Tidak ada tagihan.</div>}</div></article>
+      <article className="card portal-card span-two guardian-wallet-card"><header className="card-header"><div><h3>Buku Tabungan & Belanja Kantin</h3><p>Saldo cashless, limit harian, dan mutasi SINURPAY</p></div><div className="guardian-wallet-balance"><small>Saldo tersedia</small><strong>Rp{money.format(balance)}</strong><Status tone={wallet?.status==="Diblokir"?"red":"green"}>{wallet?.status||"Aktif"}</Status></div></header><div className="guardian-wallet-grid"><div><span>MUTASI TERBARU</span>{walletEntries.slice(0,6).map(entry=><article key={String(entry.id)}><div><strong>{entry.entry_type}</strong><small>{entry.reference} · {String(entry.created_at).slice(0,10)}<br/>{entry.note}</small></div><b className={Number(entry.amount)>=0?"amount-in":"amount-out"}>{Number(entry.amount)>=0?"+":"−"}Rp{money.format(Math.abs(Number(entry.amount)))}</b></article>)}{!walletEntries.length&&<div className="portal-empty">Belum ada mutasi tabungan.</div>}</div><div><span>BELANJA KANTIN</span>{canteenSales.slice(0,6).map(sale=><article key={String(sale.id)}><div><strong>{sale.receipt_no}</strong><small>{String(sale.created_at).slice(0,16).replace("T"," ")} · {sale.cashier_email}</small></div><b>Rp{money.format(Number(sale.total))}</b><Status tone={sale.status==="Berhasil"?"green":"red"}>{sale.status}</Status></article>)}{!canteenSales.length&&<div className="portal-empty">Belum ada transaksi kantin.</div>}</div></div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Tahfidz & Mutaba’ah</h3><p>Perkembangan hafalan dan ibadah</p></div></header><div className="portal-list">{tahfidz.slice(0,4).map(x=><div key={`t-${x.id}`}><div><strong>{tahfidzRange(x)}</strong><small>{x.amount} ayat · {x.teacher} · {x.recorded_at}</small></div><Status tone="green">{x.grade}</Status></div>)}{mutabaah.slice(0,3).map(x=><div key={`m-${x.id}`}><div><strong>{x.activity}</strong><small>{x.record_date}</small></div><Status tone={Number(x.completed)?"green":"amber"}>{Number(x.completed)?"Selesai":"Belum"}</Status></div>)}{!tahfidz.length&&!mutabaah.length&&<div className="portal-empty">Belum ada catatan perkembangan.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Rapor Akademik</h3><p>Nilai SMP–SMK terbaru</p></div></header><div className="portal-list">{grades.length?grades.slice(0,8).map(x=><div key={String(x.id)}><div><strong>{x.subject_name}</strong><small>{x.semester} · {x.academic_year} · {x.note||"Tanpa catatan"}</small></div><Status tone={Number(x.final_score)>=Number(x.minimum_score||75)?"green":"amber"}>{x.final_score} · {x.predicate}</Status></div>):<div className="portal-empty">Belum ada nilai akademik.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Rapor Karakter</h3><p>Penilaian pembina terbaru</p></div></header><div className="portal-list">{characters.length?characters.slice(0,5).map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.note} · {x.semester}</small></div><b>{x.score}/100</b></div>):<div className="portal-empty">Belum ada rapor karakter.</div>}</div></article>
@@ -716,6 +900,7 @@ function ReportsPage({ role }: { role:Role }) {
     {key:"counseling",title:"Laporan Pembinaan",copy:"Konseling, prestasi, dan pelanggaran",tone:"violet",admin:false},
     {key:"schedules",title:"Jadwal Pelajaran",copy:"Jadwal harian SMP dan SMK",tone:"amber",admin:false},
     {key:"finance",title:"Laporan Keuangan",copy:"SPP, uang saku, dan transaksi",tone:"blue",admin:true},
+    {key:"sinurpay",title:"Laporan SINURPAY",copy:"Tabungan, belanja kartu, omzet, dan kasir kantin",tone:"green",admin:true},
     {key:"inventory",title:"Laporan Inventaris",copy:"Aset, jumlah, lokasi, dan kondisi",tone:"green",admin:true},
     {key:"admissions",title:"Laporan PPDB",copy:"Pendaftar dan status verifikasi",tone:"violet",admin:true},
   ];
@@ -1037,6 +1222,8 @@ export default function DashboardClient() {
       ...data.grades.map(row => result(`grade:${row.id}`, row.student_name, `${row.subject_name} · ${row.final_score} (${row.predicate})`, "akademik", "A", `${row.semester} ${row.academic_year} rapor nilai akademik`)),
       ...data.health.map(row => result(`health:${row.id}`, row.student_name, `${row.complaint || row.diagnosis || "Catatan kesehatan"} · ${row.date || ""}`, "kesehatan", "✚", `${row.treatment} ${row.status}`)),
       ...data.transactions.map(row => result(`transaction:${row.id}`, row.student_name || row.description, `${row.type || "Transaksi"} · Rp${money.format(Number(row.amount || 0))}`, "keuangan", "Rp", `${row.category} ${row.date} uang saku transaksi`)),
+      ...data.walletEntries.map(row => result(`wallet:${row.id}`, row.student_name, `${row.entry_type} · Rp${money.format(Math.abs(Number(row.amount || 0)))} · saldo Rp${money.format(Number(row.balance_after || 0))}`, "sinurpay", "fi-rr-cash-register", `${row.reference} ${row.note} tabungan kantin cashless`)),
+      ...data.canteenSales.map(row => result(`canteen:${row.id}`, row.student_name, `${row.receipt_no} · Rp${money.format(Number(row.total || 0))} · ${row.status}`, "sinurpay", "fi-rr-receipt", "kantin belanja kasir barcode")),
       ...data.bills.map(row => result(`bill:${row.id}`, row.student_name || row.invoice_no, `${row.category || "Tagihan"} · Rp${money.format(Number(row.amount || 0))} · ${row.status || ""}`, "keuangan", "Rp", `${row.invoice_no} ${row.due_date} spp pembayaran tagihan`)),
       ...data.inventory.map(row => result(`inventory:${row.id}`, row.name, `${row.location || "Lokasi belum diisi"} · ${row.condition || row.status || ""}`, "inventaris", "◇", `${row.category} ${row.quantity} stok aset`)),
       ...data.announcements.map(row => result(`announcement:${row.id}`, row.title, `${row.category || "Pengumuman"} · ${row.date || ""}`, "pengumuman", "◉", `${row.content} informasi berita`)),
@@ -1094,6 +1281,7 @@ export default function DashboardClient() {
       case "mutabaah": return <MutabaahPage rows={data.mutabaah} {...actions("mutabaah")} />;
       case "kesehatan": return <HealthPage rows={data.health} {...actions("health")} />;
       case "keuangan": return <FinancePage rows={data.transactions} bills={data.bills} onAdd={()=>setEditor({resource:"transactions"})} onBill={()=>setEditor({resource:"bills"})} onNotify={()=>setShowNotification(true)} onPayment={row=>void openPayment(row)} />;
+      case "sinurpay": return <SinurpayPage notify={notify} />;
       case "karakter": return <CharacterPage onAdd={()=>setEditor({resource:"characters"})} />;
       case "inventaris": return <InventoryPage rows={data.inventory} {...actions("inventory")} />;
       case "pengumuman": return <AnnouncementsPage rows={data.announcements} {...actions("announcements")} onNotify={()=>setShowNotification(true)} />;

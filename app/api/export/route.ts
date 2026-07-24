@@ -90,6 +90,14 @@ const exports:Record<string,ExportDefinition> = {
     dateKey:"recorded_at",
     adminOnly:true,
   },
+  sinurpay: {
+    title:"Laporan SINURPAY dan Kantin Cashless",
+    description:"Transaksi kartu santri, omzet kantin, status pembayaran, dan petugas kasir.",
+    query:"SELECT c.receipt_no,c.created_at,s.nis,s.name AS santri,s.class_name,c.total,c.status,c.cashier_email FROM canteen_sales c JOIN students s ON s.id=c.student_id ORDER BY c.id DESC",
+    columns:[{key:"receipt_no",label:"Referensi",weight:1.25},{key:"created_at",label:"Waktu",weight:1.2},{key:"nis",label:"NIS"},{key:"santri",label:"Santri",weight:1.5},{key:"class_name",label:"Kelas"},{key:"total",label:"Total",weight:1.15},{key:"status",label:"Status"},{key:"cashier_email",label:"Kasir",weight:1.5}],
+    dateKey:"created_at",
+    adminOnly:true,
+  },
   inventory: {
     title:"Laporan Inventaris",
     description:"Aset pesantren, jumlah, satuan, lokasi, dan kondisi.",
@@ -120,7 +128,7 @@ function dateLabel(value:string) {
 
 function displayValue(key:string,value:unknown) {
   if(value===null||value===undefined||value==="") return "-";
-  if(key==="amount") return `Rp ${new Intl.NumberFormat("id-ID").format(Number(value))}`;
+  if(key==="amount"||key==="total") return `Rp ${new Intl.NumberFormat("id-ID").format(Number(value))}`;
   if(key==="completed") return Number(value)?"Selesai":"Belum";
   if(key.endsWith("_at")||key.endsWith("_date")) return dateLabel(String(value));
   return String(value);

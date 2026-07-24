@@ -46,6 +46,11 @@ export async function GET(request: Request) {
       audit,
       guardianMessages,
       guardianRequests,
+      walletAccounts,
+      walletEntries,
+      canteenProducts,
+      canteenSales,
+      canteenSaleItems,
     ] = await Promise.all([
       guardian
         ? owned("SELECT * FROM students WHERE lower(guardian_email) = ? ORDER BY id")
@@ -135,6 +140,25 @@ export async function GET(request: Request) {
         ? owned("SELECT g.*,s.name AS student_name,s.nis FROM guardian_requests g JOIN students s ON s.id=g.student_id WHERE lower(s.guardian_email)=? ORDER BY g.id DESC LIMIT 50")
         : staff ? scoped("SELECT g.*,s.name AS student_name,s.nis FROM guardian_requests g JOIN students s ON s.id=g.student_id WHERE s.room=? ORDER BY g.id DESC LIMIT 100")
         : all("SELECT g.*,s.name AS student_name,s.nis FROM guardian_requests g JOIN students s ON s.id=g.student_id ORDER BY g.id DESC LIMIT 100"),
+      guardian
+        ? owned("SELECT w.id,w.student_id,w.balance,w.daily_limit,w.status,w.updated_at,s.name AS student_name,s.nis FROM wallet_accounts w JOIN students s ON s.id=w.student_id WHERE lower(s.guardian_email)=? ORDER BY s.name")
+        : staff ? all("SELECT * FROM wallet_accounts WHERE 1=0")
+        : all("SELECT w.*,s.name AS student_name,s.nis,s.class_name,s.room FROM wallet_accounts w JOIN students s ON s.id=w.student_id ORDER BY s.name"),
+      guardian
+        ? owned("SELECT e.*,s.name AS student_name FROM wallet_entries e JOIN students s ON s.id=e.student_id WHERE lower(s.guardian_email)=? ORDER BY e.id DESC LIMIT 100")
+        : staff ? all("SELECT * FROM wallet_entries WHERE 1=0")
+        : all("SELECT e.*,s.name AS student_name FROM wallet_entries e JOIN students s ON s.id=e.student_id ORDER BY e.id DESC LIMIT 200"),
+      guardian || staff
+        ? all("SELECT * FROM canteen_products WHERE 1=0")
+        : all("SELECT * FROM canteen_products ORDER BY category,name"),
+      guardian
+        ? owned("SELECT c.*,s.name AS student_name,s.nis FROM canteen_sales c JOIN students s ON s.id=c.student_id WHERE lower(s.guardian_email)=? ORDER BY c.id DESC LIMIT 100")
+        : staff ? all("SELECT * FROM canteen_sales WHERE 1=0")
+        : all("SELECT c.*,s.name AS student_name,s.nis FROM canteen_sales c JOIN students s ON s.id=c.student_id ORDER BY c.id DESC LIMIT 150"),
+      guardian
+        ? owned("SELECT i.* FROM canteen_sale_items i JOIN canteen_sales c ON c.id=i.sale_id JOIN students s ON s.id=c.student_id WHERE lower(s.guardian_email)=? ORDER BY i.id DESC LIMIT 300")
+        : staff ? all("SELECT * FROM canteen_sale_items WHERE 1=0")
+        : all("SELECT * FROM canteen_sale_items ORDER BY id DESC LIMIT 500"),
     ]);
 
     return Response.json({
@@ -162,6 +186,11 @@ export async function GET(request: Request) {
       audit: audit.results,
       guardianMessages: guardianMessages.results,
       guardianRequests: guardianRequests.results,
+      walletAccounts: walletAccounts.results,
+      walletEntries: walletEntries.results,
+      canteenProducts: canteenProducts.results,
+      canteenSales: canteenSales.results,
+      canteenSaleItems: canteenSaleItems.results,
       warning: seedWarning,
     });
   } catch (error) {

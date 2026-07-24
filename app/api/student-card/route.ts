@@ -11,6 +11,14 @@ export async function GET(request:Request) {
     const owned=await database().prepare("SELECT id FROM students WHERE id=? AND lower(guardian_email)=lower(?)").bind(id,user.email).first();
     if(!owned) return Response.json({error:"Santri tidak terhubung dengan akun ini."},{status:403});
   }
-  const qr=await QRCode.toDataURL(JSON.stringify({app:"SINURMAN",id:student.id,nis:student.nis}),{width:320,margin:1,color:{dark:"#183153",light:"#ffffff"}});
-  return Response.json({student,qr});
+  const db=database();
+  let wallet=await db.prepare("SELECT card_token,status FROM wallet_accounts WHERE student_id=?").bind(id).first<{card_token:string;status:string}>();
+  if(!wallet) {
+    const token=`SNP-${crypto.randomUUID().replaceAll("-","").slice(0,20).toUpperCase()}`;
+    const now=new Date().toISOString();
+    await db.prepare("INSERT INTO wallet_accounts (student_id,card_token,balance,daily_limit,status,updated_at) VALUES (?,?,0,50000,'Aktif',?)").bind(id,token,now).run();
+    wallet={card_token:token,status:"Aktif"};
+  }
+  const qr=await QRCode.toDataURL(JSON.stringify({app:"SINURMAN",id:student.id,nis:student.nis,walletToken:wallet.card_token}),{width:320,margin:1,color:{dark:"#183153",light:"#ffffff"}});
+  return Response.json({student,qr,wallet:{status:wallet.status}});
 }

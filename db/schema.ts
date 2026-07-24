@@ -271,6 +271,60 @@ export const guardianRequests = sqliteTable("guardian_requests", {
   createdAt: text("created_at").notNull(),
 });
 
+export const walletAccounts = sqliteTable("wallet_accounts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().unique().references(() => students.id),
+  cardToken: text("card_token").notNull().unique(),
+  balance: integer("balance").notNull().default(0),
+  dailyLimit: integer("daily_limit").notNull().default(50000),
+  status: text("status").notNull().default("Aktif"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const walletEntries = sqliteTable("wallet_entries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  entryType: text("entry_type").notNull(),
+  amount: integer("amount").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  reference: text("reference").notNull(),
+  note: text("note").notNull(),
+  actorEmail: text("actor_email").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const canteenProducts = sqliteTable("canteen_products", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sku: text("sku").notNull().unique(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  price: integer("price").notNull(),
+  stock: integer("stock").notNull(),
+  status: text("status").notNull().default("Aktif"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const canteenSales = sqliteTable("canteen_sales", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  receiptNo: text("receipt_no").notNull().unique(),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  total: integer("total").notNull(),
+  status: text("status").notNull().default("Berhasil"),
+  cashierEmail: text("cashier_email").notNull(),
+  createdAt: text("created_at").notNull(),
+  reversedAt: text("reversed_at").notNull().default(""),
+});
+
+export const canteenSaleItems = sqliteTable("canteen_sale_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  saleId: integer("sale_id").notNull().references(() => canteenSales.id),
+  productId: integer("product_id").notNull().references(() => canteenProducts.id),
+  productName: text("product_name").notNull(),
+  quantity: integer("quantity").notNull(),
+  unitPrice: integer("unit_price").notNull(),
+  subtotal: integer("subtotal").notNull(),
+});
+
 export const auditLogs = sqliteTable("audit_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userEmail: text("user_email").notNull(),

@@ -37,6 +37,11 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS bills (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,invoice_no TEXT NOT NULL UNIQUE,category TEXT NOT NULL,amount INTEGER NOT NULL,due_date TEXT NOT NULL,status TEXT NOT NULL,payment_url TEXT NOT NULL,payment_method TEXT NOT NULL DEFAULT '',payment_reference TEXT NOT NULL DEFAULT '',paid_at TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS guardian_messages (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,sender_email TEXT NOT NULL,subject TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Baru',reply TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,replied_at TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS guardian_requests (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,requester_email TEXT NOT NULL,type TEXT NOT NULL,visit_date TEXT NOT NULL,start_time TEXT NOT NULL,end_time TEXT NOT NULL,purpose TEXT NOT NULL,visitor_name TEXT NOT NULL,visitor_phone TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Diajukan',qr_token TEXT NOT NULL UNIQUE,used_at TEXT NOT NULL DEFAULT '',approved_by TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS wallet_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL UNIQUE,card_token TEXT NOT NULL UNIQUE,balance INTEGER NOT NULL DEFAULT 0,daily_limit INTEGER NOT NULL DEFAULT 50000,status TEXT NOT NULL DEFAULT 'Aktif',updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS wallet_entries (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,entry_type TEXT NOT NULL,amount INTEGER NOT NULL,balance_after INTEGER NOT NULL,reference TEXT NOT NULL,note TEXT NOT NULL,actor_email TEXT NOT NULL,created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS canteen_products (id INTEGER PRIMARY KEY AUTOINCREMENT,sku TEXT NOT NULL UNIQUE,name TEXT NOT NULL,category TEXT NOT NULL,price INTEGER NOT NULL,stock INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'Aktif',updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS canteen_sales (id INTEGER PRIMARY KEY AUTOINCREMENT,receipt_no TEXT NOT NULL UNIQUE,student_id INTEGER NOT NULL,total INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'Berhasil',cashier_email TEXT NOT NULL,created_at TEXT NOT NULL,reversed_at TEXT NOT NULL DEFAULT '')",
+      "CREATE TABLE IF NOT EXISTS canteen_sale_items (id INTEGER PRIMARY KEY AUTOINCREMENT,sale_id INTEGER NOT NULL,product_id INTEGER NOT NULL,product_name TEXT NOT NULL,quantity INTEGER NOT NULL,unit_price INTEGER NOT NULL,subtotal INTEGER NOT NULL)",
       "CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,user_email TEXT NOT NULL,action TEXT NOT NULL,resource TEXT NOT NULL,record_id INTEGER,detail TEXT NOT NULL,created_at TEXT NOT NULL)",
     ];
     await db.batch(definitions.map((sql) => db.prepare(sql)));
@@ -177,6 +182,28 @@ export async function seedIfNeeded() {
       .bind("Masuk", "SPP", 750000, "Lunas", "SPP Juli 2026", now),
     db.prepare("INSERT INTO transactions (student_id, type, category, amount, status, note, recorded_at) VALUES (1, ?, ?, ?, ?, ?, ?)")
       .bind("Masuk", "Uang Saku", 500000, "Berhasil", "Top up wali santri", now),
+  ]);
+  const walletCount = await db.prepare("SELECT COUNT(*) AS total FROM wallet_accounts").first<{ total:number }>();
+  if (Number(walletCount?.total ?? 0) === 0) {
+    const studentRows = await db.prepare("SELECT id FROM students ORDER BY id").all<{ id:number }>();
+    await db.batch(studentRows.results.flatMap((student) => {
+      const token = `SNP-${crypto.randomUUID().replaceAll("-","").slice(0,20).toUpperCase()}`;
+      return [
+        db.prepare("INSERT INTO wallet_accounts (student_id,card_token,balance,daily_limit,status,updated_at) VALUES (?,?,?,?,?,?)")
+          .bind(student.id,token,student.id===1?350000:150000,50000,"Aktif",now),
+        db.prepare("INSERT INTO wallet_entries (student_id,entry_type,amount,balance_after,reference,note,actor_email,created_at) VALUES (?,?,?,?,?,?,?,?)")
+          .bind(student.id,"Setoran",student.id===1?350000:150000,student.id===1?350000:150000,`SEED-${student.id}`,"Saldo awal tabungan santri","system@sinurman.id",now),
+      ];
+    }));
+  }
+  const productCount = await db.prepare("SELECT COUNT(*) AS total FROM canteen_products").first<{ total:number }>();
+  if (Number(productCount?.total ?? 0) === 0) await db.batch([
+    db.prepare("INSERT INTO canteen_products (sku,name,category,price,stock,status,updated_at) VALUES (?,?,?,?,?,?,?)").bind("KTN-001","Air Mineral","Minuman",3000,120,"Aktif",now),
+    db.prepare("INSERT INTO canteen_products (sku,name,category,price,stock,status,updated_at) VALUES (?,?,?,?,?,?,?)").bind("KTN-002","Susu Kotak","Minuman",7000,65,"Aktif",now),
+    db.prepare("INSERT INTO canteen_products (sku,name,category,price,stock,status,updated_at) VALUES (?,?,?,?,?,?,?)").bind("KTN-003","Roti Cokelat","Makanan",6000,48,"Aktif",now),
+    db.prepare("INSERT INTO canteen_products (sku,name,category,price,stock,status,updated_at) VALUES (?,?,?,?,?,?,?)").bind("KTN-004","Nasi Ayam","Makanan",15000,35,"Aktif",now),
+    db.prepare("INSERT INTO canteen_products (sku,name,category,price,stock,status,updated_at) VALUES (?,?,?,?,?,?,?)").bind("KTN-005","Buku Tulis","Alat Tulis",5000,80,"Aktif",now),
+    db.prepare("INSERT INTO canteen_products (sku,name,category,price,stock,status,updated_at) VALUES (?,?,?,?,?,?,?)").bind("KTN-006","Pulpen","Alat Tulis",3000,95,"Aktif",now),
   ]);
   if (Number(count?.total ?? 0) === 0) await db.batch([
     db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at) VALUES (?, ?, ?, ?, ?, ?)")

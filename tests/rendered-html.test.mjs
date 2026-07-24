@@ -309,3 +309,42 @@ test("master Al-Quran berisi 114 surat dan memvalidasi rentang lintas surat", as
   assert.match(quran, /end<start/);
   assert.match(quran, /amount\+=QURAN_SURAHS\[index\]\.verses/);
 });
+
+test("SINURPAY menyediakan buku tabungan, kasir barcode, stok, limit, dan audit", async () => {
+  const [dashboard, route, card, bootstrap, migration] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/sinurpay/route.ts"),
+    file("app/api/student-card/route.ts"),
+    file("app/api/bootstrap/route.ts"),
+    file("drizzle/0009_sinurpay.sql"),
+  ]);
+  for (const feature of ["Kasir Kantin","Buku Tabungan","Produk & Stok","Transaksi & Laporan","Scan kartu santri"]) {
+    assert.match(dashboard, new RegExp(feature.replace("&",".")));
+  }
+  for (const table of ["wallet_accounts","wallet_entries","canteen_products","canteen_sales","canteen_sale_items"]) {
+    assert.match(route, new RegExp(table));
+    assert.match(migration, new RegExp(`CREATE TABLE .${table}.`));
+  }
+  assert.match(route, /Saldo tidak cukup/);
+  assert.match(route, /Melebihi limit harian/);
+  assert.match(route, /Stok salah satu produk tidak mencukupi/);
+  assert.match(route, /reverse-sale/);
+  assert.match(route, /notifyGuardian/);
+  assert.match(route, /user\.role!=="Admin"/);
+  assert.match(card, /walletToken/);
+  assert.match(bootstrap, /lower\(s\.guardian_email\)=\?/);
+});
+
+test("portal wali menampilkan saldo dan mutasi SINURPAY milik santri terhubung", async () => {
+  const [dashboard, bootstrap, route] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/bootstrap/route.ts"),
+    file("app/api/sinurpay/route.ts"),
+  ]);
+  assert.match(dashboard, /Saldo SINURPAY/);
+  assert.match(dashboard, /Buku Tabungan & Belanja Kantin/);
+  assert.match(bootstrap, /walletEntries/);
+  assert.match(bootstrap, /canteenSales/);
+  assert.match(route, /lower\(s\.guardian_email\)=lower\(\?\)/);
+  assert.doesNotMatch(route, /guardian.*card_token/);
+});
