@@ -186,14 +186,10 @@ export async function seedIfNeeded() {
   const walletCount = await db.prepare("SELECT COUNT(*) AS total FROM wallet_accounts").first<{ total:number }>();
   if (Number(walletCount?.total ?? 0) === 0) {
     const studentRows = await db.prepare("SELECT id FROM students ORDER BY id").all<{ id:number }>();
-    await db.batch(studentRows.results.flatMap((student) => {
+    await db.batch(studentRows.results.map((student) => {
       const token = `SNP-${crypto.randomUUID().replaceAll("-","").slice(0,20).toUpperCase()}`;
-      return [
-        db.prepare("INSERT INTO wallet_accounts (student_id,card_token,balance,daily_limit,status,updated_at) VALUES (?,?,?,?,?,?)")
-          .bind(student.id,token,student.id===1?350000:150000,50000,"Aktif",now),
-        db.prepare("INSERT INTO wallet_entries (student_id,entry_type,amount,balance_after,reference,note,actor_email,created_at) VALUES (?,?,?,?,?,?,?,?)")
-          .bind(student.id,"Setoran",student.id===1?350000:150000,student.id===1?350000:150000,`SEED-${student.id}`,"Saldo awal tabungan santri","system@sinurman.id",now),
-      ];
+      return db.prepare("INSERT INTO wallet_accounts (student_id,card_token,balance,daily_limit,status,updated_at) VALUES (?,?,0,50000,?,?)")
+        .bind(student.id,token,"Aktif",now);
     }));
   }
   const productCount = await db.prepare("SELECT COUNT(*) AS total FROM canteen_products").first<{ total:number }>();
