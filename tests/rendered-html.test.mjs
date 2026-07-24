@@ -233,6 +233,24 @@ test("portal internal memakai login ChatGPT dan halaman PPDB tetap publik", asyn
   assert.doesNotMatch(lib, /admin@sinurman\.local/);
 });
 
+test("portal wali memiliki halaman masuk khusus dan pengunci akses anak", async () => {
+  const [guardianLogin, dashboard, bootstrap, ppdb] = await Promise.all([
+    file("app/wali/page.tsx"),
+    file("app/dashboard-client.tsx"),
+    file("app/api/bootstrap/route.ts"),
+    file("app/ppdb/page.tsx"),
+  ]);
+  assert.match(guardianLogin, /Masuk ke Portal Wali/);
+  assert.match(guardianLogin, /Email akun wali/);
+  assert.match(guardianLogin, /signin-with-chatgpt\?return_to=%2F/);
+  assert.match(guardianLogin, /getChatGPTUser/);
+  assert.match(dashboard, /role==="Wali Santri"&&key!=="portalwali"/);
+  assert.match(dashboard, /hanya dapat membuka laporan anak di Portal Wali/);
+  assert.match(dashboard, /Buka & Bagikan Portal Wali/);
+  assert.match(bootstrap, /lower\(s\.guardian_email\)=\?/);
+  assert.match(ppdb, /href="\/wali">Masuk Portal Wali/);
+});
+
 test("Musyrif dan Kepala Asrama dibatasi modul serta kamar penugasan", async () => {
   const [page, lib, bootstrap, records, migration] = await Promise.all([
     file("app/dashboard-client.tsx"),

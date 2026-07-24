@@ -779,3 +779,71 @@ h4 {
   .page-footer>span { max-width:170px; }.page-footer div button:first-child { display:none; }
   .form-grid { grid-template-columns:1fr; }.form-grid label.wide { grid-column:auto; }.record-modal { padding:24px 19px; }.row-actions { min-width:70px; }
 }
+
+/* Public guardian access */
+.guardian-login-page { min-height:100vh; color:#26364a; background:#f4f7fb; }
+.guardian-login-header { min-height:72px; display:flex; align-items:center; justify-content:space-between; gap:20px; padding:14px clamp(22px,7vw,110px); border-bottom:1px solid #e0e8f0; background:#fff; }
+.guardian-login-brand { display:flex; align-items:center; gap:11px; color:#183153; text-decoration:none; }
+.guardian-login-brand>span { width:40px; height:40px; display:grid; place-items:center; border-radius:11px; color:#fff; background:linear-gradient(135deg,#183153,#2c7be5); box-shadow:0 7px 18px rgba(44,123,229,.22); font-size:20px; }
+.guardian-login-brand>div { display:flex; flex-direction:column; }
+.guardian-login-brand strong { font-size:14px; letter-spacing:.7px; }
+.guardian-login-brand small { margin-top:2px; color:#8191a4; font-size:9px!important; }
+.guardian-login-hero { min-height:590px; display:grid; grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr); align-items:center; gap:70px; padding:64px clamp(24px,8vw,130px); background:radial-gradient(circle at 82% 14%,rgba(44,123,229,.14),transparent 30%),linear-gradient(140deg,#f8fbff,#eef4fb); }
+.guardian-login-copy { max-width:700px; }
+.guardian-login-eyebrow,.guardian-login-guide>span { color:#2c7be5; font-size:10px; font-weight:800; letter-spacing:1.25px; }
+.guardian-login-copy h1 { max-width:650px; margin:14px 0 20px; color:#183153; font-size:clamp(39px,5.5vw,66px)!important; line-height:1.04; letter-spacing:-2.5px; }
+.guardian-login-copy>p { max-width:630px; margin:0; color:#65778b; font-size:14px; line-height:1.75; }
+.guardian-login-actions { display:flex; align-items:center; gap:17px; margin-top:28px; }
+.guardian-login-primary { min-height:45px; padding:0 20px; }
+.guardian-login-actions small { max-width:250px; color:#7a8b9f; }
+.guardian-login-session { width:min(490px,100%); display:grid; grid-template-columns:1fr auto; align-items:center; gap:3px 20px; margin-top:28px; padding:17px 18px; border:1px solid #d9e5f0; border-radius:13px; background:#fff; box-shadow:0 12px 32px rgba(24,49,83,.08); }
+.guardian-login-session span,.guardian-login-session small { color:#7d8da0; font-size:10px!important; }
+.guardian-login-session strong { color:#183153; font-size:13px; }
+.guardian-login-session .primary-button { grid-column:2; grid-row:1/4; }
+.guardian-security-note { display:flex; align-items:center; gap:10px; max-width:600px; margin-top:22px; }
+.guardian-security-note>span { width:27px; height:27px; flex:0 0 27px; display:grid; place-items:center; border-radius:50%; color:#008e68; background:#dff6ee; font-weight:800; }
+.guardian-security-note p { margin:0; color:#6e8094; font-size:11px; line-height:1.55; }
+.guardian-login-guide { padding:31px; border:1px solid rgba(255,255,255,.16); border-radius:18px; color:#fff; background:linear-gradient(145deg,#142f4e,#1d4e7d 65%,#276fb0); box-shadow:0 28px 60px rgba(24,49,83,.23); }
+.guardian-login-guide>span { color:#7ed8bb; }
+.guardian-login-guide h2 { margin:8px 0 23px; color:#fff; font-size:23px!important; }
+.guardian-login-guide ol { display:flex; flex-direction:column; gap:0; margin:0; padding:0; list-style:none; }
+.guardian-login-guide li { display:grid; grid-template-columns:35px 1fr; gap:13px; padding:16px 0; border-top:1px solid rgba(255,255,255,.12); }
+.guardian-login-guide li>b { width:32px; height:32px; display:grid; place-items:center; border-radius:50%; color:#215b91; background:#fff; font-size:11px; }
+.guardian-login-guide li strong { display:block; font-size:12px; }
+.guardian-login-guide li p { margin:5px 0 0; color:rgba(255,255,255,.67); font-size:10px; line-height:1.55; }
+.guardian-login-help { margin-top:16px; padding:16px; border-radius:11px; color:#2d4258; background:#fff; }
+.guardian-login-help strong { font-size:11px; }
+.guardian-login-help p { margin:5px 0 0; color:#6c7e91; font-size:9px; line-height:1.55; }
+.guardian-login-help code { display:block; margin-top:9px; padding:7px 9px; border-radius:6px; color:#2c7be5; background:#edf4fd; font-size:9px; word-break:break-all; }
+.guardian-login-features { width:min(1120px,calc(100% - 32px)); display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:-28px auto 48px; position:relative; }
+.guardian-login-features article { display:flex; align-items:center; gap:14px; min-height:105px; padding:20px; border:1px solid #e0e7ef; border-radius:14px; background:#fff; box-shadow:0 15px 36px rgba(24,49,83,.08); }
+.guardian-login-features i { width:42px; height:42px; flex:0 0 42px; display:grid; place-items:center; border-radius:11px; color:#2c7be5; background:#eaf2fd; font-size:12px; font-style:normal; font-weight:800; }
+.guardian-login-features strong { color:#183153; font-size:12px; }
+.guardian-login-features p { margin:5px 0 0; color:#7a899a; font-size:9px; line-height:1.5; }
+.guardian-login-footer { padding:25px; color:#8392a4; font-size:9px; text-align:center; }
+.guardian-access-admin { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:16px; padding:20px 22px; border-left:4px solid #2c7be5; }
+.guardian-access-admin>div { max-width:760px; }
+.guardian-access-admin span { color:#2c7be5; font-size:9px; font-weight:800; letter-spacing:1px; }
+.guardian-access-admin h3 { margin:5px 0; color:var(--navy); }
+.guardian-access-admin p { margin:0; color:var(--muted); font-size:11px; line-height:1.55; }
+.guardian-empty .link-button { margin-top:15px; }
+
+@media (max-width:900px) {
+  .guardian-login-hero { grid-template-columns:1fr; gap:40px; padding-top:48px; padding-bottom:70px; }
+  .guardian-login-copy { max-width:none; }
+  .guardian-login-guide { width:min(600px,100%); box-sizing:border-box; }
+}
+
+@media (max-width:650px) {
+  .guardian-login-header { align-items:flex-start; padding:13px 16px; }
+  .guardian-login-header>.secondary-button { max-width:155px; min-height:38px; padding:8px 11px; text-align:center; }
+  .guardian-login-brand small { max-width:145px; }
+  .guardian-login-hero { padding:42px 18px 65px; }
+  .guardian-login-copy h1 { font-size:39px!important; letter-spacing:-1.5px; }
+  .guardian-login-actions { align-items:flex-start; flex-direction:column; }
+  .guardian-login-session { grid-template-columns:1fr; }
+  .guardian-login-session .primary-button { grid-column:1; grid-row:auto; margin-top:9px; }
+  .guardian-login-guide { padding:24px 20px; }
+  .guardian-login-features { grid-template-columns:1fr; margin-top:-25px; }
+  .guardian-access-admin { align-items:flex-start; flex-direction:column; }
+}
