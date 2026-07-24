@@ -293,6 +293,29 @@ export const walletEntries = sqliteTable("wallet_entries", {
   createdAt: text("created_at").notNull(),
 });
 
+export const walletTopups = sqliteTable("wallet_topups", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  topupNo: text("topup_no").notNull().unique(),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  amount: integer("amount").notNull(),
+  method: text("method").notNull(),
+  provider: text("provider").notNull(),
+  status: text("status").notNull().default("Menunggu Pembayaran"),
+  paymentUrl: text("payment_url").notNull().default(""),
+  paymentReference: text("payment_reference").notNull().default(""),
+  createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  paidAt: text("paid_at").notNull().default(""),
+});
+
+export const walletTopupSettlements = sqliteTable("wallet_topup_settlements", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  topupId: integer("topup_id").notNull().unique().references(() => walletTopups.id),
+  reference: text("reference").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 export const canteenProducts = sqliteTable("canteen_products", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   sku: text("sku").notNull().unique(),

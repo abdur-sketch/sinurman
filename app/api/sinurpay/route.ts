@@ -58,8 +58,13 @@ async function getPayload(user:{email:string;role:string}) {
     ? db.prepare(`SELECT c.*,s.name AS student_name,s.nis FROM canteen_sales c JOIN students s ON s.id=c.student_id
                   WHERE lower(s.guardian_email)=lower(?) ORDER BY c.id DESC LIMIT 100`).bind(user.email)
     : db.prepare(`SELECT c.*,s.name AS student_name,s.nis FROM canteen_sales c JOIN students s ON s.id=c.student_id ORDER BY c.id DESC LIMIT 150`);
-  const [accounts,entries,sales,products,items]=await Promise.all([
-    accountQuery.all(),entryQuery.all(),saleQuery.all(),
+  const topupQuery=guardian
+    ? db.prepare(`SELECT t.*,s.name AS student_name,s.nis FROM wallet_topups t JOIN students s ON s.id=t.student_id
+                  WHERE lower(s.guardian_email)=lower(?) ORDER BY t.id DESC LIMIT 100`).bind(user.email)
+    : db.prepare(`SELECT t.*,s.name AS student_name,s.nis FROM wallet_topups t JOIN students s ON s.id=t.student_id ORDER BY t.id DESC LIMIT 200`);
+  const [accounts,entries,topups,sales,products,items]=await Promise.all([
+    accountQuery.all(),entryQuery.all(),topupQuery.all(),
+    saleQuery.all(),
     db.prepare("SELECT * FROM canteen_products ORDER BY status DESC,category,name").all(),
     guardian
       ? db.prepare(`SELECT i.* FROM canteen_sale_items i JOIN canteen_sales c ON c.id=i.sale_id JOIN students s ON s.id=c.student_id
@@ -71,6 +76,7 @@ async function getPayload(user:{email:string;role:string}) {
   return {
     accounts:accounts.results,
     entries:entries.results,
+    topups:topups.results,
     products:products.results,
     sales:sales.results,
     saleItems:items.results,

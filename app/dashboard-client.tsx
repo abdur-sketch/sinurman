@@ -34,6 +34,7 @@ type AppData = {
   guardianRequests: Row[];
   walletAccounts: Row[];
   walletEntries: Row[];
+  walletTopups: Row[];
   canteenProducts: Row[];
   canteenSales: Row[];
   canteenSaleItems: Row[];
@@ -53,7 +54,7 @@ const emptyData: AppData = {
   inventory: [], announcements: [], notifications: [],
   attendance: [], subjects: [], grades: [], permits: [], schedules: [], rooms: [], admissions: [], admissionDocuments: [],
   counseling: [], bills: [], users: [], audit: [], guardianMessages: [], guardianRequests: [],
-  walletAccounts: [], walletEntries: [], canteenProducts: [], canteenSales: [], canteenSaleItems: [],
+  walletAccounts: [], walletEntries: [], walletTopups: [], canteenProducts: [], canteenSales: [], canteenSaleItems: [],
 };
 type PageKey =
   | "dashboard"
@@ -343,6 +344,7 @@ function HealthPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () 
 type SinurpayPayload = {
   accounts:Row[];
   entries:Row[];
+  topups:Row[];
   products:Row[];
   sales:Row[];
   saleItems:Row[];
@@ -350,7 +352,7 @@ type SinurpayPayload = {
 };
 
 function SinurpayPage({ notify }: { notify:(message:string)=>void }) {
-  const [data,setData]=useState<SinurpayPayload>({accounts:[],entries:[],products:[],sales:[],saleItems:[],stats:{totalBalance:0,todayRevenue:0,todayTransactions:0,lowStock:0}});
+  const [data,setData]=useState<SinurpayPayload>({accounts:[],entries:[],topups:[],products:[],sales:[],saleItems:[],stats:{totalBalance:0,todayRevenue:0,todayTransactions:0,lowStock:0}});
   const [tab,setTab]=useState<"cashier"|"savings"|"products"|"reports">("cashier");
   const [loading,setLoading]=useState(true);
   const [working,setWorking]=useState(false);
@@ -449,6 +451,18 @@ function SinurpayPage({ notify }: { notify:(message:string)=>void }) {
     catch(error) { notify(error instanceof Error?error.message:"Pembatalan gagal."); }
   }
 
+  async function verifyTopup(topup:Row) {
+    if(!window.confirm(`Verifikasi transfer ${topup.topup_no} sebesar Rp${money.format(Number(topup.amount))}?`)) return;
+    setWorking(true);
+    try {
+      const response=await fetch("/api/sinurpay/topup",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"verify",topupId:Number(topup.id)})});
+      const result=await response.json() as {error?:string};
+      if(!response.ok) throw new Error(result.error||"Verifikasi gagal.");
+      notify("Top-up terverifikasi dan saldo santri bertambah.");await load();
+    } catch(error) { notify(error instanceof Error?error.message:"Verifikasi gagal."); }
+    finally { setWorking(false); }
+  }
+
   return <div className="sinurpay-page">
     <section className="sinurpay-hero">
       <div><span>SINURPAY · KANTIN CASHLESS</span><h2>Belanja aman tanpa uang tunai.</h2><p>Scan kartu santri, proses pembayaran, dan pantau buku tabungan dalam satu sistem.</p></div>
@@ -498,6 +512,7 @@ function SinurpayPage({ notify }: { notify:(message:string)=>void }) {
       </form>
       <article className="card data-card wallet-accounts"><header className="card-header"><div><h3>Rekening Santri</h3><p>Saldo, limit harian, dan status kartu</p></div></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Saldo</th><th>Limit Harian</th><th>Kartu</th><th /></tr></thead><tbody>{data.accounts.map(account=><tr key={String(account.id)}><td><strong>{account.student_name}</strong><small className="cell-note">{account.nis} · {account.class_name}</small></td><td><strong>Rp{money.format(Number(account.balance))}</strong></td><td>Rp{money.format(Number(account.daily_limit))}</td><td><Status tone={account.status==="Aktif"?"green":"red"}>{account.status}</Status></td><td><button className="text-button" onClick={()=>void updateAccount(account)}>Atur</button></td></tr>)}</tbody></table></div></article>
       <article className="card data-card wallet-ledger"><header className="card-header"><div><h3>Mutasi Terbaru</h3><p>Jejak saldo yang tidak dapat diedit langsung</p></div></header><div className="portal-list">{data.entries.slice(0,12).map(entry=><div key={String(entry.id)}><div><strong>{entry.student_name} · {entry.entry_type}</strong><small>{entry.reference} · {String(entry.created_at).slice(0,16).replace("T"," ")}<br/>{entry.note}</small></div><b className={Number(entry.amount)>=0?"amount-in":"amount-out"}>{Number(entry.amount)>=0?"+":"−"}Rp{money.format(Math.abs(Number(entry.amount)))}</b><small>Saldo Rp{money.format(Number(entry.balance_after))}</small></div>)}</div></article>
+      <article className="card data-card wallet-ledger"><header className="card-header"><div><h3>Top-up Wali Santri</h3><p>QRIS terverifikasi otomatis; transfer bank dapat dikonfirmasi Admin</p></div></header><div className="table-wrap"><table><thead><tr><th>Referensi</th><th>Santri</th><th>Metode</th><th>Nominal</th><th>Status</th><th /></tr></thead><tbody>{data.topups.map(topup=><tr key={String(topup.id)}><td className="muted">{topup.topup_no}</td><td><strong>{topup.student_name}</strong></td><td>{topup.provider||topup.method}</td><td>Rp{money.format(Number(topup.amount))}</td><td><Status tone={topup.status==="Berhasil"?"green":"amber"}>{topup.status}</Status></td><td>{topup.status==="Menunggu Verifikasi"&&<button className="text-button" disabled={working} onClick={()=>void verifyTopup(topup)}>Verifikasi</button>}</td></tr>)}</tbody></table></div></article>
     </section>}
 
     {tab==="products"&&<section className="sinurpay-management">
@@ -819,11 +834,34 @@ function GuardianActionModal({ type, student, onClose, onDone }: { type:"contact
   </form></div>;
 }
 
+function WalletTopupModal({ student, onClose, onDone }: { student:Row; onClose:()=>void; onDone:(message:string)=>Promise<void> }) {
+  const [amount,setAmount]=useState("50000");
+  const [method,setMethod]=useState("QRIS");
+  const [saving,setSaving]=useState(false);
+  const [error,setError]=useState("");
+  const [payment,setPayment]=useState<{topupNo:string;amount:number;provider:string;status:string;paymentUrl?:string;qrDataUrl?:string;bank?:{name:string;number:string;holder:string}|null}|null>(null);
+  async function submit(event:React.FormEvent) {
+    event.preventDefault();setSaving(true);setError("");
+    try {
+      const response=await fetch("/api/sinurpay/topup",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({studentId:Number(student.id),amount:Number(amount),method})});
+      const result=await response.json() as NonNullable<typeof payment>&{error?:string};
+      if(!response.ok) throw new Error(result.error||"Top-up gagal dibuat.");
+      setPayment(result);await onDone("Permintaan top-up berhasil dibuat.");
+    } catch(caught) { setError(caught instanceof Error?caught.message:"Top-up gagal dibuat."); }
+    finally { setSaving(false); }
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal topup-modal" role="dialog" aria-modal="true" onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">TOP-UP SINURPAY</span><h2>Tambah saldo {student.name}</h2><p>Saldo hanya bertambah setelah pembayaran diterima dan diverifikasi.</p>
+    {!payment?<form onSubmit={submit}><div className="form-grid"><label>Nominal top-up<input required min="10000" max="5000000" step="1000" type="number" value={amount} onChange={event=>setAmount(event.target.value)}/></label><label>Metode pembayaran<select value={method} onChange={event=>setMethod(event.target.value)}><option>QRIS</option><option>Transfer Bank</option></select></label></div>{error&&<div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button disabled={saving} className="primary-button">{saving?"Menyiapkan…":"Buat Top-up"}</button></div></form>
+    :<div className="topup-payment"><Status tone="amber">{payment.status}</Status><h3>Rp{money.format(payment.amount)}</h3><code>{payment.topupNo}</code>{payment.qrDataUrl&&<img src={payment.qrDataUrl} alt={`QRIS ${payment.topupNo}`}/>} {payment.bank&&<dl><div><dt>Bank</dt><dd>{payment.bank.name}</dd></div><div><dt>Nomor rekening</dt><dd>{payment.bank.number}</dd></div><div><dt>Atas nama</dt><dd>{payment.bank.holder}</dd></div></dl>}<p>{payment.paymentUrl?"Scan QR atau buka halaman pembayaran. Saldo masuk otomatis setelah webhook terverifikasi.":"Transfer sesuai nominal, lalu tunggu verifikasi Admin."}</p><div className="modal-actions">{payment.paymentUrl&&<a className="primary-button link-button" href={payment.paymentUrl} target="_blank" rel="noreferrer">Buka Pembayaran</a>}<button className="secondary-button" onClick={onClose}>Tutup</button></div></div>}
+  </div></div>;
+}
+
 function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppData; onCard:(row:Row)=>void; onPayment:(row:Row)=>void; reload:()=>Promise<void>; notify:(message:string)=>void }) {
   const [selectedId,setSelectedId]=useState(String(data.students[0]?.id??""));
   const [day,setDay]=useState(()=>{const current=new Intl.DateTimeFormat("id-ID",{weekday:"long"}).format(new Date());return current==="Minggu"?"Senin":current;});
   const [action,setAction]=useState<"contact"|"permit"|null>(null);
   const [requestOpen,setRequestOpen]=useState(false);
+  const [topupOpen,setTopupOpen]=useState(false);
   const [qrRequest,setQrRequest]=useState<Row|null>(null);
   const student=data.students.find(x=>String(x.id)===selectedId)??data.students[0];
   if(!student) return <div className="empty-state guardian-empty"><b>Belum ada santri yang terhubung</b><span>Minta Admin mengisi “Email akun wali” pada data santri menggunakan email akun Anda: {data.user?.email}</span></div>;
@@ -843,7 +881,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
 
   return <div className="guardian-portal">
     {data.students.length>1&&<section className="student-switcher card"><span>Pilih santri</span>{data.students.map(x=><button key={String(x.id)} className={String(x.id)===String(student.id)?"active":""} onClick={()=>setSelectedId(String(x.id))}>{x.name}<small>{x.class_name}</small></button>)}</section>}
-    <section className="guardian-hero"><div className="large-avatar">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><span>PORTAL WALI SANTRI · DATA TERLINDUNGI</span><h2>{student.name}</h2><p>{student.nis} · {student.class_name} · {student.room}</p></div><div className="header-actions"><button className="secondary-button" onClick={()=>onCard(student)}>Kartu QR</button><button className="secondary-button" onClick={()=>setAction("permit")}>Ajukan Izin</button><button className="secondary-button" onClick={()=>setRequestOpen(true)}>Kunjungan / Jemput</button><button className="primary-button" onClick={()=>setAction("contact")}>Hubungi Pesantren</button></div></section>
+    <section className="guardian-hero"><div className="large-avatar">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><span>PORTAL WALI SANTRI · DATA TERLINDUNGI</span><h2>{student.name}</h2><p>{student.nis} · {student.class_name} · {student.room}</p></div><div className="header-actions"><button className="primary-button" onClick={()=>setTopupOpen(true)}>+ Top Up Saldo</button><button className="secondary-button" onClick={()=>onCard(student)}>Kartu QR</button><button className="secondary-button" onClick={()=>setAction("permit")}>Ajukan Izin</button><button className="secondary-button" onClick={()=>setRequestOpen(true)}>Kunjungan / Jemput</button><button className="secondary-button" onClick={()=>setAction("contact")}>Hubungi Pesantren</button></div></section>
     <section className="stats-grid four guardian-stats">
       <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Kehadiran</span><strong>{attendanceRate}%</strong><small>{attendance.filter(x=>x.status==="Hadir").length} dari {attendance.length} catatan</small></div></article>
       <article className="metric-card"><MiniIcon tone="blue">◫</MiniIcon><div><span>Setoran Tahfidz</span><strong>{tahfidz.length}</strong><small>{tahfidz[0]?`Terakhir ${tahfidzRange(tahfidz[0])}`:"Belum ada setoran"}</small></div></article>
@@ -867,6 +905,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
     {action&&<GuardianActionModal type={action} student={student} onClose={()=>setAction(null)} onDone={done} />}
     {requestOpen&&<GuardianRequestModal student={student} onClose={()=>setRequestOpen(false)} onDone={done}/>}
     {qrRequest&&<GuardianRequestQrModal request={qrRequest} onClose={()=>setQrRequest(null)}/>}
+    {topupOpen&&<WalletTopupModal student={student} onClose={()=>setTopupOpen(false)} onDone={done}/>}
   </div>;
 }
 

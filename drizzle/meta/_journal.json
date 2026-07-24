@@ -64,6 +64,20 @@
       "when": 1784874904072,
       "tag": "0009_sinurpay",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1784875909759,
+      "tag": "0010_sinurpay_topup",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1784875968900,
+      "tag": "0011_sinurpay_settlement",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { database } from "../../_lib";
 import { notifyGuardian } from "../../_notifications";
+import { settleWalletTopup } from "../../sinurpay/_topup";
 
 async function sha512(value:string) {
   const hash=await crypto.subtle.digest("SHA-512",new TextEncoder().encode(value));
@@ -46,6 +47,10 @@ export async function POST(request:Request) {
   const paid=["settlement","capture","paid","completed","payment.succeeded","payment_session.completed"].some(x=>status.includes(x));
   if(!invoice) return Response.json({error:"Referensi pembayaran tidak ditemukan."},{status:400});
   if(!paid) return Response.json({ok:true,ignored:true});
-  const found=await settle(invoice,isMidtrans?"Midtrans QRIS":isXendit?"Xendit QRIS":"Rekonsiliasi",String(payload.transaction_id||payload.payment_id||payload.id||invoice));
+  const method=isMidtrans?"Midtrans QRIS":isXendit?"Xendit QRIS":"Rekonsiliasi";
+  const reference=String(payload.transaction_id||payload.payment_id||payload.id||invoice);
+  const found=invoice.startsWith("TOP-")
+    ? await settleWalletTopup(invoice,method,reference)
+    : await settle(invoice,method,reference);
   return Response.json({ok:true,found});
 }

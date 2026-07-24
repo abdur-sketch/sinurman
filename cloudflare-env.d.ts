@@ -9,5 +9,8 @@ declare namespace Cloudflare {
     WHATSAPP_TOKEN?: string;
     WHATSAPP_PHONE_NUMBER_ID?: string;
     PAYMENT_WEBHOOK_SECRET?: string;
+    BANK_NAME?: string;
+    BANK_ACCOUNT_NUMBER?: string;
+    BANK_ACCOUNT_HOLDER?: string;
   }
 }

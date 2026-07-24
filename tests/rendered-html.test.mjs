@@ -348,3 +348,26 @@ test("portal wali menampilkan saldo dan mutasi SINURPAY milik santri terhubung",
   assert.match(route, /lower\(s\.guardian_email\)=lower\(\?\)/);
   assert.doesNotMatch(route, /guardian.*card_token/);
 });
+
+test("top-up SINURPAY memakai payment gateway, webhook idempoten, dan isolasi wali", async () => {
+  const [dashboard, topup, settlement, webhook, runtime, migration, guardMigration] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/sinurpay/topup/route.ts"),
+    file("app/api/sinurpay/_topup.ts"),
+    file("app/api/payments/webhook/route.ts"),
+    file("app/api/_lib.ts"),
+    file("drizzle/0010_sinurpay_topup.sql"),
+    file("drizzle/0011_sinurpay_settlement.sql"),
+  ]);
+  assert.match(dashboard, /Top Up Saldo/);
+  assert.match(dashboard, /QRIS/);
+  assert.match(topup, /String\(student\.guardian_email\)\.toLowerCase\(\)!==user\.email\.toLowerCase\(\)/);
+  assert.match(topup, /MIDTRANS_SERVER_KEY/);
+  assert.match(topup, /XENDIT_API_KEY/);
+  assert.match(webhook, /invoice\.startsWith\("TOP-"\)/);
+  assert.match(settlement, /wallet_topup_settlements/);
+  assert.match(settlement, /UPDATE wallet_accounts SET balance/);
+  assert.match(runtime, /CREATE TABLE IF NOT EXISTS wallet_topups/);
+  assert.match(migration, /CREATE TABLE `wallet_topups`/);
+  assert.match(guardMigration, /UNIQUE INDEX `wallet_topup_settlements_topup_id_unique`/);
+});

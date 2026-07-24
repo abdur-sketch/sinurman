@@ -48,6 +48,7 @@ export async function GET(request: Request) {
       guardianRequests,
       walletAccounts,
       walletEntries,
+      walletTopups,
       canteenProducts,
       canteenSales,
       canteenSaleItems,
@@ -148,6 +149,10 @@ export async function GET(request: Request) {
         ? owned("SELECT e.*,s.name AS student_name FROM wallet_entries e JOIN students s ON s.id=e.student_id WHERE lower(s.guardian_email)=? ORDER BY e.id DESC LIMIT 100")
         : staff ? all("SELECT * FROM wallet_entries WHERE 1=0")
         : all("SELECT e.*,s.name AS student_name FROM wallet_entries e JOIN students s ON s.id=e.student_id ORDER BY e.id DESC LIMIT 200"),
+      guardian
+        ? owned("SELECT t.*,s.name AS student_name,s.nis FROM wallet_topups t JOIN students s ON s.id=t.student_id WHERE lower(s.guardian_email)=? ORDER BY t.id DESC LIMIT 100")
+        : staff ? all("SELECT * FROM wallet_topups WHERE 1=0")
+        : all("SELECT t.*,s.name AS student_name,s.nis FROM wallet_topups t JOIN students s ON s.id=t.student_id ORDER BY t.id DESC LIMIT 200"),
       guardian || staff
         ? all("SELECT * FROM canteen_products WHERE 1=0")
         : all("SELECT * FROM canteen_products ORDER BY category,name"),
@@ -188,6 +193,7 @@ export async function GET(request: Request) {
       guardianRequests: guardianRequests.results,
       walletAccounts: walletAccounts.results,
       walletEntries: walletEntries.results,
+      walletTopups: walletTopups.results,
       canteenProducts: canteenProducts.results,
       canteenSales: canteenSales.results,
       canteenSaleItems: canteenSaleItems.results,
