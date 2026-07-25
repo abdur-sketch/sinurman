@@ -1,7 +1,16 @@
 import { env } from "cloudflare:workers";
 
 export type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
+export type AuthenticatedUser = {
+  id: number;
+  email: string;
+  name: string;
+  role: Role;
+  roomScope: string;
+  guardianPhone?: string;
+};
 const ownerEmail = "baikganteng88@gmail.com";
+const guardianCookieName = "sinurman_wali_session";
 
 export function database() {
   if (!env.DB) throw new Error("Database SINURMAN belum tersedia.");
@@ -45,6 +54,10 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS canteen_sales (id INTEGER PRIMARY KEY AUTOINCREMENT,receipt_no TEXT NOT NULL UNIQUE,student_id INTEGER NOT NULL,total INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'Berhasil',cashier_email TEXT NOT NULL,created_at TEXT NOT NULL,reversed_at TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS canteen_sale_items (id INTEGER PRIMARY KEY AUTOINCREMENT,sale_id INTEGER NOT NULL,product_id INTEGER NOT NULL,product_name TEXT NOT NULL,quantity INTEGER NOT NULL,unit_price INTEGER NOT NULL,subtotal INTEGER NOT NULL)",
       "CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,user_email TEXT NOT NULL,action TEXT NOT NULL,resource TEXT NOT NULL,record_id INTEGER,detail TEXT NOT NULL,created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS guardian_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT NOT NULL UNIQUE,pin_hash TEXT NOT NULL,pin_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Aktif',failed_attempts INTEGER NOT NULL DEFAULT 0,locked_until TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS guardian_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT,account_id INTEGER NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,created_at TEXT NOT NULL,last_seen_at TEXT NOT NULL)",
+      "CREATE INDEX IF NOT EXISTS guardian_sessions_account_idx ON guardian_sessions(account_id)",
+      "CREATE INDEX IF NOT EXISTS guardian_sessions_expiry_idx ON guardian_sessions(expires_at)",
     ];
     await db.batch(definitions.map((sql) => db.prepare(sql)));
 
@@ -89,6 +102,7 @@ export function ensureDatabaseSchema() {
     await db.prepare("UPDATE tahfidz_records SET surah_to=surah WHERE surah_to=''").run();
     await db.prepare("UPDATE tahfidz_records SET verse_from=CASE WHEN instr(replace(verses,'–','-'),'-')>0 THEN CAST(substr(replace(verses,'–','-'),1,instr(replace(verses,'–','-'),'-')-1) AS INTEGER) ELSE CAST(verses AS INTEGER) END WHERE verse_from=0").run();
     await db.prepare("UPDATE tahfidz_records SET verse_to=CASE WHEN instr(replace(verses,'–','-'),'-')>0 THEN CAST(substr(replace(verses,'–','-'),instr(replace(verses,'–','-'),'-')+1) AS INTEGER) ELSE CAST(verses AS INTEGER) END WHERE verse_to=0").run();
+    await db.prepare("UPDATE students SET guardian_phone=CASE WHEN substr(replace(replace(replace(replace(replace(guardian_phone,'+',''),' ',''),'-',''),'(',''),')',''),1,1)='0' THEN '62'||substr(replace(replace(replace(replace(replace(guardian_phone,'+',''),' ',''),'-',''),'(',''),')',''),2) WHEN substr(replace(replace(replace(replace(replace(guardian_phone,'+',''),' ',''),'-',''),'(',''),')',''),1,1)='8' THEN '62'||replace(replace(replace(replace(replace(guardian_phone,'+',''),' ',''),'-',''),'(',''),')','') ELSE replace(replace(replace(replace(replace(guardian_phone,'+',''),' ',''),'-',''),'(',''),')','') END WHERE guardian_phone<>''").run();
   })().catch((error) => {
     schemaReady = null;
     throw error;
@@ -96,22 +110,173 @@ export function ensureDatabaseSchema() {
   return schemaReady;
 }
 
-export function currentIdentity(request: Request) {
-  const email = request.headers.get("oai-authenticated-user-email");
-  if (!email) throw new Error("Silakan masuk dengan ChatGPT untuk membuka portal internal.");
-  const encodedName = request.headers.get("oai-authenticated-user-full-name");
-  const encoding = request.headers.get("oai-authenticated-user-full-name-encoding");
-  let name = email.split("@")[0];
-  if (encodedName && encoding === "percent-encoded-utf-8") {
-    try { name = decodeURIComponent(encodedName); } catch { /* use fallback */ }
+function bytesToHex(bytes: Uint8Array) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function hexToBytes(value: string) {
+  const pairs = value.match(/.{1,2}/g) ?? [];
+  return new Uint8Array(pairs.map((pair) => Number.parseInt(pair, 16)));
+}
+
+async function sha256(value: string) {
+  return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))));
+}
+
+async function deriveGuardianPin(pin: string, salt: string) {
+  const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", iterations: 100_000, salt: hexToBytes(salt) },
+    material,
+    256,
+  );
+  return bytesToHex(new Uint8Array(bits));
+}
+
+function randomHex(size: number) {
+  const bytes = new Uint8Array(size);
+  crypto.getRandomValues(bytes);
+  return bytesToHex(bytes);
+}
+
+function cookieValue(request: Request, name: string) {
+  const cookie = request.headers.get("cookie") ?? "";
+  for (const part of cookie.split(";")) {
+    const [key, ...value] = part.trim().split("=");
+    if (key === name) return decodeURIComponent(value.join("="));
   }
-  return { email, name };
+  return "";
+}
+
+export function normalizeGuardianPhone(value: unknown) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.startsWith("0")) digits = `62${digits.slice(1)}`;
+  else if (digits.startsWith("8")) digits = `62${digits}`;
+  return digits;
+}
+
+export async function getGuardianSession(request: Request) {
+  await ensureDatabaseSchema();
+  const token = cookieValue(request, guardianCookieName);
+  if (!token || token.length < 40) return null;
+  const tokenHash = await sha256(token);
+  const now = new Date().toISOString();
+  return database().prepare(
+    `SELECT a.id,a.phone,a.status,s.id AS sessionId,s.expires_at AS expiresAt
+     FROM guardian_sessions s JOIN guardian_accounts a ON a.id=s.account_id
+     WHERE s.token_hash=? AND s.expires_at>? AND a.status='Aktif'`,
+  ).bind(tokenHash, now).first<{ id:number; phone:string; status:string; sessionId:number; expiresAt:string }>();
+}
+
+export async function createGuardianSession(accountId: number) {
+  const token = randomHex(32);
+  const tokenHash = await sha256(token);
+  const now = new Date();
+  const expires = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  await database().batch([
+    database().prepare("DELETE FROM guardian_sessions WHERE expires_at<=?").bind(now.toISOString()),
+    database().prepare("INSERT INTO guardian_sessions (account_id,token_hash,expires_at,created_at,last_seen_at) VALUES (?,?,?,?,?)")
+      .bind(accountId, tokenHash, expires.toISOString(), now.toISOString(), now.toISOString()),
+  ]);
+  return {
+    token,
+    cookie: `${guardianCookieName}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`,
+  };
+}
+
+export async function removeGuardianSession(request: Request) {
+  const token = cookieValue(request, guardianCookieName);
+  if (token) await database().prepare("DELETE FROM guardian_sessions WHERE token_hash=?").bind(await sha256(token)).run();
+  return `${guardianCookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+}
+
+export async function setGuardianPin(phoneInput: unknown, pin: string) {
+  await ensureDatabaseSchema();
+  const phone = normalizeGuardianPhone(phoneInput);
+  if (!/^62\d{8,13}$/.test(phone)) throw new Error("Nomor HP wali tidak valid.");
+  if (!/^\d{6}$/.test(pin)) throw new Error("PIN harus terdiri dari 6 angka.");
+  const linked = await database().prepare("SELECT COUNT(*) AS total FROM students WHERE guardian_phone=?").bind(phone).first<{total:number}>();
+  if (!Number(linked?.total ?? 0)) throw new Error("Nomor HP belum terhubung dengan Data Santri.");
+  const salt = randomHex(16);
+  const hash = await deriveGuardianPin(pin, salt);
+  const now = new Date().toISOString();
+  await database().prepare(
+    `INSERT INTO guardian_accounts (phone,pin_hash,pin_salt,status,failed_attempts,locked_until,created_at,updated_at)
+     VALUES (?,?,?,'Aktif',0,'',?,?)
+     ON CONFLICT(phone) DO UPDATE SET pin_hash=excluded.pin_hash,pin_salt=excluded.pin_salt,status='Aktif',failed_attempts=0,locked_until='',updated_at=excluded.updated_at`,
+  ).bind(phone, hash, salt, now, now).run();
+  const account = await database().prepare("SELECT id FROM guardian_accounts WHERE phone=?").bind(phone).first<{id:number}>();
+  if (account) await database().prepare("DELETE FROM guardian_sessions WHERE account_id=?").bind(account.id).run();
+  return phone;
+}
+
+export async function verifyGuardianPin(phoneInput: unknown, pin: string) {
+  await ensureDatabaseSchema();
+  const phone = normalizeGuardianPhone(phoneInput);
+  const account = await database().prepare("SELECT * FROM guardian_accounts WHERE phone=?").bind(phone).first<{
+    id:number; phone:string; pin_hash:string; pin_salt:string; status:string; failed_attempts:number; locked_until:string;
+  }>();
+  if (!account || account.status !== "Aktif") return { ok:false as const, message:"Nomor HP atau PIN tidak sesuai." };
+  const now = new Date();
+  if (account.locked_until && account.locked_until > now.toISOString()) {
+    return { ok:false as const, message:"Akun terkunci sementara. Coba kembali setelah 15 menit." };
+  }
+  const candidate = await deriveGuardianPin(pin, account.pin_salt);
+  let difference = candidate.length ^ account.pin_hash.length;
+  for (let index = 0; index < Math.min(candidate.length, account.pin_hash.length); index += 1) {
+    difference |= candidate.charCodeAt(index) ^ account.pin_hash.charCodeAt(index);
+  }
+  if (difference !== 0) {
+    const attempts = Number(account.failed_attempts ?? 0) + 1;
+    const lockedUntil = attempts >= 5 ? new Date(now.getTime() + 15 * 60 * 1000).toISOString() : "";
+    await database().prepare("UPDATE guardian_accounts SET failed_attempts=?,locked_until=?,updated_at=? WHERE id=?")
+      .bind(attempts >= 5 ? 0 : attempts, lockedUntil, now.toISOString(), account.id).run();
+    return { ok:false as const, message:lockedUntil ? "Terlalu banyak percobaan. Akun dikunci selama 15 menit." : "Nomor HP atau PIN tidak sesuai." };
+  }
+  await database().prepare("UPDATE guardian_accounts SET failed_attempts=0,locked_until='',updated_at=? WHERE id=?")
+    .bind(now.toISOString(), account.id).run();
+  return { ok:true as const, accountId:account.id, phone:account.phone };
+}
+
+export async function currentIdentity(request: Request) {
+  const email = request.headers.get("oai-authenticated-user-email");
+  if (email) {
+    const encodedName = request.headers.get("oai-authenticated-user-full-name");
+    const encoding = request.headers.get("oai-authenticated-user-full-name-encoding");
+    let name = email.split("@")[0];
+    if (encodedName && encoding === "percent-encoded-utf-8") {
+      try { name = decodeURIComponent(encodedName); } catch { /* use fallback */ }
+    }
+    return { email, name };
+  }
+  const guardian = await getGuardianSession(request);
+  if (guardian) {
+    const student = await database().prepare("SELECT guardian_name FROM students WHERE guardian_phone=? ORDER BY id LIMIT 1")
+      .bind(guardian.phone).first<{guardian_name:string}>();
+    return {
+      email: `wali:${guardian.phone}`,
+      name: student?.guardian_name || `Wali ${guardian.phone.slice(-4)}`,
+      guardianPhone: guardian.phone,
+      guardianAccountId: guardian.id,
+    };
+  }
+  throw new Error("Silakan masuk untuk membuka SINURMAN.");
 }
 
 export async function ensureUser(request: Request) {
   await ensureDatabaseSchema();
   const db = database();
-  const identity = currentIdentity(request);
+  const identity = await currentIdentity(request);
+  if (identity.guardianPhone) {
+    return {
+      id: -Number(identity.guardianAccountId),
+      email: identity.email,
+      name: identity.name,
+      role: "Wali Santri" as const,
+      roomScope: "",
+      guardianPhone: identity.guardianPhone,
+    };
+  }
   const existing = await db
     .prepare("SELECT id, email, name, role, room_scope AS roomScope FROM users WHERE email = ?")
     .bind(identity.email)
@@ -120,9 +285,9 @@ export async function ensureUser(request: Request) {
   if (existing) {
     if (identity.email.toLowerCase() === ownerEmail && existing.role !== "Admin") {
       await db.prepare("UPDATE users SET role='Admin' WHERE id=?").bind(existing.id).run();
-      return { ...existing, role: "Admin" as const };
+      return { ...existing, role: "Admin" as const } as AuthenticatedUser;
     }
-    return existing;
+    return existing as AuthenticatedUser;
   }
 
   const count = await db.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>();
@@ -135,7 +300,16 @@ export async function ensureUser(request: Request) {
   return (await db
     .prepare("SELECT id, email, name, role, room_scope AS roomScope FROM users WHERE email = ?")
     .bind(identity.email)
-    .first()) as { id: number; email: string; name: string; role: Role; roomScope: string };
+    .first()) as AuthenticatedUser;
+}
+
+export async function guardianOwnsStudent(user: Pick<AuthenticatedUser,"email"|"role"|"guardianPhone">, studentId: number) {
+  if (user.role === "Admin") return true;
+  if (user.role !== "Wali Santri") return false;
+  const query = user.guardianPhone
+    ? database().prepare("SELECT id FROM students WHERE id=? AND guardian_phone=?").bind(studentId, user.guardianPhone)
+    : database().prepare("SELECT id FROM students WHERE id=? AND lower(guardian_email)=lower(?)").bind(studentId, user.email);
+  return Boolean(await query.first());
 }
 
 export function canWrite(role: Role, resource: string) {

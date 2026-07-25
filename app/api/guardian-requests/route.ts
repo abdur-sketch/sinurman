@@ -1,16 +1,12 @@
-import { database, ensureUser } from "../_lib";
+import { database, ensureUser, guardianOwnsStudent } from "../_lib";
 import { notifyGuardian } from "../_notifications";
-
-async function ownsStudent(email:string,studentId:number) {
-  return Boolean(await database().prepare("SELECT id FROM students WHERE id=? AND lower(guardian_email)=lower(?)").bind(studentId,email).first());
-}
 
 export async function POST(request:Request) {
   const user=await ensureUser(request);
   if(user.role!=="Wali Santri"&&user.role!=="Admin") return Response.json({error:"Permintaan hanya dapat diajukan wali santri."},{status:403});
   const payload=await request.json() as {studentId?:number;type?:string;visitDate?:string;startTime?:string;endTime?:string;purpose?:string;visitorName?:string;visitorPhone?:string};
   const studentId=Number(payload.studentId);
-  if(!studentId||user.role==="Wali Santri"&&!(await ownsStudent(user.email,studentId))) return Response.json({error:"Santri tidak terhubung dengan akun ini."},{status:403});
+  if(!studentId||user.role==="Wali Santri"&&!(await guardianOwnsStudent(user,studentId))) return Response.json({error:"Santri tidak terhubung dengan akun ini."},{status:403});
   if(!["Kunjungan","Penjemputan"].includes(String(payload.type))||!payload.visitDate||!payload.startTime||!payload.endTime||!payload.purpose?.trim()||!payload.visitorName?.trim()||!payload.visitorPhone?.trim()) return Response.json({error:"Seluruh data kunjungan atau penjemputan wajib diisi."},{status:400});
   if(payload.endTime<=payload.startTime) return Response.json({error:"Jam selesai harus setelah jam mulai."},{status:400});
   const token=crypto.randomUUID().replaceAll("-","").toUpperCase();

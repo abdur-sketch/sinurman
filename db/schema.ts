@@ -357,3 +357,24 @@ export const auditLogs = sqliteTable("audit_logs", {
   detail: text("detail").notNull(),
   createdAt: text("created_at").notNull(),
 });
+
+export const guardianAccounts = sqliteTable("guardian_accounts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  phone: text("phone").notNull().unique(),
+  pinHash: text("pin_hash").notNull(),
+  pinSalt: text("pin_salt").notNull(),
+  status: text("status").notNull().default("Aktif"),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lockedUntil: text("locked_until").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const guardianSessions = sqliteTable("guardian_sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  accountId: integer("account_id").notNull().references(() => guardianAccounts.id),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+});

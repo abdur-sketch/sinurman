@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getChatGPTUser } from "../chatgpt-auth";
+import GuardianLoginClient from "./wali-login-client";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +10,7 @@ export const metadata: Metadata = {
     "Akses laporan perkembangan anak yang terhubung dengan akun wali di SINURMAN.",
 };
 
-export default async function GuardianLoginPage() {
-  const user = await getChatGPTUser();
-
+export default function GuardianLoginPage() {
   return (
     <main className="guardian-login-page">
       <header className="guardian-login-header">
@@ -33,31 +31,12 @@ export default async function GuardianLoginPage() {
           <span className="guardian-login-eyebrow">AKSES KHUSUS WALI SANTRI</span>
           <h1>Laporan anak, aman dalam satu portal.</h1>
           <p>
-            SINURMAN mencocokkan email akun Anda dengan email wali pada data
-            santri. Setelah masuk, Anda hanya dapat melihat anak yang memang
-            terhubung dengan email tersebut.
+            SINURMAN mencocokkan nomor HP Anda dengan nomor wali pada Data
+            Santri. Setelah masuk, Anda hanya dapat melihat anak yang memang
+            terhubung dengan nomor tersebut.
           </p>
 
-          {user ? (
-            <div className="guardian-login-session">
-              <span>Akun yang sedang aktif</span>
-              <strong>{user.displayName}</strong>
-              <small>{user.email}</small>
-              <Link className="primary-button link-button" href="/">
-                Buka Portal Wali →
-              </Link>
-            </div>
-          ) : (
-            <div className="guardian-login-actions">
-              <a
-                className="primary-button link-button guardian-login-primary"
-                href="/signin-with-chatgpt?return_to=%2F"
-              >
-                Masuk ke Portal Wali →
-              </a>
-              <small>Gunakan email yang didaftarkan oleh Admin pesantren.</small>
-            </div>
-          )}
+          <GuardianLoginClient />
 
           <div className="guardian-security-note">
             <span>✓</span>
@@ -77,18 +56,18 @@ export default async function GuardianLoginPage() {
               <div>
                 <strong>Pastikan email sudah terdaftar</strong>
                 <p>
-                  Admin mengisi kolom “Email akun wali” pada Data Santri dengan
-                  email milik Anda.
+                  Admin mengisi “Nomor WhatsApp wali” pada Data Santri dan
+                  membuat PIN 6 angka untuk Anda.
                 </p>
               </div>
             </li>
             <li>
               <b>2</b>
               <div>
-                <strong>Masuk memakai email yang sama</strong>
+                <strong>Masuk memakai nomor HP dan PIN</strong>
                 <p>
-                  Tekan tombol masuk, lalu gunakan akun ChatGPT dengan alamat
-                  email tersebut.
+                  Masukkan nomor WhatsApp yang terdaftar dan PIN dari Admin
+                  pesantren.
                 </p>
               </div>
             </li>
@@ -106,10 +85,9 @@ export default async function GuardianLoginPage() {
           <div className="guardian-login-help">
             <strong>Anak belum muncul?</strong>
             <p>
-              Hubungi Admin pesantren dan kirimkan nama santri serta email yang
-              Anda pakai untuk masuk.
+              Hubungi Admin pesantren dan kirimkan nama santri serta nomor HP
+              yang Anda pakai untuk masuk.
             </p>
-            {user && <code>{user.email}</code>}
           </div>
         </aside>
       </section>

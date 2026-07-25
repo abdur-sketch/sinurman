@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import QRCode from "qrcode";
-import { database, ensureUser } from "../../_lib";
+import { database, ensureUser, guardianOwnsStudent } from "../../_lib";
 import { settleWalletTopup } from "../_topup";
 
 export async function POST(request:Request) {
@@ -22,7 +22,7 @@ export async function POST(request:Request) {
     if(!["QRIS","Transfer Bank"].includes(method)) return Response.json({error:"Metode pembayaran tidak valid."},{status:400});
     const student=await db.prepare("SELECT id,name,guardian_phone,guardian_email FROM students WHERE id=?").bind(studentId).first<Record<string,unknown>>();
     if(!student) return Response.json({error:"Santri tidak ditemukan."},{status:404});
-    if(user.role==="Wali Santri"&&String(student.guardian_email).toLowerCase()!==user.email.toLowerCase()) return Response.json({error:"Santri tidak terhubung dengan akun wali ini."},{status:403});
+    if(user.role==="Wali Santri"&&!(await guardianOwnsStudent(user,studentId))) return Response.json({error:"Santri tidak terhubung dengan akun wali ini."},{status:403});
     if(user.role!=="Admin"&&user.role!=="Wali Santri") return Response.json({error:"Peran Anda tidak dapat membuat top-up."},{status:403});
     const now=new Date();
     const topupNo=`TOP-${now.toISOString().replace(/\D/g,"").slice(2,14)}-${crypto.randomUUID().slice(0,5).toUpperCase()}`;

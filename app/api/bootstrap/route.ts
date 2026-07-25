@@ -12,14 +12,24 @@ export async function GET(request: Request) {
     }
     const guardian = user.role === "Wali Santri";
     const staff = user.role === "Musyrif" || user.role === "Kepala Asrama";
-    const guardianEmail = user.email.toLocaleLowerCase("id-ID");
+    const guardianKey = user.guardianPhone || user.email.toLocaleLowerCase("id-ID");
     const roomScope = user.roomScope || "__BELUM_DITUGASKAN__";
     const safe = async (operation: Promise<D1Result<unknown>>) => {
       try { return await operation; }
       catch { return { results: [] } as unknown as D1Result<unknown>; }
     };
     const all = (query: string) => safe(db.prepare(query).all());
-    const owned = (query: string) => safe(db.prepare(query).bind(guardianEmail).all());
+    const owned = (query: string) => {
+      const scopedQuery = user.guardianPhone
+        ? query
+          .replaceAll("lower(s.guardian_email)", "s.guardian_phone")
+          .replaceAll("lower(guardian_email)", "guardian_phone")
+          .replaceAll("lower(a.applicant_email)", "a.guardian_phone")
+          .replaceAll("lower(applicant_email)", "guardian_phone")
+          .replaceAll("lower(g.sender_email)", "s.guardian_phone")
+        : query;
+      return safe(db.prepare(scopedQuery).bind(guardianKey).all());
+    };
     const scoped = (query: string) => safe(db.prepare(query).bind(roomScope).all());
 
     const [
@@ -52,6 +62,7 @@ export async function GET(request: Request) {
       canteenProducts,
       canteenSales,
       canteenSaleItems,
+      guardianAccounts,
     ] = await Promise.all([
       guardian
         ? owned("SELECT * FROM students WHERE lower(guardian_email) = ? ORDER BY id")
@@ -164,6 +175,9 @@ export async function GET(request: Request) {
         ? owned("SELECT i.* FROM canteen_sale_items i JOIN canteen_sales c ON c.id=i.sale_id JOIN students s ON s.id=c.student_id WHERE lower(s.guardian_email)=? ORDER BY i.id DESC LIMIT 300")
         : staff ? all("SELECT * FROM canteen_sale_items WHERE 1=0")
         : all("SELECT * FROM canteen_sale_items ORDER BY id DESC LIMIT 500"),
+      user.role === "Admin"
+        ? all("SELECT id,phone,status,failed_attempts,locked_until,created_at,updated_at FROM guardian_accounts ORDER BY phone")
+        : all("SELECT id,phone,status,failed_attempts,locked_until,created_at,updated_at FROM guardian_accounts WHERE 1=0"),
     ]);
 
     return Response.json({
@@ -197,6 +211,7 @@ export async function GET(request: Request) {
       canteenProducts: canteenProducts.results,
       canteenSales: canteenSales.results,
       canteenSaleItems: canteenSaleItems.results,
+      guardianAccounts: guardianAccounts.results,
       warning: seedWarning,
     });
   } catch (error) {

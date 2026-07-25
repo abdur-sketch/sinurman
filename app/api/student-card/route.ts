@@ -1,5 +1,5 @@
 import QRCode from "qrcode";
-import { database, ensureUser } from "../_lib";
+import { database, ensureUser, guardianOwnsStudent } from "../_lib";
 
 export async function GET(request:Request) {
   const user=await ensureUser(request);
@@ -8,8 +8,7 @@ export async function GET(request:Request) {
   const student=await database().prepare("SELECT id,name,nis,class_name,room,status FROM students WHERE id=?").bind(id).first<Record<string,unknown>>();
   if(!student) return Response.json({error:"Santri tidak ditemukan."},{status:404});
   if(user.role==="Wali Santri") {
-    const owned=await database().prepare("SELECT id FROM students WHERE id=? AND lower(guardian_email)=lower(?)").bind(id,user.email).first();
-    if(!owned) return Response.json({error:"Santri tidak terhubung dengan akun ini."},{status:403});
+    if(!(await guardianOwnsStudent(user,id))) return Response.json({error:"Santri tidak terhubung dengan akun ini."},{status:403});
   }
   const db=database();
   let wallet=await db.prepare("SELECT card_token,status FROM wallet_accounts WHERE student_id=?").bind(id).first<{card_token:string;status:string}>();

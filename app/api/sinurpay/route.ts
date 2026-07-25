@@ -42,25 +42,27 @@ async function findAccount(scan:unknown) {
   ).bind(parsed.token,parsed.token,parsed.id,parsed.id,parsed.nis,parsed.nis).first<AccountRow>();
 }
 
-async function getPayload(user:{email:string;role:string}) {
+async function getPayload(user:{email:string;role:string;guardianPhone?:string}) {
   const db=database();
   const guardian=user.role==="Wali Santri";
+  const guardianField=user.guardianPhone?"s.guardian_phone=?":"lower(s.guardian_email)=lower(?)";
+  const guardianKey=user.guardianPhone||user.email;
   const accountQuery=guardian
     ? db.prepare(`SELECT w.id,w.student_id,s.name AS student_name,s.nis,s.class_name,s.room,w.balance,w.daily_limit,w.status,w.updated_at
-                  FROM wallet_accounts w JOIN students s ON s.id=w.student_id WHERE lower(s.guardian_email)=lower(?) ORDER BY s.name`).bind(user.email)
+                  FROM wallet_accounts w JOIN students s ON s.id=w.student_id WHERE ${guardianField} ORDER BY s.name`).bind(guardianKey)
     : db.prepare(`SELECT w.*,s.name AS student_name,s.nis,s.class_name,s.room
                   FROM wallet_accounts w JOIN students s ON s.id=w.student_id ORDER BY s.name`);
   const entryQuery=guardian
     ? db.prepare(`SELECT e.*,s.name AS student_name FROM wallet_entries e JOIN students s ON s.id=e.student_id
-                  WHERE lower(s.guardian_email)=lower(?) ORDER BY e.id DESC LIMIT 150`).bind(user.email)
+                  WHERE ${guardianField} ORDER BY e.id DESC LIMIT 150`).bind(guardianKey)
     : db.prepare(`SELECT e.*,s.name AS student_name FROM wallet_entries e JOIN students s ON s.id=e.student_id ORDER BY e.id DESC LIMIT 250`);
   const saleQuery=guardian
     ? db.prepare(`SELECT c.*,s.name AS student_name,s.nis FROM canteen_sales c JOIN students s ON s.id=c.student_id
-                  WHERE lower(s.guardian_email)=lower(?) ORDER BY c.id DESC LIMIT 100`).bind(user.email)
+                  WHERE ${guardianField} ORDER BY c.id DESC LIMIT 100`).bind(guardianKey)
     : db.prepare(`SELECT c.*,s.name AS student_name,s.nis FROM canteen_sales c JOIN students s ON s.id=c.student_id ORDER BY c.id DESC LIMIT 150`);
   const topupQuery=guardian
     ? db.prepare(`SELECT t.*,s.name AS student_name,s.nis FROM wallet_topups t JOIN students s ON s.id=t.student_id
-                  WHERE lower(s.guardian_email)=lower(?) ORDER BY t.id DESC LIMIT 100`).bind(user.email)
+                  WHERE ${guardianField} ORDER BY t.id DESC LIMIT 100`).bind(guardianKey)
     : db.prepare(`SELECT t.*,s.name AS student_name,s.nis FROM wallet_topups t JOIN students s ON s.id=t.student_id ORDER BY t.id DESC LIMIT 200`);
   const [accounts,entries,topups,sales,products,items]=await Promise.all([
     accountQuery.all(),entryQuery.all(),topupQuery.all(),
@@ -68,7 +70,7 @@ async function getPayload(user:{email:string;role:string}) {
     db.prepare("SELECT * FROM canteen_products ORDER BY status DESC,category,name").all(),
     guardian
       ? db.prepare(`SELECT i.* FROM canteen_sale_items i JOIN canteen_sales c ON c.id=i.sale_id JOIN students s ON s.id=c.student_id
-                    WHERE lower(s.guardian_email)=lower(?) ORDER BY i.id DESC LIMIT 400`).bind(user.email).all()
+                    WHERE ${guardianField} ORDER BY i.id DESC LIMIT 400`).bind(guardianKey).all()
       : db.prepare("SELECT * FROM canteen_sale_items ORDER BY id DESC LIMIT 600").all(),
   ]);
   const today=new Date().toISOString().slice(0,10);

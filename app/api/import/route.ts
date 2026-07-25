@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { database, ensureUser } from "../_lib";
+import { database, ensureUser, normalizeGuardianPhone } from "../_lib";
 
 export async function POST(request: Request) {
   try {
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     if(!valid.length) return Response.json({error:"Kolom wajib: nama, nis, kelas. Kolom opsional: kamar, nama_wali, whatsapp, email_wali."},{status:400});
     const now=new Date().toISOString();
     const statements=valid.slice(0,500).map(r=>database().prepare("INSERT OR IGNORE INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(String(r.nama),String(r.nis),String(r.kelas),String(r.kamar||"-"),String(r.nama_wali||"-"),String(r.whatsapp||"-"),String(r.email_wali||"").toLocaleLowerCase("id-ID"),"Aktif",now));
+      .bind(String(r.nama),String(r.nis),String(r.kelas),String(r.kamar||"-"),String(r.nama_wali||"-"),normalizeGuardianPhone(r.whatsapp),String(r.email_wali||"").toLocaleLowerCase("id-ID"),"Aktif",now));
     const results=await database().batch(statements);
     const imported=results.reduce((sum,r)=>sum+Number(r.meta.changes||0),0);
     await database().prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")

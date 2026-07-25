@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import QRCode from "qrcode";
-import { database, ensureUser } from "../_lib";
+import { database, ensureUser, guardianOwnsStudent } from "../_lib";
 
 export async function GET(request: Request) {
   const user = await ensureUser(request);
@@ -22,9 +22,7 @@ export async function POST(request: Request) {
   const bill = await database().prepare("SELECT b.*, s.name, s.guardian_phone FROM bills b JOIN students s ON s.id=b.student_id WHERE b.id=?").bind(payload.billId).first<Record<string,unknown>>();
   if(!bill) return Response.json({error:"Tagihan tidak ditemukan."},{status:404});
   if (user.role === "Wali Santri") {
-    const owned = await database().prepare("SELECT b.id FROM bills b JOIN students s ON s.id=b.student_id WHERE b.id=? AND lower(s.guardian_email)=lower(?)")
-      .bind(payload.billId, user.email).first();
-    if (!owned) return Response.json({ error:"Tagihan tidak terhubung dengan akun ini." },{status:403});
+    if (!(await guardianOwnsStudent(user,Number(bill.student_id)))) return Response.json({ error:"Tagihan tidak terhubung dengan akun ini." },{status:403});
   }
   let paymentUrl="";
   if(env.MIDTRANS_SERVER_KEY) {

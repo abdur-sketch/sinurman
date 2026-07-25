@@ -1,13 +1,9 @@
-import { database, ensureUser } from "../_lib";
+import { database, ensureUser, guardianOwnsStudent, type AuthenticatedUser } from "../_lib";
 
-async function canAccessStudent(user: { email: string; role: string }, studentId: number) {
+async function canAccessStudent(user: Pick<AuthenticatedUser,"email"|"role"|"guardianPhone">, studentId: number) {
   if (user.role === "Admin") return true;
   if (user.role !== "Wali Santri") return false;
-  const student = await database()
-    .prepare("SELECT id FROM students WHERE id=? AND lower(guardian_email)=lower(?)")
-    .bind(studentId, user.email)
-    .first();
-  return Boolean(student);
+  return guardianOwnsStudent(user, studentId);
 }
 
 export async function POST(request: Request) {

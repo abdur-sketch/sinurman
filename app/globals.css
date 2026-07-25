@@ -796,6 +796,19 @@ h4 {
 .guardian-login-actions { display:flex; align-items:center; gap:17px; margin-top:28px; }
 .guardian-login-primary { min-height:45px; padding:0 20px; }
 .guardian-login-actions small { max-width:250px; color:#7a8b9f; }
+.guardian-login-form { width:min(500px,100%); display:grid; grid-template-columns:1fr 160px; gap:13px; margin-top:28px; padding:19px; border:1px solid #dce6f0; border-radius:14px; background:#fff; box-shadow:0 14px 35px rgba(24,49,83,.08); box-sizing:border-box; }
+.guardian-login-form label { display:flex; flex-direction:column; gap:7px; color:#405269; font-size:10px; font-weight:700; }
+.guardian-login-form input { width:100%; min-height:44px; padding:10px 12px; border:1px solid #d5e0eb; border-radius:8px; outline:0; color:#183153; background:#fff; box-sizing:border-box; font:inherit; }
+.guardian-login-form input:focus { border-color:#2c7be5; box-shadow:0 0 0 3px rgba(44,123,229,.11); }
+.guardian-login-form .guardian-login-primary { min-height:44px; }
+.guardian-login-form>small { align-self:center; color:#788a9f; font-size:9px!important; line-height:1.5; }
+.guardian-login-form .form-error { grid-column:1/-1; margin:0; }
+.guardian-phone-input { display:grid; grid-template-columns:auto 1fr; align-items:center; overflow:hidden; border:1px solid #d5e0eb; border-radius:8px; }
+.guardian-phone-input:focus-within { border-color:#2c7be5; box-shadow:0 0 0 3px rgba(44,123,229,.11); }
+.guardian-phone-input span { padding:0 0 0 12px; color:#2c7be5; font-size:11px; font-weight:800; }
+.guardian-phone-input input { border:0; box-shadow:none!important; }
+.guardian-login-checking { display:block; color:#718196; font-size:11px; }
+.guardian-phone-session { margin-top:28px; }
 .guardian-login-session { width:min(490px,100%); display:grid; grid-template-columns:1fr auto; align-items:center; gap:3px 20px; margin-top:28px; padding:17px 18px; border:1px solid #d9e5f0; border-radius:13px; background:#fff; box-shadow:0 12px 32px rgba(24,49,83,.08); }
 .guardian-login-session span,.guardian-login-session small { color:#7d8da0; font-size:10px!important; }
 .guardian-login-session strong { color:#183153; font-size:13px; }
@@ -826,6 +839,10 @@ h4 {
 .guardian-access-admin span { color:#2c7be5; font-size:9px; font-weight:800; letter-spacing:1px; }
 .guardian-access-admin h3 { margin:5px 0; color:var(--navy); }
 .guardian-access-admin p { margin:0; color:var(--muted); font-size:11px; line-height:1.55; }
+.guardian-access-table { margin-bottom:16px; }
+.guardian-access-actions { display:flex; align-items:center; justify-content:flex-end; gap:10px; min-width:145px; }
+.guardian-pin-modal>label { display:flex; flex-direction:column; gap:7px; margin-top:18px; color:var(--text); font-size:11px; font-weight:700; }
+.guardian-pin-modal>label input { min-height:46px; padding:11px 13px; border:1px solid var(--border); border-radius:8px; color:var(--navy); background:var(--surface); font-size:18px; font-weight:800; letter-spacing:5px; }
 .guardian-empty .link-button { margin-top:15px; }
 
 @media (max-width:900px) {
@@ -841,6 +858,8 @@ h4 {
   .guardian-login-hero { padding:42px 18px 65px; }
   .guardian-login-copy h1 { font-size:39px!important; letter-spacing:-1.5px; }
   .guardian-login-actions { align-items:flex-start; flex-direction:column; }
+  .guardian-login-form { grid-template-columns:1fr; padding:16px; }
+  .guardian-login-form .form-error { grid-column:1; }
   .guardian-login-session { grid-template-columns:1fr; }
   .guardian-login-session .primary-button { grid-column:1; grid-row:auto; margin-top:9px; }
   .guardian-login-guide { padding:24px 20px; }

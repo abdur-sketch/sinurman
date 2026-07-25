@@ -1,4 +1,4 @@
-import { database, ensureDatabaseSchema } from "../_lib";
+import { database, ensureDatabaseSchema, normalizeGuardianPhone } from "../_lib";
 
 const levels = new Set(["SMP", "SMK"]);
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).bind(
       registrationNo, clean(body.name), email, clean(body.nisn, 30), clean(body.birth_place), clean(body.birth_date, 20),
-      clean(body.gender, 20), clean(body.desired_level, 10), clean(body.guardian_name), clean(body.guardian_phone, 30),
+      clean(body.gender, 20), clean(body.desired_level, 10), clean(body.guardian_name), normalizeGuardianPhone(body.guardian_phone),
       clean(body.previous_school), clean(body.address, 500), "Pendaftaran", 0, "", "", "", trackingToken, now,
     ).run();
     return Response.json({

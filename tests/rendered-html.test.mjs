@@ -23,27 +23,30 @@ test("portal wali menyediakan seluruh layanan utama", async () => {
   assert.match(page, /onPayment/);
 });
 
-test("data wali diisolasi berdasarkan email yang terhubung", async () => {
-  const [bootstrap, portal, studentCard, migration] = await Promise.all([
+test("data wali diisolasi berdasarkan nomor HP yang terhubung", async () => {
+  const [bootstrap, portal, studentCard, migration, auth] = await Promise.all([
     file("app/api/bootstrap/route.ts"),
     file("app/api/portal/route.ts"),
     file("app/api/student-card/route.ts"),
-    file("drizzle/0003_new_sprite.sql"),
+    file("drizzle/0011_gifted_nocturne.sql"),
+    file("app/api/_lib.ts"),
   ]);
 
-  assert.match(bootstrap, /lower\(s\.guardian_email\)=\?/);
+  assert.match(bootstrap, /user\.guardianPhone/);
+  assert.match(bootstrap, /s\.guardian_phone/);
   assert.match(bootstrap, /guardianMessages/);
   assert.match(portal, /canAccessStudent/);
-  assert.match(portal, /lower\(guardian_email\)=lower\(\?\)/);
-  assert.match(studentCard, /guardian_email/);
-  assert.match(migration, /ADD `guardian_email`/);
-  assert.match(migration, /CREATE TABLE `guardian_messages`/);
+  assert.match(portal, /guardianOwnsStudent/);
+  assert.match(studentCard, /guardianOwnsStudent/);
+  assert.match(auth, /guardian_phone=\?/);
+  assert.match(migration, /CREATE TABLE `guardian_accounts`/);
+  assert.match(migration, /CREATE TABLE `guardian_sessions`/);
 });
 
 test("pembayaran wali memeriksa kepemilikan tagihan", async () => {
   const payment = await file("app/api/integrations/route.ts");
   assert.match(payment, /user\.role === "Wali Santri"/);
-  assert.match(payment, /b\.id=\? AND lower\(s\.guardian_email\)=lower\(\?\)/);
+  assert.match(payment, /guardianOwnsStudent/);
   assert.match(payment, /Midtrans|Xendit/);
 });
 
@@ -234,21 +237,47 @@ test("portal internal memakai login ChatGPT dan halaman PPDB tetap publik", asyn
 });
 
 test("portal wali memiliki halaman masuk khusus dan pengunci akses anak", async () => {
-  const [guardianLogin, dashboard, bootstrap, ppdb] = await Promise.all([
+  const [guardianLogin, guardianClient, dashboard, bootstrap, ppdb, authRoute, adminRoute] = await Promise.all([
     file("app/wali/page.tsx"),
+    file("app/wali/wali-login-client.tsx"),
     file("app/dashboard-client.tsx"),
     file("app/api/bootstrap/route.ts"),
     file("app/ppdb/page.tsx"),
+    file("app/api/wali-auth/route.ts"),
+    file("app/api/guardian-accounts/route.ts"),
   ]);
-  assert.match(guardianLogin, /Masuk ke Portal Wali/);
-  assert.match(guardianLogin, /Email akun wali/);
-  assert.match(guardianLogin, /signin-with-chatgpt\?return_to=%2F/);
-  assert.match(guardianLogin, /getChatGPTUser/);
+  assert.match(guardianLogin, /nomor HP dan PIN/);
+  assert.match(guardianClient, /Masuk ke Portal Wali/);
+  assert.match(guardianClient, /\/api\/wali-auth/);
+  assert.match(guardianClient, /PIN Portal Wali/);
+  assert.match(authRoute, /set-cookie/);
+  assert.match(adminRoute, /setGuardianPin/);
   assert.match(dashboard, /role==="Wali Santri"&&key!=="portalwali"/);
   assert.match(dashboard, /hanya dapat membuka laporan anak di Portal Wali/);
   assert.match(dashboard, /Buka & Bagikan Portal Wali/);
-  assert.match(bootstrap, /lower\(s\.guardian_email\)=\?/);
+  assert.match(bootstrap, /guardianPhone/);
   assert.match(ppdb, /href="\/wali">Masuk Portal Wali/);
+});
+
+test("login nomor HP memakai PIN aman, sesi HttpOnly, dan penguncian percobaan", async () => {
+  const [lib, authRoute, portalPage, migration] = await Promise.all([
+    file("app/api/_lib.ts"),
+    file("app/api/wali-auth/route.ts"),
+    file("app/portal-wali/page.tsx"),
+    file("drizzle/0011_gifted_nocturne.sql"),
+  ]);
+  assert.match(lib, /PBKDF2/);
+  assert.match(lib, /iterations: 100_000/);
+  assert.match(lib, /failed_attempts/);
+  assert.match(lib, /15 \* 60 \* 1000/);
+  assert.match(lib, /HttpOnly; Secure; SameSite=Lax/);
+  assert.match(lib, /guardian_sessions/);
+  assert.match(authRoute, /verifyGuardianPin/);
+  assert.match(authRoute, /redirectTo: "\/portal-wali"/);
+  assert.match(portalPage, /getGuardianSession/);
+  assert.match(portalPage, /redirect\("\/wali"\)/);
+  assert.match(migration, /pin_hash/);
+  assert.doesNotMatch(authRoute, /pin_hash/);
 });
 
 test("Musyrif dan Kepala Asrama dibatasi modul serta kamar penugasan", async () => {
@@ -350,7 +379,7 @@ test("SINURPAY menyediakan buku tabungan, kasir barcode, stok, limit, dan audit"
   assert.match(route, /notifyGuardian/);
   assert.match(route, /user\.role!=="Admin"/);
   assert.match(card, /walletToken/);
-  assert.match(bootstrap, /lower\(s\.guardian_email\)=\?/);
+  assert.match(bootstrap, /guardianPhone/);
 });
 
 test("portal wali menampilkan saldo dan mutasi SINURPAY milik santri terhubung", async () => {
@@ -363,7 +392,8 @@ test("portal wali menampilkan saldo dan mutasi SINURPAY milik santri terhubung",
   assert.match(dashboard, /Buku Tabungan & Belanja Kantin/);
   assert.match(bootstrap, /walletEntries/);
   assert.match(bootstrap, /canteenSales/);
-  assert.match(route, /lower\(s\.guardian_email\)=lower\(\?\)/);
+  assert.match(route, /guardianField/);
+  assert.match(route, /s\.guardian_phone=\?/);
   assert.doesNotMatch(route, /guardian.*card_token/);
 });
 
@@ -379,7 +409,7 @@ test("top-up SINURPAY memakai payment gateway, webhook idempoten, dan isolasi wa
   ]);
   assert.match(dashboard, /Top Up Saldo/);
   assert.match(dashboard, /QRIS/);
-  assert.match(topup, /String\(student\.guardian_email\)\.toLowerCase\(\)!==user\.email\.toLowerCase\(\)/);
+  assert.match(topup, /guardianOwnsStudent/);
   assert.match(topup, /MIDTRANS_SERVER_KEY/);
   assert.match(topup, /XENDIT_API_KEY/);
   assert.match(webhook, /invoice\.startsWith\("TOP-"\)/);

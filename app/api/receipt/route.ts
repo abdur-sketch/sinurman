@@ -1,12 +1,12 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { database, ensureUser } from "../_lib";
+import { database, ensureUser, guardianOwnsStudent } from "../_lib";
 
 export async function GET(request:Request) {
   const user=await ensureUser(request);
   const id=Number(new URL(request.url).searchParams.get("id"));
-  const bill=await database().prepare("SELECT b.*,s.name,s.nis,s.guardian_email FROM bills b JOIN students s ON s.id=b.student_id WHERE b.id=?").bind(id).first<Record<string,unknown>>();
+  const bill=await database().prepare("SELECT b.*,s.name,s.nis,s.guardian_email,s.guardian_phone FROM bills b JOIN students s ON s.id=b.student_id WHERE b.id=?").bind(id).first<Record<string,unknown>>();
   if(!bill) return Response.json({error:"Tagihan tidak ditemukan."},{status:404});
-  if(user.role==="Wali Santri"&&String(bill.guardian_email).toLocaleLowerCase("id-ID")!==user.email.toLocaleLowerCase("id-ID")) return Response.json({error:"Kuitansi tidak terhubung dengan akun ini."},{status:403});
+  if(user.role==="Wali Santri"&&!(await guardianOwnsStudent(user,Number(bill.student_id)))) return Response.json({error:"Kuitansi tidak terhubung dengan akun ini."},{status:403});
   if(bill.status!=="Lunas") return Response.json({error:"Kuitansi tersedia setelah pembayaran lunas."},{status:409});
   const pdf=await PDFDocument.create();
   const page=pdf.addPage([595,420]);

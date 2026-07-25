@@ -1,4 +1,4 @@
-import { canWrite, database, ensureUser } from "../_lib";
+import { canWrite, database, ensureUser, normalizeGuardianPhone } from "../_lib";
 import { notifyRecordChange } from "../_notifications";
 import { quranRangeAmount } from "../../quran-data";
 
@@ -139,6 +139,12 @@ export async function POST(request: Request) {
     }
 
     const source:Record<string,unknown> = { ...(payload.data ?? {}) };
+    if (resource === "students" && source.guardian_phone !== undefined) {
+      source.guardian_phone = normalizeGuardianPhone(source.guardian_phone);
+      if (!/^62\d{8,13}$/.test(String(source.guardian_phone))) {
+        return Response.json({ error:"Nomor WhatsApp wali tidak valid." }, { status:400 });
+      }
+    }
     if (resource === "tahfidz") {
       const surahFrom=String(source.surah_from??"").trim();
       const surahTo=String(source.surah_to??"").trim();

@@ -1,4 +1,4 @@
-import { database, ensureUser } from "../_lib";
+import { database, ensureUser, normalizeGuardianPhone } from "../_lib";
 import { sendWhatsappNotification } from "../_notifications";
 
 const applicationStatuses = [
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       text(body.gender),
       text(body.desired_level),
       text(body.guardian_name),
-      text(body.guardian_phone),
+      normalizeGuardianPhone(body.guardian_phone),
       text(body.previous_school),
       text(body.address),
       "Pendaftaran",

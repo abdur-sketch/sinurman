@@ -7,7 +7,7 @@ type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
 type Resource = "students" | "tahfidz" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
 type Row = Record<string, string | number | null>;
 type AppData = {
-  user?: { name: string; email: string; role: Role; roomScope?: string };
+  user?: { name: string; email: string; role: Role; roomScope?: string; guardianPhone?: string };
   warning?: string;
   students: Row[];
   tahfidz: Row[];
@@ -38,6 +38,7 @@ type AppData = {
   canteenProducts: Row[];
   canteenSales: Row[];
   canteenSaleItems: Row[];
+  guardianAccounts: Row[];
 };
 type EditorState = { resource: Resource; row?: Row } | null;
 type SearchResult = {
@@ -54,7 +55,7 @@ const emptyData: AppData = {
   inventory: [], announcements: [], notifications: [],
   attendance: [], subjects: [], grades: [], permits: [], schedules: [], rooms: [], admissions: [], admissionDocuments: [],
   counseling: [], bills: [], users: [], audit: [], guardianMessages: [], guardianRequests: [],
-  walletAccounts: [], walletEntries: [], walletTopups: [], canteenProducts: [], canteenSales: [], canteenSaleItems: [],
+  walletAccounts: [], walletEntries: [], walletTopups: [], canteenProducts: [], canteenSales: [], canteenSaleItems: [], guardianAccounts: [],
 };
 type PageKey =
   | "dashboard"
@@ -384,7 +385,7 @@ function SinurpayPage({ notify }: { notify:(message:string)=>void }) {
     } catch { /* scanner may provide a raw card token or NIS */ }
     return data.accounts.find(account=>String(account.card_token)===token||String(account.student_id)===id||String(account.nis).toLowerCase()===nis.toLowerCase());
   },[scan,data.accounts]);
-  const cartLines=data.products.filter(item=>cart[String(item.id)]).map(item=>({...item,quantity:cart[String(item.id)]}));
+  const cartLines:(Row&{quantity:number})[]=data.products.filter(item=>cart[String(item.id)]).map(item=>({...item,quantity:cart[String(item.id)]}));
   const cartTotal=cartLines.reduce((sum,item)=>sum+Number(item.price)*item.quantity,0);
 
   function changeQuantity(id:unknown,delta:number) {
@@ -744,8 +745,40 @@ function CounselingPage({ rows, edit, remove }: { rows:Row[]; edit:(r:Resource,r
   return <section className="card data-card"><header className="card-header"><div><h3>Catatan Konseling & Pembinaan</h3><p>Data bersifat terbatas untuk pengurus berwenang</p></div><button className="primary-button" onClick={()=>edit("counseling")}>+ Catatan Baru</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Jenis</th><th>Kategori</th><th>Catatan</th><th>Poin</th><th>Status</th><th /></tr></thead><tbody>{rows.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong></td><td><Status tone={x.type==="Prestasi"?"green":x.type==="Pelanggaran"?"red":"blue"}>{x.type}</Status></td><td>{x.category}</td><td>{x.description}</td><td>{x.points}</td><td>{x.status}</td><td><DataActions row={x} onEdit={r=>edit("counseling",r)} onDelete={r=>remove("counseling",r)} /></td></tr>)}</tbody></table></div></section>;
 }
 
-function UsersPage({ data, edit, remove, reply }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void; reply:(row:Row)=>void }) {
-  return <><section className="guardian-access-admin card"><div><span>PORTAL WALI SANTRI</span><h3>Hubungkan wali dengan email yang tepat</h3><p>Isi “Email akun wali” pada Data Santri. Wali kemudian masuk melalui tautan khusus menggunakan email yang sama dan hanya menerima data anak yang terhubung.</p></div><a className="primary-button link-button" href="/wali" target="_blank" rel="noreferrer">Buka & Bagikan Portal Wali →</a></section>
+function GuardianAccessAdmin({ data, reload, notify }: { data:AppData; reload:()=>Promise<void>; notify:(message:string)=>void }) {
+  const [selected,setSelected]=useState<{phone:string;name:string;students:string}|null>(null);
+  const [pin,setPin]=useState("");
+  const [saving,setSaving]=useState(false);
+  const guardians=Array.from(data.students.reduce((map,student)=>{
+    const phone=String(student.guardian_phone||"");
+    if(!phone) return map;
+    const current=map.get(phone)??{phone,name:String(student.guardian_name||"Wali Santri"),students:[] as string[]};
+    current.students.push(String(student.name));
+    map.set(phone,current);
+    return map;
+  },new Map<string,{phone:string;name:string;students:string[]}>()).values());
+  async function savePin(event:React.FormEvent) {
+    event.preventDefault(); if(!selected) return; setSaving(true);
+    const response=await fetch("/api/guardian-accounts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone:selected.phone,pin})});
+    const result=await response.json() as {error?:string;message?:string};
+    setSaving(false);
+    if(!response.ok){notify(result.error||"PIN gagal disimpan.");return;}
+    notify(result.message||"PIN Portal Wali disimpan.");setSelected(null);setPin("");await reload();
+  }
+  async function toggle(phone:string,status:string) {
+    const next=status==="Aktif"?"Diblokir":"Aktif";
+    const response=await fetch("/api/guardian-accounts",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({phone,status:next})});
+    const result=await response.json() as {error?:string};
+    if(!response.ok){notify(result.error||"Status akun gagal diubah.");return;}
+    notify(`Akses wali ${next.toLowerCase()}.`);await reload();
+  }
+  return <><section className="guardian-access-admin card"><div><span>PORTAL WALI SANTRI</span><h3>Masuk dengan nomor HP dan PIN</h3><p>Nomor diambil dari “Nomor WhatsApp wali” pada Data Santri. Buat PIN 6 angka, lalu bagikan nomor dan PIN tersebut langsung kepada wali.</p></div><a className="primary-button link-button" href="/wali" target="_blank" rel="noreferrer">Buka & Bagikan Portal Wali →</a></section>
+  <section className="card data-card guardian-access-table"><header className="card-header"><div><h3>Akses Portal Wali</h3><p>Satu nomor dapat terhubung dengan beberapa anak</p></div><Status tone="blue">{guardians.length} wali</Status></header><div className="table-wrap"><table><thead><tr><th>Wali</th><th>Santri Terhubung</th><th>Status Akses</th><th /></tr></thead><tbody>{guardians.map(guardian=>{const account=data.guardianAccounts.find(row=>String(row.phone)===guardian.phone);const status=String(account?.status||"Belum dibuat");return <tr key={guardian.phone}><td><strong>{guardian.name}</strong><small className="cell-note">+{guardian.phone}</small></td><td>{guardian.students.join(", ")}</td><td><Status tone={status==="Aktif"?"green":status==="Diblokir"?"red":"amber"}>{status}</Status></td><td><div className="guardian-access-actions"><button className="text-button" onClick={()=>{setSelected({phone:guardian.phone,name:guardian.name,students:guardian.students.join(", ")});setPin("");}}>{account?"Reset PIN":"Buat PIN"}</button>{account&&<button className="text-button" onClick={()=>void toggle(guardian.phone,status)}>{status==="Aktif"?"Blokir":"Aktifkan"}</button>}</div></td></tr>})}{!guardians.length&&<tr><td colSpan={4} className="muted">Isi nomor WhatsApp pada Data Santri terlebih dahulu.</td></tr>}</tbody></table></div></section>
+  {selected&&<div className="modal-backdrop" onMouseDown={()=>setSelected(null)}><form className="record-modal guardian-pin-modal" onSubmit={savePin} onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={()=>setSelected(null)}>×</button><span className="modal-eyebrow">AKSES PORTAL WALI</span><h2>Atur PIN {selected.name}</h2><p>+{selected.phone} · {selected.students}. Mengganti PIN akan mengeluarkan sesi lama dari semua perangkat.</p><label>PIN 6 angka<input required autoFocus inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={pin} onChange={event=>setPin(event.target.value.replace(/\D/g,"").slice(0,6))} placeholder="Contoh: 482731"/></label><div className="modal-actions"><button type="button" className="secondary-button" onClick={()=>setSelected(null)}>Batal</button><button className="primary-button" disabled={saving}>{saving?"Menyimpan…":"Simpan PIN"}</button></div></form></div>}</>;
+}
+
+function UsersPage({ data, edit, remove, reply, reload, notify }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void; reply:(row:Row)=>void; reload:()=>Promise<void>; notify:(message:string)=>void }) {
+  return <><GuardianAccessAdmin data={data} reload={reload} notify={notify}/>
   <section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Manajemen Pengguna</h3><p>Hak akses server-side</p></div><button className="primary-button" onClick={()=>edit("users")}>+ Pengguna</button></header><div className="table-wrap"><table><thead><tr><th>Pengguna</th><th>Peran</th><th /></tr></thead><tbody>{data.users.map(x=><tr key={String(x.id)}><td><strong>{x.name}</strong><small className="cell-note">{x.email}</small></td><td><Status tone={x.role==="Admin"?"violet":x.role==="Ustadz"?"blue":"green"}>{x.role}</Status></td><td><DataActions row={x} onEdit={r=>edit("users",r)} onDelete={r=>remove("users",r)} /></td></tr>)}</tbody></table></div></article><article className="card data-card"><header className="card-header"><div><h3>Audit Aktivitas</h3><p>Jejak perubahan terbaru</p></div></header><div className="audit-list">{data.audit.map(x=><div key={String(x.id)}><MiniIcon tone={x.action==="Hapus"?"red":x.action==="Tambah"?"green":"blue"}>{String(x.action).slice(0,1)}</MiniIcon><div><strong>{x.action} · {x.resource}</strong><p>{x.detail}</p><small>{x.user_email} · {new Date(String(x.created_at)).toLocaleString("id-ID")}</small></div></div>)}</div></article></section>
   <section className="card data-card guardian-inbox"><header className="card-header"><div><h3>Pesan dari Wali Santri</h3><p>Pertanyaan dari Portal Wali yang menunggu tindak lanjut</p></div><Status tone={data.guardianMessages.some(x=>x.status==="Baru")?"amber":"green"}>{data.guardianMessages.filter(x=>x.status==="Baru").length} baru</Status></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Subjek & Pesan</th><th>Pengirim</th><th>Status</th><th /></tr></thead><tbody>{data.guardianMessages.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong></td><td><strong>{x.subject}</strong><small className="cell-note">{x.message}{x.reply?` · Balasan: ${x.reply}`:""}</small></td><td className="muted">{x.sender_email}</td><td><Status tone={x.status==="Dibalas"?"green":"amber"}>{x.status}</Status></td><td><button className="text-button" onClick={()=>reply(x)}>{x.status==="Dibalas"?"Balas lagi":"Balas"}</button></td></tr>)}{!data.guardianMessages.length&&<tr><td colSpan={5} className="muted">Belum ada pesan dari wali santri.</td></tr>}</tbody></table></div></section></>;
 }
@@ -865,7 +898,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
   const [topupOpen,setTopupOpen]=useState(false);
   const [qrRequest,setQrRequest]=useState<Row|null>(null);
   const student=data.students.find(x=>String(x.id)===selectedId)??data.students[0];
-  if(!student) return <div className="empty-state guardian-empty"><b>Belum ada santri yang terhubung</b><span>Minta Admin mengisi “Email akun wali” pada Data Santri menggunakan email akun Anda: {data.user?.email}</span><a className="secondary-button link-button" href="/wali">Lihat cara menghubungkan akun</a></div>;
+  if(!student) return <div className="empty-state guardian-empty"><b>Belum ada santri yang terhubung</b><span>Minta Admin memastikan “Nomor WhatsApp wali” pada Data Santri sama dengan nomor akun Anda: +{data.user?.guardianPhone}</span><a className="secondary-button link-button" href="/wali">Lihat cara menghubungkan akun</a></div>;
 
   const byStudent=(rows:Row[])=>rows.filter(x=>Number(x.student_id)===Number(student.id));
   const bills=byStudent(data.bills), attendance=byStudent(data.attendance), tahfidz=byStudent(data.tahfidz), grades=byStudent(data.grades);
@@ -955,7 +988,7 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
   students: [
     { key:"name",label:"Nama lengkap" },{ key:"nis",label:"NIS" },{ key:"class_name",label:"Kelas" },
     { key:"room",label:"Kamar" },{ key:"guardian_name",label:"Nama wali" },{ key:"guardian_phone",label:"Nomor WhatsApp wali",type:"tel" },
-    { key:"guardian_email",label:"Email akun wali",type:"email" },
+    { key:"guardian_email",label:"Email wali (opsional)",type:"email" },
     { key:"status",label:"Status",options:["Aktif","Izin","Nonaktif"] },
   ],
   tahfidz: [
@@ -1065,7 +1098,7 @@ function RecordModal({ editor, students, subjects, onClose, onSave }: { editor: 
       :field.type==="subject"?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih mata pelajaran</option>{subjects.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.class_name}</option>)}</select>
       :field.options?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih</option>{field.options.map(o=><option key={o}>{o}</option>)}</select>
       :field.type==="textarea"?<textarea required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />
-      :<input required={!["status","note","room_scope"].includes(field.key)} readOnly={editor.resource==="tahfidz"&&field.key==="amount"} min={["verse_from","verse_to","amount"].includes(field.key)?1:undefined} max={["minimum_score","assignment_score","midterm_score","exam_score"].includes(field.key)?100:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
+      :<input required={!["status","note","room_scope","guardian_email"].includes(field.key)} readOnly={editor.resource==="tahfidz"&&field.key==="amount"} min={["verse_from","verse_to","amount"].includes(field.key)?1:undefined} max={["minimum_score","assignment_score","midterm_score","exam_score"].includes(field.key)?100:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
     </label>)}</div>
     {error&&<div className="form-error">{error}</div>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button disabled={saving} className="primary-button">{saving?"Menyimpan...":"Simpan Data"}</button></div>
@@ -1094,7 +1127,7 @@ function HelpModal({ role, onClose, onNavigate, onRefresh }: { role:Role; onClos
     ? [
       {title:"Pembayaran",copy:"Buka tagihan anak, lalu tekan Tampilkan QR untuk melanjutkan pembayaran.",page:"portalwali",label:"Buka Portal Wali"},
       {title:"Izin & Kunjungan",copy:"Ajukan izin, kunjungan, atau penjemputan dari profil santri.",page:"portalwali",label:"Buka layanan wali"},
-      {title:"Data anak",copy:"Pastikan email akun wali sama dengan email yang tersimpan pada Data Santri.",page:"portalwali",label:"Periksa data anak"},
+      {title:"Data anak",copy:"Pastikan nomor HP wali sama dengan nomor WhatsApp yang tersimpan pada Data Santri.",page:"portalwali",label:"Periksa data anak"},
     ]
     : role==="Admin"
       ? [
@@ -1122,7 +1155,7 @@ function HelpModal({ role, onClose, onNavigate, onRefresh }: { role:Role; onClos
   </div></div>;
 }
 
-function AccountModal({ user, role, onClose }: { user:AppData["user"]; role:Role; onClose:()=>void }) {
+function AccountModal({ user, role, onClose, onLogout }: { user:AppData["user"]; role:Role; onClose:()=>void; onLogout:()=>void }) {
   const closeButtonRef=useRef<HTMLButtonElement>(null);
   useEffect(()=>{
     closeButtonRef.current?.focus();
@@ -1133,10 +1166,10 @@ function AccountModal({ user, role, onClose }: { user:AppData["user"]; role:Role
   const initials=(user?.name||"Pengguna").split(" ").map(value=>value[0]).slice(0,2).join("").toUpperCase();
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="account-modal-title" onMouseDown={event=>event.stopPropagation()}>
     <button ref={closeButtonRef} type="button" className="modal-close" aria-label="Tutup profil akun" onClick={onClose}>×</button>
-    <span className="modal-eyebrow">AKUN SINURMAN</span><h2 id="account-modal-title">Profil pengguna</h2><p>Identitas ini berasal dari akun ChatGPT yang sedang masuk.</p>
-    <div className="account-summary"><span>{initials}</span><div><strong>{user?.name||"Pengguna SINURMAN"}</strong><small>{user?.email||"Email belum tersedia"}</small></div></div>
+    <span className="modal-eyebrow">AKUN SINURMAN</span><h2 id="account-modal-title">Profil pengguna</h2><p>{user?.guardianPhone?"Identitas wali terhubung dengan nomor HP pada Data Santri.":"Identitas ini berasal dari akun internal yang sedang masuk."}</p>
+    <div className="account-summary"><span>{initials}</span><div><strong>{user?.name||"Pengguna SINURMAN"}</strong><small>{user?.guardianPhone?`+${user.guardianPhone}`:user?.email||"Identitas belum tersedia"}</small></div></div>
     <dl className="account-details"><div><dt>Peran</dt><dd>{role}</dd></div><div><dt>Penugasan kamar</dt><dd>{user?.roomScope||"Tidak dibatasi"}</dd></div><div><dt>Status akun</dt><dd><Status tone="green">Aktif</Status></dd></div></dl>
-    <div className="modal-actions"><a className="secondary-button link-button" href="/signout-with-chatgpt?return_to=%2F">Keluar dari akun</a><button type="button" className="primary-button" onClick={onClose}>Selesai</button></div>
+    <div className="modal-actions"><button type="button" className="secondary-button" onClick={onLogout}>Keluar dari akun</button><button type="button" className="primary-button" onClick={onClose}>Selesai</button></div>
   </div></div>;
 }
 
@@ -1330,7 +1363,7 @@ export default function DashboardClient() {
       case "jadwal": return <SchedulePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "penerimaan": return <AdmissionsPage data={data} role={role} reload={loadData} notify={notify} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "konseling": return <CounselingPage rows={data.counseling} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
-      case "pengguna": return <UsersPage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} reply={row=>void replyGuardianMessage(row)} />;
+      case "pengguna": return <UsersPage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} reply={row=>void replyGuardianMessage(row)} reload={loadData} notify={notify} />;
       case "integrasi": return <IntegrationsPage data={data} onImported={loadData} notify={notify} />;
       case "portalwali": return <GuardianPortal data={data} onCard={setCardStudent} onPayment={row=>void openPayment(row)} reload={loadData} notify={notify} />;
     }
@@ -1380,6 +1413,15 @@ export default function DashboardClient() {
     setDark(nextDark);
     window.localStorage.setItem("sinurman-theme",nextDark?"dark":"light");
     notify(nextDark?"Mode gelap diaktifkan.":"Mode terang diaktifkan.");
+  }
+
+  async function logout() {
+    if(data.user?.guardianPhone) {
+      await fetch("/api/wali-auth",{method:"DELETE"});
+      window.location.assign("/wali");
+      return;
+    }
+    window.location.assign("/signout-with-chatgpt?return_to=%2F");
   }
 
   return (
@@ -1449,7 +1491,7 @@ export default function DashboardClient() {
             </div>
             <span className="divider" />
             <div className="profile-wrap"><button type="button" className={`profile-button ${topbarPanel==="profile"?"active":""}`} onClick={()=>setTopbarPanel(current=>current==="profile"?null:"profile")} aria-haspopup="menu" aria-expanded={topbarPanel==="profile"}><span>{(data.user?.name||"Pengguna").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{data.user?.name||"Pengguna SINURMAN"}</strong><small>{role}</small></div><i>{topbarPanel==="profile"?"⌃":"⌄"}</i></button>
-              {topbarPanel==="profile"&&<div className="topbar-popover profile-menu" role="menu"><div className="profile-menu-head"><span>{(data.user?.name||"Pengguna").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{data.user?.name||"Pengguna SINURMAN"}</strong><small>{data.user?.email||role}</small></div></div><div className="profile-role"><span>✓</span><div><strong>{role} aktif</strong><small>{data.user?.roomScope?`Kamar ${data.user.roomScope}`:"Akses sesuai penugasan akun"}</small></div></div><button type="button" onClick={()=>{setTopbarPanel(null);setShowAccount(true);}}>♙ <span>Profil akun</span></button><button type="button" onClick={()=>{setTopbarPanel(null);setShowSettings(true);}}>⚙ <span>Pengaturan tampilan</span></button><button type="button" onClick={()=>{setTopbarPanel(null);setShowHelp(true);}}>? <span>Pusat bantuan</span></button><a href="/signout-with-chatgpt?return_to=%2F">↪ <span>Keluar</span></a></div>}
+              {topbarPanel==="profile"&&<div className="topbar-popover profile-menu" role="menu"><div className="profile-menu-head"><span>{(data.user?.name||"Pengguna").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{data.user?.name||"Pengguna SINURMAN"}</strong><small>{data.user?.guardianPhone?`+${data.user.guardianPhone}`:data.user?.email||role}</small></div></div><div className="profile-role"><span>✓</span><div><strong>{role} aktif</strong><small>{data.user?.roomScope?`Kamar ${data.user.roomScope}`:"Akses sesuai penugasan akun"}</small></div></div><button type="button" onClick={()=>{setTopbarPanel(null);setShowAccount(true);}}>♙ <span>Profil akun</span></button><button type="button" onClick={()=>{setTopbarPanel(null);setShowSettings(true);}}>⚙ <span>Pengaturan tampilan</span></button><button type="button" onClick={()=>{setTopbarPanel(null);setShowHelp(true);}}>? <span>Pusat bantuan</span></button><button type="button" onClick={()=>void logout()}>↪ <span>Keluar</span></button></div>}
             </div>
           </div>
         </header>
@@ -1471,7 +1513,7 @@ export default function DashboardClient() {
       {showNotification&&<NotificationModal students={data.students} onClose={()=>setShowNotification(false)} onSent={notify} />}
       {paymentBill&&<PaymentQrModal bill={paymentBill} onClose={()=>setPaymentBill(null)} onUpdated={loadData} notify={notify}/>}
       {showHelp&&<HelpModal role={role} onClose={()=>setShowHelp(false)} onNavigate={selectPage} onRefresh={async()=>{await loadData();notify("Data berhasil disinkronkan.");}}/>}
-      {showAccount&&<AccountModal user={data.user} role={role} onClose={()=>setShowAccount(false)}/>}
+      {showAccount&&<AccountModal user={data.user} role={role} onClose={()=>setShowAccount(false)} onLogout={()=>void logout()}/>}
       {showSettings&&<SettingsModal dark={dark} onDarkChange={changeTheme} onHelp={()=>setShowHelp(true)} onClose={()=>setShowSettings(false)}/>}
       {toast&&<div className="toast"><span>✓</span>{toast}</div>}
     </div>
