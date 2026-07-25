@@ -358,6 +358,26 @@ export const auditLogs = sqliteTable("audit_logs", {
   createdAt: text("created_at").notNull(),
 });
 
+export const employees = sqliteTable("employees", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  employeeNo: text("employee_no").notNull().unique(),
+  name: text("name").notNull(),
+  gender: text("gender").notNull(),
+  birthPlace: text("birth_place").notNull().default(""),
+  birthDate: text("birth_date").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  email: text("email").notNull().default(""),
+  position: text("position").notNull(),
+  workUnit: text("work_unit").notNull(),
+  employmentType: text("employment_type").notNull(),
+  education: text("education").notNull().default(""),
+  joinDate: text("join_date").notNull(),
+  address: text("address").notNull().default(""),
+  status: text("status").notNull().default("Aktif"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const guardianAccounts = sqliteTable("guardian_accounts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   phone: text("phone").notNull().unique(),

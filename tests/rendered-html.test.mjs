@@ -280,6 +280,32 @@ test("login nomor HP memakai PIN aman, sesi HttpOnly, dan penguncian percobaan",
   assert.doesNotMatch(authRoute, /pin_hash/);
 });
 
+test("data pegawai memiliki CRUD Admin, filter, pencarian, dan migrasi database", async () => {
+  const [dashboard, records, bootstrap, runtime, schema, migration] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/records/route.ts"),
+    file("app/api/bootstrap/route.ts"),
+    file("app/api/_lib.ts"),
+    file("db/schema.ts"),
+    file("drizzle/0012_noisy_lilandra.sql"),
+  ]);
+  assert.match(dashboard, /Data Pegawai/);
+  assert.match(dashboard, /function EmployeesPage/);
+  assert.match(dashboard, /Total Pegawai/);
+  assert.match(dashboard, /Pegawai Aktif/);
+  assert.match(dashboard, /Tenaga Pendidikan/);
+  assert.match(dashboard, /Cari nama, NIP, jabatan, atau nomor HP/);
+  assert.match(dashboard, /actions\("employees"\)/);
+  assert.match(records, /employees: \{/);
+  assert.match(records, /employee_no/);
+  assert.match(bootstrap, /SELECT \* FROM employees ORDER BY name/);
+  assert.match(bootstrap, /user\.role === "Admin"/);
+  assert.match(runtime, /CREATE TABLE IF NOT EXISTS employees/);
+  assert.match(schema, /export const employees/);
+  assert.match(migration, /CREATE TABLE `employees`/);
+  assert.match(migration, /employees_employee_no_unique/);
+});
+
 test("Musyrif dan Kepala Asrama dibatasi modul serta kamar penugasan", async () => {
   const [page, lib, bootstrap, records, migration] = await Promise.all([
     file("app/dashboard-client.tsx"),

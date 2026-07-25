@@ -845,6 +845,13 @@ h4 {
 .guardian-pin-modal>label input { min-height:46px; padding:11px 13px; border:1px solid var(--border); border-radius:8px; color:var(--navy); background:var(--surface); font-size:18px; font-weight:800; letter-spacing:5px; }
 .guardian-empty .link-button { margin-top:15px; }
 
+.employees-page { display:flex; flex-direction:column; gap:16px; }
+.employee-data-card { margin-top:0; }
+.employee-filters .search-field { min-width:min(360px,100%); }
+.employee-data-card .person>div { min-width:0; display:flex; flex-direction:column; }
+.employee-data-card td { vertical-align:middle; }
+.employee-data-card .table-footer>small { color:var(--muted); }
+
 @media (max-width:900px) {
   .guardian-login-hero { grid-template-columns:1fr; gap:40px; padding-top:48px; padding-bottom:70px; }
   .guardian-login-copy { max-width:none; }

@@ -8,6 +8,11 @@ const resourceConfig = {
     columns: ["name", "nis", "class_name", "room", "guardian_name", "guardian_phone", "guardian_email", "status", "created_at"],
     required: ["name", "nis", "class_name", "room", "guardian_name", "guardian_phone"],
   },
+  employees: {
+    table: "employees",
+    columns: ["employee_no","name","gender","birth_place","birth_date","phone","email","position","work_unit","employment_type","education","join_date","address","status","created_at","updated_at"],
+    required: ["employee_no","name","gender","position","work_unit","employment_type","join_date"],
+  },
   tahfidz: {
     table: "tahfidz_records",
     columns: ["student_id", "surah", "verses", "surah_from", "surah_to", "verse_from", "verse_to", "amount", "grade", "teacher", "recorded_at"],
