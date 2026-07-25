@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -377,6 +377,38 @@ export const employees = sqliteTable("employees", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const schoolClasses = sqliteTable("school_classes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  educationLevel: text("education_level", { enum: ["SMP", "SMK"] }).notNull(),
+  gradeOrder: integer("grade_order").notNull(),
+  major: text("major").notNull().default(""),
+  homeroomTeacher: text("homeroom_teacher").notNull().default(""),
+  capacity: integer("capacity").notNull().default(32),
+  nextClassName: text("next_class_name").notNull().default(""),
+  academicYear: text("academic_year").notNull(),
+  status: text("status").notNull().default("Aktif"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const studentPromotions = sqliteTable("student_promotions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  studentName: text("student_name").notNull(),
+  nis: text("nis").notNull(),
+  fromClass: text("from_class").notNull(),
+  toClass: text("to_class").notNull(),
+  action: text("action", { enum: ["Naik Kelas", "Alumni"] }).notNull(),
+  academicYearFrom: text("academic_year_from").notNull(),
+  academicYearTo: text("academic_year_to").notNull(),
+  processedBy: text("processed_by").notNull(),
+  processedAt: text("processed_at").notNull(),
+}, (table) => [
+  uniqueIndex("student_promotions_year_idx").on(table.studentId, table.academicYearFrom),
+  index("student_promotions_student_idx").on(table.studentId),
+]);
 
 export const guardianAccounts = sqliteTable("guardian_accounts", {
   id: integer("id").primaryKey({ autoIncrement: true }),

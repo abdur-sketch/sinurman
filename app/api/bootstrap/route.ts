@@ -35,6 +35,8 @@ export async function GET(request: Request) {
     const [
       students,
       employees,
+      classes,
+      promotionHistory,
       tahfidz,
       mutabaah,
       health,
@@ -72,6 +74,12 @@ export async function GET(request: Request) {
       user.role === "Admin"
         ? all("SELECT * FROM employees ORDER BY name")
         : all("SELECT * FROM employees WHERE 1=0"),
+      guardian
+        ? all("SELECT * FROM school_classes WHERE 1=0")
+        : all("SELECT * FROM school_classes ORDER BY education_level,grade_order,name"),
+      user.role === "Admin"
+        ? all("SELECT * FROM student_promotions ORDER BY id DESC LIMIT 500")
+        : all("SELECT * FROM student_promotions WHERE 1=0"),
       guardian
         ? owned("SELECT t.*, s.name AS student_name FROM tahfidz_records t JOIN students s ON s.id=t.student_id WHERE lower(s.guardian_email)=? ORDER BY t.id DESC LIMIT 100")
         : staff ? scoped("SELECT t.*,s.name AS student_name FROM tahfidz_records t JOIN students s ON s.id=t.student_id WHERE s.room=? ORDER BY t.id DESC LIMIT 100")
@@ -188,6 +196,8 @@ export async function GET(request: Request) {
       user,
       students: students.results,
       employees: employees.results,
+      classes: classes.results,
+      promotionHistory: promotionHistory.results,
       tahfidz: tahfidz.results,
       mutabaah: mutabaah.results,
       health: health.results,

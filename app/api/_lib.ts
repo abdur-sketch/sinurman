@@ -55,6 +55,10 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS canteen_sale_items (id INTEGER PRIMARY KEY AUTOINCREMENT,sale_id INTEGER NOT NULL,product_id INTEGER NOT NULL,product_name TEXT NOT NULL,quantity INTEGER NOT NULL,unit_price INTEGER NOT NULL,subtotal INTEGER NOT NULL)",
       "CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,user_email TEXT NOT NULL,action TEXT NOT NULL,resource TEXT NOT NULL,record_id INTEGER,detail TEXT NOT NULL,created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT,employee_no TEXT NOT NULL UNIQUE,name TEXT NOT NULL,gender TEXT NOT NULL,birth_place TEXT NOT NULL DEFAULT '',birth_date TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',position TEXT NOT NULL,work_unit TEXT NOT NULL,employment_type TEXT NOT NULL,education TEXT NOT NULL DEFAULT '',join_date TEXT NOT NULL,address TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS school_classes (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,education_level TEXT NOT NULL,grade_order INTEGER NOT NULL,major TEXT NOT NULL DEFAULT '',homeroom_teacher TEXT NOT NULL DEFAULT '',capacity INTEGER NOT NULL DEFAULT 32,next_class_name TEXT NOT NULL DEFAULT '',academic_year TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS student_promotions (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,student_name TEXT NOT NULL,nis TEXT NOT NULL,from_class TEXT NOT NULL,to_class TEXT NOT NULL,action TEXT NOT NULL,academic_year_from TEXT NOT NULL,academic_year_to TEXT NOT NULL,processed_by TEXT NOT NULL,processed_at TEXT NOT NULL)",
+      "CREATE UNIQUE INDEX IF NOT EXISTS student_promotions_year_idx ON student_promotions(student_id,academic_year_from)",
+      "CREATE INDEX IF NOT EXISTS student_promotions_student_idx ON student_promotions(student_id)",
       "CREATE TABLE IF NOT EXISTS guardian_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT NOT NULL UNIQUE,pin_hash TEXT NOT NULL,pin_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Aktif',failed_attempts INTEGER NOT NULL DEFAULT 0,locked_until TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS guardian_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT,account_id INTEGER NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,created_at TEXT NOT NULL,last_seen_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS guardian_sessions_account_idx ON guardian_sessions(account_id)",
@@ -344,6 +348,18 @@ export async function seedIfNeeded() {
     db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .bind("Faris Abdullah", "SN-240212", "IX A", "Ibnu Khaldun 02", "Abdullah Karim", "6281234567805", "wali.faris@sinurman.id", "Aktif", now),
   ]);
+  await db.prepare(
+    `INSERT OR IGNORE INTO school_classes
+      (name,education_level,grade_order,major,homeroom_teacher,capacity,next_class_name,academic_year,status,created_at,updated_at)
+     SELECT DISTINCT class_name,
+       CASE WHEN class_name LIKE 'VII%' OR class_name LIKE 'VIII%' OR class_name LIKE 'IX%' THEN 'SMP' ELSE 'SMK' END,
+       CASE WHEN class_name LIKE 'XII%' THEN 12 WHEN class_name LIKE 'XI%' THEN 11 WHEN class_name LIKE 'X %' OR class_name='X' THEN 10
+            WHEN class_name LIKE 'IX%' THEN 9 WHEN class_name LIKE 'VIII%' THEN 8 ELSE 7 END,
+       CASE WHEN class_name LIKE 'X %' THEN substr(class_name,3) WHEN class_name LIKE 'XI %' THEN substr(class_name,4)
+            WHEN class_name LIKE 'XII %' THEN substr(class_name,5) ELSE '' END,
+       '',32,'','2026/2027','Aktif',?,?
+     FROM students WHERE class_name<>'' AND class_name NOT LIKE 'Alumni%'`,
+  ).bind(now,now).run();
   if (Number(count?.total ?? 0) === 0) await db.batch([
     db.prepare("INSERT INTO tahfidz_records (student_id, surah, verses, amount, grade, teacher, recorded_at) VALUES (1, ?, ?, ?, ?, ?, ?)")
       .bind("Al-Mulk", "1–15", 15, "Mumtaz", "Ustadz Hasan", now),
@@ -455,6 +471,16 @@ export async function seedIfNeeded() {
     }
     for(let index=0;index<statements.length;index+=75) await db.batch(statements.slice(index,index+75));
   }
+  await db.prepare(
+    `INSERT OR IGNORE INTO school_classes
+      (name,education_level,grade_order,major,homeroom_teacher,capacity,next_class_name,academic_year,status,created_at,updated_at)
+     SELECT DISTINCT class_name,education_level,
+       CASE WHEN class_name LIKE 'XII%' THEN 12 WHEN class_name LIKE 'XI%' THEN 11 WHEN class_name LIKE 'X %' OR class_name='X' THEN 10
+            WHEN class_name LIKE 'IX%' THEN 9 WHEN class_name LIKE 'VIII%' THEN 8 ELSE 7 END,
+       CASE WHEN education_level='SMK' THEN replace(replace(replace(class_name,'XII ',''),'XI ',''),'X ','') ELSE '' END,
+       '',32,'','2026/2027','Aktif',?,?
+     FROM schedules WHERE class_name<>''`,
+  ).bind(now,now).run();
   const roomCount = await db.prepare("SELECT COUNT(*) AS total FROM rooms").first<{ total:number }>();
   if (Number(roomCount?.total ?? 0) === 0) await db.batch([
     db.prepare("INSERT INTO rooms (name, capacity, supervisor, status) VALUES (?, ?, ?, ?)")

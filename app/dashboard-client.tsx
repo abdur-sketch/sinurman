@@ -4,13 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QURAN_SURAHS, quranRangeAmount } from "./quran-data";
 
 type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
-type Resource = "students" | "employees" | "tahfidz" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
+type Resource = "students" | "employees" | "classes" | "tahfidz" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
 type Row = Record<string, string | number | null>;
 type AppData = {
   user?: { name: string; email: string; role: Role; roomScope?: string; guardianPhone?: string };
   warning?: string;
   students: Row[];
   employees: Row[];
+  classes: Row[];
+  promotionHistory: Row[];
   tahfidz: Row[];
   mutabaah: Row[];
   health: Row[];
@@ -52,7 +54,7 @@ type SearchResult = {
 };
 
 const emptyData: AppData = {
-  students: [], employees: [], tahfidz: [], mutabaah: [], health: [], transactions: [], characters: [],
+  students: [], employees: [], classes: [], promotionHistory: [], tahfidz: [], mutabaah: [], health: [], transactions: [], characters: [],
   inventory: [], announcements: [], notifications: [],
   attendance: [], subjects: [], grades: [], permits: [], schedules: [], rooms: [], admissions: [], admissionDocuments: [],
   counseling: [], bills: [], users: [], audit: [], guardianMessages: [], guardianRequests: [],
@@ -62,6 +64,7 @@ type PageKey =
   | "dashboard"
   | "santri"
   | "pegawai"
+  | "kelas"
   | "tahfidz"
   | "akademik"
   | "mutabaah"
@@ -87,6 +90,7 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
       { key: "dashboard", icon: "fi-rr-apps", label: "Dashboard" },
       { key: "santri", icon: "fi-rr-users", label: "Data Santri" },
       { key: "pegawai", icon: "fi-rr-id-badge", label: "Data Pegawai" },
+      { key: "kelas", icon: "fi-rr-chalkboard-user", label: "Kelas & Kenaikan" },
     ],
   },
   {
@@ -132,6 +136,7 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
   dashboard: { title: "Assalamu’alaikum, Ahmad 👋", subtitle: "Berikut ringkasan perkembangan pesantren hari ini." },
   santri: { title: "Data Santri", subtitle: "Kelola profil, kelas, kamar, dan status seluruh santri." },
   pegawai: { title: "Data Pegawai", subtitle: "Kelola identitas, jabatan, unit kerja, dan status pegawai pesantren." },
+  kelas: { title: "Kelas & Kenaikan", subtitle: "Kelola master kelas, proses kenaikan otomatis, dan arsip alumni." },
   tahfidz: { title: "Tahfidz & Hafalan", subtitle: "Pantau target, setoran, dan capaian hafalan santri." },
   akademik: { title: "Akademik & Rapor", subtitle: "Kelola mata pelajaran dan nilai rapor SMP–SMK." },
   mutabaah: { title: "Mutaba’ah Ibadah", subtitle: "Rekap pelaksanaan ibadah dan kegiatan harian." },
@@ -300,17 +305,78 @@ function TahfidzPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: ()
 
 function StudentsPage({ rows, onAdd, onEdit, onDelete, onCard }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onCard:(row:Row)=>void }) {
   const [query, setQuery] = useState("");
-  const filtered = rows.filter((s) => `${s.name} ${s.nis}`.toLowerCase().includes(query.toLowerCase()));
+  const [classFilter,setClassFilter]=useState("Semua Kelas");
+  const [statusFilter,setStatusFilter]=useState("Semua Status");
+  const classNames=Array.from(new Set(rows.map(row=>String(row.class_name||"")).filter(Boolean))).sort();
+  const statuses=Array.from(new Set(rows.map(row=>String(row.status||"")).filter(Boolean))).sort();
+  const filtered = rows.filter((s) =>
+    `${s.name} ${s.nis}`.toLowerCase().includes(query.toLowerCase())
+    &&(classFilter==="Semua Kelas"||s.class_name===classFilter)
+    &&(statusFilter==="Semua Status"||s.status===statusFilter)
+  );
   return (
     <section className="card data-card">
       <header className="card-header responsive"><div><h3>Daftar Santri</h3><p>{rows.length} santri tersimpan pada tahun ajaran 2026/2027</p></div><div className="header-actions"><a className="secondary-button link-button" href="/api/export?type=students&format=csv">⇩ Excel/CSV</a><button className="primary-button" onClick={onAdd}>+ Tambah Santri</button></div></header>
-      <div className="filters"><div className="search-field">⌕ <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cari nama atau NIS..." /></div><select><option>Semua Kelas</option><option>VII</option><option>VIII</option><option>IX</option></select><select><option>Semua Status</option><option>Aktif</option><option>Izin</option></select></div>
+      <div className="filters"><div className="search-field">⌕ <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cari nama atau NIS..." /></div><select value={classFilter} onChange={event=>setClassFilter(event.target.value)}><option>Semua Kelas</option>{classNames.map(value=><option key={value}>{value}</option>)}</select><select value={statusFilter} onChange={event=>setStatusFilter(event.target.value)}><option>Semua Status</option>{statuses.map(value=><option key={value}>{value}</option>)}</select></div>
       <div className="table-wrap"><table><thead><tr><th>Nama Santri</th><th>NIS</th><th>Kelas</th><th>Kamar</th><th>Status</th><th /></tr></thead>
         <tbody>{filtered.map(s=><tr key={String(s.id)}><td><div className="person"><span>{String(s.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{s.name}</strong></div></td><td className="muted">{s.nis}</td><td>{s.class_name}</td><td>{s.room}</td><td><Status tone={s.status==="Aktif"?"green":"amber"}>{s.status}</Status></td><td><div className="row-actions"><button onClick={()=>onCard(s)}>QR</button><button onClick={()=>onEdit(s)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(s)}>Hapus</button></div></td></tr>)}</tbody>
       </table></div>
       <footer className="table-footer"><span>Menampilkan {filtered.length} dari {rows.length} santri</span><div><button>‹</button><button className="active">1</button><button>›</button></div></footer>
     </section>
   );
+}
+
+function ClassesPromotionPage({ data, onAdd, onEdit, onDelete, reload, notify }: { data:AppData; onAdd:()=>void; onEdit:(row:Row)=>void; onDelete:(row:Row)=>void; reload:()=>Promise<void>; notify:(message:string)=>void }) {
+  const currentYear=String(data.classes[0]?.academic_year||"2026/2027");
+  const nextYear=useMemo(()=>{
+    const years=currentYear.match(/\d{4}/g);
+    return years?.length===2?`${Number(years[0])+1}/${Number(years[1])+1}`:"2027/2028";
+  },[currentYear]);
+  const [yearFrom,setYearFrom]=useState(currentYear);
+  const [yearTo,setYearTo]=useState(nextYear);
+  const [processing,setProcessing]=useState(false);
+  const activeStudents=data.students.filter(row=>row.status!=="Alumni"&&row.status!=="Nonaktif");
+  const alumni=data.students.filter(row=>row.status==="Alumni"||String(row.class_name).startsWith("Alumni"));
+  async function promote() {
+    if(!window.confirm(`Proses kenaikan ${yearFrom} → ${yearTo}? Kelas seluruh santri aktif akan diperbarui dan santri tingkat akhir dipindahkan ke arsip Alumni.`)) return;
+    setProcessing(true);
+    try {
+      const response=await fetch("/api/promotions",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({academicYearFrom:yearFrom,academicYearTo:yearTo})});
+      const result=await response.json() as {error?:string;promoted?:number;alumni?:number;skipped?:number};
+      if(!response.ok) throw new Error(result.error||"Kenaikan kelas gagal diproses.");
+      notify(`${result.promoted||0} santri naik kelas, ${result.alumni||0} menjadi alumni, ${result.skipped||0} dilewati.`);
+      await reload();
+    } catch(error) { notify(error instanceof Error?error.message:"Kenaikan kelas gagal diproses."); }
+    finally { setProcessing(false); }
+  }
+  return <div className="classes-page">
+    <section className="stats-grid four">
+      <article className="metric-card"><MiniIcon tone="blue">K</MiniIcon><div><span>Kelas Aktif</span><strong>{data.classes.filter(row=>row.status==="Aktif").length}</strong><small>Master kelas SMP–SMK</small></div></article>
+      <article className="metric-card"><MiniIcon tone="green">↑</MiniIcon><div><span>Siap Diproses</span><strong>{activeStudents.length}</strong><small>Santri aktif dan izin</small></div></article>
+      <article className="metric-card"><MiniIcon tone="violet">A</MiniIcon><div><span>Alumni Tersimpan</span><strong>{alumni.length}</strong><small>Data tidak pernah dihapus</small></div></article>
+      <article className="metric-card"><MiniIcon tone="amber">↻</MiniIcon><div><span>Riwayat Kenaikan</span><strong>{data.promotionHistory.length}</strong><small>Jejak perpindahan kelas</small></div></article>
+    </section>
+    <section className="card report-toolbar">
+      <div><strong>Kenaikan kelas otomatis</strong><small>Profil, tahfidz, kesehatan, pembayaran, dan laporan tetap memakai data santri yang sama.</small></div>
+      <label>Dari<input value={yearFrom} onChange={event=>setYearFrom(event.target.value)} placeholder="2026/2027"/></label>
+      <label>Ke<input value={yearTo} onChange={event=>setYearTo(event.target.value)} placeholder="2027/2028"/></label>
+      <button className="primary-button" disabled={processing} onClick={()=>void promote()}>{processing?"Memproses…":"Proses Kenaikan"}</button>
+    </section>
+    <section className="card data-card">
+      <header className="card-header responsive"><div><h3>Master Kelas</h3><p>Tambahkan kelas dan atur kelas tujuan berikutnya. Kelas akhir otomatis menjadi Alumni.</p></div><button className="primary-button" onClick={onAdd}>+ Tambah Kelas</button></header>
+      <div className="table-wrap"><table><thead><tr><th>Kelas</th><th>Jenjang</th><th>Wali Kelas</th><th>Kapasitas</th><th>Kelas Berikutnya</th><th>Tahun Ajaran</th><th>Status</th><th /></tr></thead><tbody>
+        {data.classes.map(row=><tr key={String(row.id)}><td><strong>{row.name}</strong><small className="cell-note">{row.major||`Tingkat ${row.grade_order}`}</small></td><td>{row.education_level}</td><td>{row.homeroom_teacher||"Belum ditentukan"}</td><td>{row.capacity} santri</td><td>{row.next_class_name||(["IX","XII"].includes(String(row.name).split(" ")[0])?`Alumni ${row.education_level}`:"Otomatis")}</td><td>{row.academic_year}</td><td><Status tone={row.status==="Aktif"?"green":"red"}>{row.status}</Status></td><td><DataActions row={row} onEdit={onEdit} onDelete={onDelete}/></td></tr>)}
+        {!data.classes.length&&<tr><td colSpan={8} className="muted">Belum ada master kelas. Klik Tambah Kelas untuk memulai.</td></tr>}
+      </tbody></table></div>
+    </section>
+    <section className="card data-card">
+      <header className="card-header"><div><h3>Riwayat Kenaikan & Alumni</h3><p>Cadangan jejak kelas lama untuk audit dan penelusuran alumni.</p></div></header>
+      <div className="table-wrap"><table><thead><tr><th>Santri</th><th>NIS</th><th>Dari</th><th>Tujuan</th><th>Proses</th><th>Tahun Ajaran</th><th>Waktu</th></tr></thead><tbody>
+        {data.promotionHistory.slice(0,100).map(row=><tr key={String(row.id)}><td><strong>{row.student_name}</strong></td><td className="muted">{row.nis}</td><td>{row.from_class}</td><td>{row.to_class}</td><td><Status tone={row.action==="Alumni"?"violet":"green"}>{row.action}</Status></td><td>{row.academic_year_from} → {row.academic_year_to}</td><td>{new Date(String(row.processed_at)).toLocaleString("id-ID")}</td></tr>)}
+        {!data.promotionHistory.length&&<tr><td colSpan={7} className="muted">Riwayat akan muncul setelah proses kenaikan pertama.</td></tr>}
+      </tbody></table></div>
+    </section>
+  </div>;
 }
 
 function EmployeesPage({ rows, onAdd, onEdit, onDelete }: { rows:Row[]; onAdd:()=>void; onEdit:(row:Row)=>void; onDelete:(row:Row)=>void }) {
@@ -1020,10 +1086,10 @@ function ReportsPage({ role }: { role:Role }) {
 
 const formFields: Record<Resource, { key: string; label: string; type?: string; options?: string[] }[]> = {
   students: [
-    { key:"name",label:"Nama lengkap" },{ key:"nis",label:"NIS" },{ key:"class_name",label:"Kelas" },
+    { key:"name",label:"Nama lengkap" },{ key:"nis",label:"NIS" },{ key:"class_name",label:"Kelas",type:"class" },
     { key:"room",label:"Kamar" },{ key:"guardian_name",label:"Nama wali" },{ key:"guardian_phone",label:"Nomor WhatsApp wali",type:"tel" },
     { key:"guardian_email",label:"Email wali (opsional)",type:"email" },
-    { key:"status",label:"Status",options:["Aktif","Izin","Nonaktif"] },
+    { key:"status",label:"Status",options:["Aktif","Izin","Alumni","Nonaktif"] },
   ],
   employees: [
     {key:"employee_no",label:"NIP / Nomor pegawai"},{key:"name",label:"Nama lengkap"},{key:"gender",label:"Jenis kelamin",options:["Laki-laki","Perempuan"]},
@@ -1032,6 +1098,11 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
     {key:"employment_type",label:"Jenis kepegawaian",options:["Tetap","Kontrak","Honorer","Magang"]},{key:"education",label:"Pendidikan terakhir"},{key:"join_date",label:"Tanggal mulai bekerja",type:"date"},
     {key:"address",label:"Alamat",type:"textarea"},{key:"status",label:"Status",options:["Aktif","Cuti","Nonaktif"]},
   ],
+  classes: [
+    {key:"name",label:"Nama kelas (contoh: VII A)"},{key:"education_level",label:"Jenjang",options:["SMP","SMK"]},{key:"grade_order",label:"Tingkat angka",type:"number"},
+    {key:"major",label:"Jurusan (opsional)"},{key:"homeroom_teacher",label:"Wali kelas"},{key:"capacity",label:"Kapasitas",type:"number"},
+    {key:"next_class_name",label:"Kelas berikutnya (opsional)",type:"class-optional"},{key:"academic_year",label:"Tahun ajaran"},{key:"status",label:"Status",options:["Aktif","Nonaktif"]},
+  ],
   tahfidz: [
     { key:"student_id",label:"Santri",type:"student" },
     { key:"surah_from",label:"Surat awal",options:QURAN_SURAHS.map(item=>item.name) },{ key:"verse_from",label:"Ayat awal",type:"number" },
@@ -1039,7 +1110,7 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
     { key:"amount",label:"Jumlah ayat disetor",type:"number" },{ key:"grade",label:"Penilaian",options:["Mumtaz","Jayyid Jiddan","Jayyid","Mengulang"] },
   ],
   subjects: [
-    {key:"code",label:"Kode mata pelajaran"},{key:"name",label:"Nama mata pelajaran"},{key:"education_level",label:"Jenjang",options:["SMP","SMK"]},{key:"class_name",label:"Kelas",options:["VII A","VIII A","IX A","X RPL","XI RPL","XII RPL","X TKJ","XI TKJ","XII TKJ"]},{key:"teacher",label:"Guru/Ustadz"},{key:"semester",label:"Semester",options:["Ganjil","Genap"]},{key:"academic_year",label:"Tahun ajaran"},{key:"minimum_score",label:"KKM",type:"number"},
+    {key:"code",label:"Kode mata pelajaran"},{key:"name",label:"Nama mata pelajaran"},{key:"education_level",label:"Jenjang",options:["SMP","SMK"]},{key:"class_name",label:"Kelas",type:"class"},{key:"teacher",label:"Guru/Ustadz"},{key:"semester",label:"Semester",options:["Ganjil","Genap"]},{key:"academic_year",label:"Tahun ajaran"},{key:"minimum_score",label:"KKM",type:"number"},
   ],
   grades: [
     {key:"student_id",label:"Santri",type:"student"},{key:"subject_id",label:"Mata pelajaran",type:"subject"},{key:"assignment_score",label:"Nilai tugas",type:"number"},{key:"midterm_score",label:"Nilai PTS",type:"number"},{key:"exam_score",label:"Nilai PAS",type:"number"},{key:"semester",label:"Semester",options:["Ganjil","Genap"]},{key:"academic_year",label:"Tahun ajaran"},{key:"note",label:"Catatan rapor",type:"textarea"},
@@ -1075,7 +1146,7 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
     {key:"student_id",label:"Santri",type:"student"},{key:"start_date",label:"Tanggal mulai",type:"date"},{key:"end_date",label:"Tanggal selesai",type:"date"},{key:"reason",label:"Alasan",type:"textarea"},{key:"status",label:"Status",options:["Diajukan","Disetujui","Ditolak","Selesai"]},
   ],
   schedules: [
-    {key:"education_level",label:"Jenjang",options:["SMP","SMK"]},{key:"class_name",label:"Kelas",options:["VII A","VIII A","IX A","X RPL","XI RPL","XII RPL","X TKJ","XI TKJ","XII TKJ"]},{key:"title",label:"Mata pelajaran/kegiatan"},{key:"category",label:"Kategori",options:["Pelajaran Umum","Produktif","Tahfidz","Ibadah","Kegiatan"]},{key:"teacher",label:"Ustadz/Guru"},{key:"location",label:"Ruang"},{key:"day_name",label:"Hari",options:["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"]},{key:"start_time",label:"Mulai",type:"time"},{key:"end_time",label:"Selesai",type:"time"},
+    {key:"education_level",label:"Jenjang",options:["SMP","SMK"]},{key:"class_name",label:"Kelas",type:"class"},{key:"title",label:"Mata pelajaran/kegiatan"},{key:"category",label:"Kategori",options:["Pelajaran Umum","Produktif","Tahfidz","Ibadah","Kegiatan"]},{key:"teacher",label:"Ustadz/Guru"},{key:"location",label:"Ruang"},{key:"day_name",label:"Hari",options:["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"]},{key:"start_time",label:"Mulai",type:"time"},{key:"end_time",label:"Selesai",type:"time"},
   ],
   rooms: [
     {key:"name",label:"Nama kamar"},{key:"capacity",label:"Kapasitas",type:"number"},{key:"supervisor",label:"Musyrif/Pembina"},{key:"status",label:"Status",options:["Aktif","Perawatan","Penuh"]},
@@ -1095,14 +1166,14 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
 };
 
 const resourceNames: Record<Resource,string> = {
-  students:"santri",employees:"pegawai",tahfidz:"setoran tahfidz",mutabaah:"kegiatan mutaba’ah",health:"pemeriksaan",transactions:"transaksi",
+  students:"santri",employees:"pegawai",classes:"kelas",tahfidz:"setoran tahfidz",mutabaah:"kegiatan mutaba’ah",health:"pemeriksaan",transactions:"transaksi",
   characters:"nilai karakter",inventory:"barang",announcements:"pengumuman",
   attendance:"absensi",permits:"izin",schedules:"jadwal",rooms:"kamar",admissions:"pendaftar",
   counseling:"catatan konseling",bills:"tagihan",users:"pengguna",
   subjects:"mata pelajaran",grades:"nilai akademik",
 };
 
-function RecordModal({ editor, students, subjects, onClose, onSave }: { editor: NonNullable<EditorState>; students: Row[]; subjects:Row[]; onClose: () => void; onSave: (resource: Resource, row: Row | undefined, data: Record<string, unknown>) => Promise<void> }) {
+function RecordModal({ editor, students, subjects, classes, onClose, onSave }: { editor: NonNullable<EditorState>; students: Row[]; subjects:Row[]; classes:Row[]; onClose: () => void; onSave: (resource: Resource, row: Row | undefined, data: Record<string, unknown>) => Promise<void> }) {
   const [form, setForm] = useState<Record<string, string>>(() => {
     const values: Record<string,string> = {};
     for (const field of formFields[editor.resource]) values[field.key] = String(editor.row?.[field.key] ?? "");
@@ -1125,7 +1196,7 @@ function RecordModal({ editor, students, subjects, onClose, onSave }: { editor: 
     event.preventDefault(); setSaving(true); setError("");
     try {
       const data: Record<string,unknown> = {};
-      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","subject_id","points","capacity","completed","verse_from","verse_to","minimum_score","assignment_score","midterm_score","exam_score"].includes(key) ? Number(value) : value;
+      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","subject_id","points","capacity","grade_order","completed","verse_from","verse_to","minimum_score","assignment_score","midterm_score","exam_score"].includes(key) ? Number(value) : value;
       await onSave(editor.resource,editor.row,data);
     } catch (e) { setError(e instanceof Error?e.message:"Gagal menyimpan."); setSaving(false); }
   }
@@ -1137,9 +1208,10 @@ function RecordModal({ editor, students, subjects, onClose, onSave }: { editor: 
     <div className="form-grid">{formFields[editor.resource].map(field=><label key={field.key} className={field.type==="textarea"?"wide":""}>{field.label}
       {field.type==="student"?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih santri</option>{students.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.nis}</option>)}</select>
       :field.type==="subject"?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih mata pelajaran</option>{subjects.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.class_name}</option>)}</select>
+      :field.type==="class"||field.type==="class-optional"?<select required={field.type==="class"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">{field.type==="class"?"Pilih kelas":"Otomatis berdasarkan tingkat"}</option>{classes.filter(row=>row.status==="Aktif"&&row.name!==editor.row?.name).map(row=><option key={String(row.id)} value={String(row.name)}>{row.name} · {row.education_level}</option>)}</select>
       :field.options?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih</option>{field.options.map(o=><option key={o}>{o}</option>)}</select>
       :field.type==="textarea"?<textarea required={!["note","address"].includes(field.key)} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />
-      :<input required={!["status","note","room_scope","guardian_email","birth_place","birth_date","phone","email","education"].includes(field.key)} readOnly={editor.resource==="tahfidz"&&field.key==="amount"} min={["verse_from","verse_to","amount"].includes(field.key)?1:undefined} max={["minimum_score","assignment_score","midterm_score","exam_score"].includes(field.key)?100:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
+      :<input required={!["status","note","room_scope","guardian_email","birth_place","birth_date","phone","email","education","major","homeroom_teacher"].includes(field.key)} readOnly={editor.resource==="tahfidz"&&field.key==="amount"} min={["verse_from","verse_to","amount","grade_order","capacity"].includes(field.key)?1:undefined} max={["minimum_score","assignment_score","midterm_score","exam_score"].includes(field.key)?100:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
     </label>)}</div>
     {error&&<div className="form-error">{error}</div>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button disabled={saving} className="primary-button">{saving?"Menyimpan...":"Simpan Data"}</button></div>
@@ -1332,6 +1404,7 @@ export default function DashboardClient() {
       ...menu,
       ...data.students.map(row => result(`student:${row.id}`, row.name, `${row.nis || "Tanpa NIS"} · ${row.class_name || "Tanpa kelas"} · ${row.room || "Tanpa kamar"}`, "santri", "♙", `${row.guardian_name} ${row.status}`)),
       ...data.employees.map(row => result(`employee:${row.id}`, row.name, `${row.employee_no||"Tanpa NIP"} · ${row.position||"Tanpa jabatan"} · ${row.work_unit||"Tanpa unit"}`, "pegawai", "fi-rr-id-badge", `${row.phone} ${row.email} ${row.employment_type} ${row.status} pegawai karyawan`)),
+      ...data.classes.map(row => result(`class:${row.id}`, row.name, `${row.education_level} · Wali kelas ${row.homeroom_teacher||"belum ditentukan"} · ${row.academic_year}`, "kelas", "fi-rr-chalkboard-user", `${row.major} ${row.next_class_name} kenaikan kelas alumni`)),
       ...data.schedules.map(row => result(`schedule:${row.id}`, row.title, `${row.class_name || ""} · ${row.day_name || ""} ${row.start_time || ""}–${row.end_time || ""} · ${row.teacher || ""}`, "jadwal", "▦", `${row.education_level} ${row.location} pelajaran mapel jadwal`)),
       ...data.tahfidz.map(row => result(`tahfidz:${row.id}`, row.student_name, tahfidzRange(row), "tahfidz", "◫", `${row.surah_from} ${row.surah_to} ${row.verse_from} ${row.verse_to} ${row.grade} ${row.status} hafalan setoran`)),
       ...data.grades.map(row => result(`grade:${row.id}`, row.student_name, `${row.subject_name} · ${row.final_score} (${row.predicate})`, "akademik", "A", `${row.semester} ${row.academic_year} rapor nilai akademik`)),
@@ -1392,6 +1465,7 @@ export default function DashboardClient() {
       case "dashboard": return <Overview data={data} />;
       case "santri": return <StudentsPage rows={data.students} {...actions("students")} onCard={setCardStudent} />;
       case "pegawai": return <EmployeesPage rows={data.employees} {...actions("employees")} />;
+      case "kelas": return <ClassesPromotionPage data={data} {...actions("classes")} reload={loadData} notify={notify} />;
       case "tahfidz": return <TahfidzPage rows={data.tahfidz} {...actions("tahfidz")} />;
       case "akademik": return <AcademicPage data={data} role={role} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "mutabaah": return <MutabaahPage rows={data.mutabaah} {...actions("mutabaah")} />;
@@ -1551,7 +1625,7 @@ export default function DashboardClient() {
         {(role==="Wali Santri"?[{key:"portalwali" as PageKey,icon:"fi-rr-home-heart",label:"Portal Wali"}]:[navGroups[0].items[0],navGroups[1].items[0],navGroups[1].items[1],navGroups[2].items[1]]).map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><ToolIcon name={item.icon} /><span>{item.label}</span></button>)}
         <button onClick={()=>setSidebarOpen(true)}><i>•••</i><span>Lainnya</span></button>
       </nav>
-      {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} subjects={data.subjects} onClose={()=>setEditor(null)} onSave={saveRecord} />}
+      {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} subjects={data.subjects} classes={data.classes} onClose={()=>setEditor(null)} onSave={saveRecord} />}
       {cardStudent&&<StudentCardModal student={cardStudent} onClose={()=>setCardStudent(null)} />}
       {showNotification&&<NotificationModal students={data.students} onClose={()=>setShowNotification(false)} onSent={notify} />}
       {paymentBill&&<PaymentQrModal bill={paymentBill} onClose={()=>setPaymentBill(null)} onUpdated={loadData} notify={notify}/>}

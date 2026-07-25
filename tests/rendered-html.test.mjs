@@ -306,6 +306,39 @@ test("data pegawai memiliki CRUD Admin, filter, pencarian, dan migrasi database"
   assert.match(migration, /employees_employee_no_unique/);
 });
 
+test("master kelas, kenaikan otomatis, dan arsip alumni tersedia untuk Admin", async () => {
+  const [dashboard, promotions, records, bootstrap, runtime, schema, tablesMigration, indexMigration] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/promotions/route.ts"),
+    file("app/api/records/route.ts"),
+    file("app/api/bootstrap/route.ts"),
+    file("app/api/_lib.ts"),
+    file("db/schema.ts"),
+    file("drizzle/0013_cool_amphibian.sql"),
+    file("drizzle/0014_amused_speed_demon.sql"),
+  ]);
+  assert.match(dashboard, /Kelas & Kenaikan/);
+  assert.match(dashboard, /function ClassesPromotionPage/);
+  assert.match(dashboard, /Kenaikan kelas otomatis/);
+  assert.match(dashboard, /Alumni Tersimpan/);
+  assert.match(dashboard, /promotionHistory/);
+  assert.match(dashboard, /type:"class"/);
+  assert.match(promotions, /Hanya Admin yang dapat memproses kenaikan kelas/);
+  assert.match(promotions, /status='Alumni'/);
+  assert.match(promotions, /INSERT OR IGNORE INTO student_promotions/);
+  assert.match(promotions, /student_promotions_year_idx|academic_year_from/);
+  assert.match(records, /school_classes/);
+  assert.match(bootstrap, /SELECT \* FROM school_classes/);
+  assert.match(bootstrap, /SELECT \* FROM student_promotions/);
+  assert.match(runtime, /CREATE TABLE IF NOT EXISTS school_classes/);
+  assert.match(runtime, /CREATE TABLE IF NOT EXISTS student_promotions/);
+  assert.match(schema, /export const schoolClasses/);
+  assert.match(schema, /export const studentPromotions/);
+  assert.match(tablesMigration, /CREATE TABLE `school_classes`/);
+  assert.match(tablesMigration, /CREATE TABLE `student_promotions`/);
+  assert.match(indexMigration, /student_promotions_year_idx/);
+});
+
 test("Musyrif dan Kepala Asrama dibatasi modul serta kamar penugasan", async () => {
   const [page, lib, bootstrap, records, migration] = await Promise.all([
     file("app/dashboard-client.tsx"),

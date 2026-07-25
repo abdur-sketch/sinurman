@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX `student_promotions_year_idx` ON `student_promotions` (`student_id`,`academic_year_from`);--> statement-breakpoint
+CREATE INDEX `student_promotions_student_idx` ON `student_promotions` (`student_id`);

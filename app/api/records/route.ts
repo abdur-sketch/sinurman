@@ -13,6 +13,11 @@ const resourceConfig = {
     columns: ["employee_no","name","gender","birth_place","birth_date","phone","email","position","work_unit","employment_type","education","join_date","address","status","created_at","updated_at"],
     required: ["employee_no","name","gender","position","work_unit","employment_type","join_date"],
   },
+  classes: {
+    table: "school_classes",
+    columns: ["name","education_level","grade_order","major","homeroom_teacher","capacity","next_class_name","academic_year","status","created_at","updated_at"],
+    required: ["name","education_level","grade_order","capacity","academic_year","status"],
+  },
   tahfidz: {
     table: "tahfidz_records",
     columns: ["student_id", "surah", "verses", "surah_from", "surah_to", "verse_from", "verse_to", "amount", "grade", "teacher", "recorded_at"],
