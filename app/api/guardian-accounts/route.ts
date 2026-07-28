@@ -38,6 +38,9 @@ export async function PATCH(request: Request) {
       const account = await database().prepare("SELECT id FROM guardian_accounts WHERE phone=?").bind(phone).first<{id:number}>();
       if (account) await database().prepare("DELETE FROM guardian_sessions WHERE account_id=?").bind(account.id).run();
     }
+    await database().prepare(
+      "INSERT INTO audit_logs (user_email,action,resource,record_id,detail,created_at) VALUES (?,?,?,NULL,?,?)",
+    ).bind(user.email, "Ubah", "guardian_accounts", `Akses +${phone} diubah menjadi ${status}`, new Date().toISOString()).run();
     return Response.json({ ok: true, status });
   } catch (error) {
     return Response.json(

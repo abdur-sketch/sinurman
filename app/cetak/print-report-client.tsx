@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import BrandMark from "../brand-mark";
 
 type ReportPayload = {
   title: string;
@@ -45,12 +46,12 @@ export default function PrintReportClient() {
   },[params]);
 
   if(error) return <main className="print-error"><span>!</span><h1>Laporan gagal dimuat</h1><p>{error}</p><button type="button" onClick={()=>window.close()}>Tutup halaman</button></main>;
-  if(!data) return <main className="print-loading"><span>ن</span><strong>Menyiapkan laporan SINURMAN…</strong></main>;
+  if(!data) return <main className="print-loading"><BrandMark/><strong>Menyiapkan laporan SINURMAN…</strong></main>;
 
   return <main className="print-report-page">
     <div className="print-controls no-print"><button type="button" onClick={()=>window.close()}>← Kembali</button><div><span>{data.rows.length} data siap dicetak</span><button type="button" disabled={printing} onClick={()=>window.print()}>{printing?"Membuka…":"Cetak Sekarang"}</button></div></div>
     <article className="print-sheet">
-      <header className="print-letterhead"><span>ن</span><div><strong>PONDOK PESANTREN NURUL IMAN</strong><small>Sistem Informasi Nurul Iman - SINURMAN</small><p>Administrasi Pesantren Terpadu · Tahun Ajaran 2026/2027</p></div></header>
+      <header className="print-letterhead"><BrandMark/><div><strong>PONDOK PESANTREN NURUL IMAN</strong><small>Sistem Informasi Nurul Iman - SINURMAN</small><p>Administrasi Pesantren Terpadu · Tahun Ajaran 2026/2027</p></div></header>
       <section className="print-report-title"><span>LAPORAN RESMI SINURMAN</span><h1>{data.title}</h1><p>{data.description}</p></section>
       <section className="print-meta"><div><small>Periode</small><strong>{data.period.label}</strong></div><div><small>Jumlah data</small><strong>{data.rows.length} baris</strong></div><div><small>Dicetak oleh</small><strong>{data.preparedBy.name}</strong></div><div><small>Waktu cetak</small><strong>{data.generatedAt}</strong></div></section>
       <div className="print-table-wrap"><table><thead><tr><th>No.</th>{data.columns.map(column=><th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{data.rows.map((row,index)=><tr key={index}><td>{index+1}</td>{data.columns.map(column=><td key={column.key}>{display(row[column.key])}</td>)}</tr>)}{!data.rows.length&&<tr><td colSpan={data.columns.length+1}>Tidak ada data pada periode yang dipilih.</td></tr>}</tbody></table></div>

@@ -1,7 +1,12 @@
 "use client";
+/* QR dan kartu memakai data URL dinamis sehingga elemen img biasa diperlukan. */
+/* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EmailAuthProvider, reauthenticateWithCredential, signInWithEmailAndPassword, updatePassword } from "firebase/auth";
+import BrandMark from "./brand-mark";
 import { QURAN_SURAHS, quranRangeAmount } from "./quran-data";
+import { firebaseClient } from "../lib/firebase/client";
 
 type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
 type Resource = "students" | "employees" | "classes" | "tahfidz" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
@@ -170,14 +175,6 @@ function tahfidzRange(row:Row) {
     : `${surahFrom} ayat ${verseFrom} s.d. ${surahTo} ayat ${verseTo}`;
 }
 
-const students = [
-  { name: "Muhammad Fikri", nis: "SN-240181", class: "VIII A", room: "Ibnu Sina 03", status: "Aktif", avatar: "MF" },
-  { name: "Ahmad Fauzan", nis: "SN-240182", class: "VIII A", room: "Ibnu Sina 03", status: "Aktif", avatar: "AF" },
-  { name: "Rizky Maulana", nis: "SN-240194", class: "VIII B", room: "Al-Farabi 02", status: "Aktif", avatar: "RM" },
-  { name: "Nabil Hidayat", nis: "SN-240207", class: "VII C", room: "Al-Khawarizmi 01", status: "Izin", avatar: "NH" },
-  { name: "Faris Abdullah", nis: "SN-240212", class: "IX A", room: "Ibnu Khaldun 02", status: "Aktif", avatar: "FA" },
-];
-
 const money = new Intl.NumberFormat("id-ID");
 
 const legacyToolIcons: Record<string, string> = {
@@ -221,7 +218,7 @@ function Metric({ title, value, icon, tone }: { title:string; value:number|strin
   return <article className="metric-card"><MiniIcon tone={tone}>{icon}</MiniIcon><div><span>{title}</span><strong>{value}</strong><small>Data PPDB terkini</small></div></article>;
 }
 
-function Overview({ data }: { data: AppData }) {
+function Overview({ data, onNavigate }: { data: AppData; onNavigate:(page:PageKey)=>void }) {
   const [classFilter,setClassFilter]=useState("Semua");
   const [roomFilter,setRoomFilter]=useState("Semua");
   const [periodFilter,setPeriodFilter]=useState("30");
@@ -242,6 +239,7 @@ function Overview({ data }: { data: AppData }) {
   const classStats=classes.map(label=>({label,value:data.students.filter(row=>row.class_name===label&&(roomFilter==="Semua"||row.room===roomFilter)).length})).filter(item=>item.value);
   const roomStats=rooms.map(label=>({label,value:data.students.filter(row=>row.room===label&&(classFilter==="Semua"||row.class_name===classFilter)).length})).filter(item=>item.value);
   const maxBar=Math.max(1,...classStats.map(item=>item.value),...roomStats.map(item=>item.value));
+  const announcements=data.announcements.slice(0,3);
   return (
     <>
       <section className="card analytics-toolbar"><div><strong>Analitik Operasional</strong><small>Grafik dan angka mengikuti kelas, kamar, serta periode yang dipilih.</small></div><label>Kelas<select value={classFilter} onChange={event=>setClassFilter(event.target.value)}><option>Semua</option>{classes.map(item=><option key={item}>{item}</option>)}</select></label><label>Kamar<select value={roomFilter} onChange={event=>setRoomFilter(event.target.value)}><option>Semua</option>{rooms.map(item=><option key={item}>{item}</option>)}</select></label><label>Periode<select value={periodFilter} onChange={event=>setPeriodFilter(event.target.value)}><option value="7">7 hari</option><option value="30">30 hari</option><option value="90">90 hari</option><option value="365">1 tahun</option><option value="all">Semua</option></select></label></section>
@@ -275,10 +273,10 @@ function Overview({ data }: { data: AppData }) {
           {[["Ayat disetorkan",tahfidz.reduce((sum,row)=>sum+Number(row.amount||0),0),"green"],["Catatan kehadiran",attendance.length,"blue"],["Nilai akademik",grades.length,"amber"],["Transaksi masuk",`Rp${money.format(paid)}`,"violet"]].map(([label,value,tone])=><div className="analytics-summary" key={String(label)}><MiniIcon tone={String(tone)}>{String(label).slice(0,1)}</MiniIcon><span>{label}</span><strong>{value}</strong></div>)}
         </article>
         <article className="card announcement-card">
-          <header className="card-header"><div><h3>Pengumuman</h3><p>Informasi penting pesantren</p></div><button className="text-button">Semua</button></header>
-          <div className="announcement-feature"><span className="date-box"><b>26</b>JUL</span><div><Status tone="blue">Akademik</Status><h4>Jadwal Ujian Tahfidz Semester</h4><p>Ujian dilaksanakan mulai 29 Juli 2026.</p></div></div>
-          <div className="announcement-mini"><span>24 Jul</span><p>Jadwal kunjungan wali santri bulan Agustus</p></div>
-          <div className="announcement-mini"><span>21 Jul</span><p>Daftar perlengkapan kegiatan Muharram</p></div>
+          <header className="card-header"><div><h3>Pengumuman</h3><p>Informasi penting pesantren</p></div><button className="text-button" onClick={()=>onNavigate("pengumuman")}>Semua</button></header>
+          {announcements[0]&&<div className="announcement-feature"><span className="date-box"><b>{new Date(String(announcements[0].published_at)).getDate()}</b>{new Date(String(announcements[0].published_at)).toLocaleDateString("id-ID",{month:"short"}).toUpperCase()}</span><div><Status tone="blue">{announcements[0].category}</Status><h4>{announcements[0].title}</h4><p>{announcements[0].content}</p></div></div>}
+          {announcements.slice(1).map(item=><div className="announcement-mini" key={String(item.id)}><span>{new Date(String(item.published_at)).toLocaleDateString("id-ID",{day:"numeric",month:"short"})}</span><p>{item.title}</p></div>)}
+          {!announcements.length&&<div className="portal-empty">Belum ada pengumuman.</div>}
         </article>
       </section>
     </>
@@ -303,10 +301,12 @@ function TahfidzPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: ()
   );
 }
 
-function StudentsPage({ rows, onAdd, onEdit, onDelete, onCard }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onCard:(row:Row)=>void }) {
+function StudentsPage({ rows, editable, onAdd, onEdit, onDelete, onCard }: { rows: Row[]; editable:boolean; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onCard:(row:Row)=>void }) {
   const [query, setQuery] = useState("");
   const [classFilter,setClassFilter]=useState("Semua Kelas");
   const [statusFilter,setStatusFilter]=useState("Semua Status");
+  const [page,setPage]=useState(1);
+  const pageSize=10;
   const classNames=Array.from(new Set(rows.map(row=>String(row.class_name||"")).filter(Boolean))).sort();
   const statuses=Array.from(new Set(rows.map(row=>String(row.status||"")).filter(Boolean))).sort();
   const filtered = rows.filter((s) =>
@@ -314,14 +314,17 @@ function StudentsPage({ rows, onAdd, onEdit, onDelete, onCard }: { rows: Row[]; 
     &&(classFilter==="Semua Kelas"||s.class_name===classFilter)
     &&(statusFilter==="Semua Status"||s.status===statusFilter)
   );
+  const pageCount=Math.max(1,Math.ceil(filtered.length/pageSize));
+  const activePage=Math.min(page,pageCount);
+  const visibleRows=filtered.slice((activePage-1)*pageSize,activePage*pageSize);
   return (
     <section className="card data-card">
-      <header className="card-header responsive"><div><h3>Daftar Santri</h3><p>{rows.length} santri tersimpan pada tahun ajaran 2026/2027</p></div><div className="header-actions"><a className="secondary-button link-button" href="/api/export?type=students&format=csv">⇩ Excel/CSV</a><button className="primary-button" onClick={onAdd}>+ Tambah Santri</button></div></header>
-      <div className="filters"><div className="search-field">⌕ <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cari nama atau NIS..." /></div><select value={classFilter} onChange={event=>setClassFilter(event.target.value)}><option>Semua Kelas</option>{classNames.map(value=><option key={value}>{value}</option>)}</select><select value={statusFilter} onChange={event=>setStatusFilter(event.target.value)}><option>Semua Status</option>{statuses.map(value=><option key={value}>{value}</option>)}</select></div>
+      <header className="card-header responsive"><div><h3>Daftar Santri</h3><p>{rows.length} santri tersimpan pada tahun ajaran 2026/2027</p></div><div className="header-actions"><a className="secondary-button link-button" href="/api/export?type=students&format=csv">⇩ Excel/CSV</a>{editable&&<button className="primary-button" onClick={onAdd}>+ Tambah Santri</button>}</div></header>
+      <div className="filters"><div className="search-field">⌕ <input value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}} placeholder="Cari nama atau NIS..." /></div><select value={classFilter} onChange={event=>{setClassFilter(event.target.value);setPage(1);}}><option>Semua Kelas</option>{classNames.map(value=><option key={value}>{value}</option>)}</select><select value={statusFilter} onChange={event=>{setStatusFilter(event.target.value);setPage(1);}}><option>Semua Status</option>{statuses.map(value=><option key={value}>{value}</option>)}</select></div>
       <div className="table-wrap"><table><thead><tr><th>Nama Santri</th><th>NIS</th><th>Kelas</th><th>Kamar</th><th>Status</th><th /></tr></thead>
-        <tbody>{filtered.map(s=><tr key={String(s.id)}><td><div className="person"><span>{String(s.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{s.name}</strong></div></td><td className="muted">{s.nis}</td><td>{s.class_name}</td><td>{s.room}</td><td><Status tone={s.status==="Aktif"?"green":"amber"}>{s.status}</Status></td><td><div className="row-actions"><button onClick={()=>onCard(s)}>QR</button><button onClick={()=>onEdit(s)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(s)}>Hapus</button></div></td></tr>)}</tbody>
+        <tbody>{visibleRows.map(s=><tr key={String(s.id)}><td><div className="person"><span>{String(s.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{s.name}</strong></div></td><td className="muted">{s.nis}</td><td>{s.class_name}</td><td>{s.room}</td><td><Status tone={s.status==="Aktif"?"green":"amber"}>{s.status}</Status></td><td><div className="row-actions"><button onClick={()=>onCard(s)}>QR</button>{editable&&<><button onClick={()=>onEdit(s)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(s)}>Hapus</button></>}</div></td></tr>)}</tbody>
       </table></div>
-      <footer className="table-footer"><span>Menampilkan {filtered.length} dari {rows.length} santri</span><div><button>‹</button><button className="active">1</button><button>›</button></div></footer>
+      <footer className="table-footer"><span>Menampilkan {visibleRows.length} dari {filtered.length} hasil · halaman {activePage}/{pageCount}</span><div><button disabled={activePage<=1} onClick={()=>setPage(value=>Math.max(1,value-1))}>‹</button><button className="active" disabled>{activePage}</button><button disabled={activePage>=pageCount} onClick={()=>setPage(value=>Math.min(pageCount,value+1))}>›</button></div></footer>
     </section>
   );
 }
@@ -409,17 +412,35 @@ function EmployeesPage({ rows, onAdd, onEdit, onDelete }: { rows:Row[]; onAdd:()
   </div>;
 }
 
-function MutabaahPage({ rows, onAdd, onEdit, onDelete }: { rows:Row[]; onAdd:()=>void; onEdit:(row:Row)=>void; onDelete:(row:Row)=>void }) {
-  const habits = [["Sholat Subuh Berjamaah",96],["Dzikir Pagi",89],["Sholat Dhuha",84],["Tilawah Harian",92],["Kajian Ba’da Maghrib",94],["Qiyamul Lail",71]];
+function MutabaahPage({ data, onAdd, onEdit, onDelete, notify }: { data:AppData; onAdd:()=>void; onEdit:(row:Row)=>void; onDelete:(row:Row)=>void; notify:(message:string)=>void }) {
+  const rows=data.mutabaah;
+  const today=new Date().toISOString().slice(0,10);
+  const todayRows=rows.filter(row=>String(row.record_date)===today);
+  const completion=todayRows.length?Math.round(todayRows.filter(row=>Number(row.completed)).length/todayRows.length*100):0;
+  const habits=Array.from(rows.reduce((map,row)=>{
+    const key=String(row.activity||"Kegiatan");
+    const current=map.get(key)||{total:0,done:0};
+    current.total+=1;current.done+=Number(row.completed)?1:0;map.set(key,current);return map;
+  },new Map<string,{total:number;done:number}>())).map(([label,value])=>[label,Math.round(value.done/value.total*100),value.total] as const).slice(0,8);
+  const attention=data.students.map(student=>{
+    const records=rows.filter(row=>String(row.student_id)===String(student.id));
+    const rate=records.length?Math.round(records.filter(row=>Number(row.completed)).length/records.length*100):100;
+    return {student,rate};
+  }).filter(item=>item.rate<70).sort((a,b)=>a.rate-b.rate).slice(0,5);
+  function contact(student:Row) {
+    const phone=String(student.guardian_phone||"").replace(/\D/g,"");
+    if(!phone){notify("Nomor WhatsApp wali belum tersedia.");return;}
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(`Assalamu’alaikum, kami ingin menyampaikan perkembangan mutaba’ah ${student.name}. Mohon pendampingannya. Jazakumullahu khairan.`)}`,"_blank","noopener,noreferrer");
+  }
   return (
     <>
-      <section className="summary-banner"><div><span>Rekap Hari Ini</span><strong>92,6%</strong><p>450 dari 486 santri telah mengisi mutaba’ah</p></div><div className="donut"><span>93<small>%</small></span></div></section>
+      <section className="summary-banner"><div><span>Rekap Hari Ini</span><strong>{completion}%</strong><p>{todayRows.filter(row=>Number(row.completed)).length} dari {todayRows.length} catatan mutaba’ah selesai</p></div><div className="donut"><span>{completion}<small>%</small></span></div></section>
       <section className="dashboard-grid">
         <article className="card compact-list"><header className="card-header"><div><h3>Capaian Kegiatan</h3><p>Rekap kegiatan dan ibadah harian</p></div><button className="primary-button" onClick={onAdd}>+ Catat Kegiatan</button></header>
-          {habits.map(([h,v],i)=><div className="progress-row habit" key={String(h)}><div><strong>{h}</strong><small>{Math.round(Number(v)*4.86)} santri</small></div><Progress value={Number(v)} tone={i===5?"amber":"green"} /><b>{v}%</b></div>)}
+          {habits.map(([h,v,total])=><div className="progress-row habit" key={String(h)}><div><strong>{h}</strong><small>{total} catatan</small></div><Progress value={Number(v)} tone={Number(v)<70?"amber":"green"} /><b>{v}%</b></div>)}{!habits.length&&<div className="portal-empty">Belum ada data kegiatan.</div>}
         </article>
         <article className="card"><header className="card-header"><div><h3>Perlu Perhatian</h3><p>Santri dengan capaian di bawah 70%</p></div></header>
-          <div className="attention-list">{students.slice(2).map((s,i)=><div key={s.nis}><span className="avatar">{s.avatar}</span><div><strong>{s.name}</strong><small>{s.class} · {62+i*3}% tercapai</small></div><button>Hubungi</button></div>)}</div>
+          <div className="attention-list">{attention.map(({student,rate})=><div key={String(student.id)}><span className="avatar">{String(student.name).split(" ").map(value=>value[0]).slice(0,2).join("")}</span><div><strong>{student.name}</strong><small>{student.class_name} · {rate}% tercapai</small></div><button onClick={()=>contact(student)}>Hubungi</button></div>)}{!attention.length&&<div className="portal-empty">Tidak ada santri di bawah 70%.</div>}</div>
         </article>
       </section><section className="card data-card"><header className="card-header"><div><h3>Catatan Mutaba’ah Santri</h3><p>{rows.length} catatan tersimpan</p></div></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Kegiatan</th><th>Tanggal</th><th>Status</th><th /></tr></thead><tbody>{rows.map(row=><tr key={String(row.id)}><td><strong>{row.student_name}</strong></td><td>{row.activity}</td><td>{row.record_date}</td><td><Status tone={Number(row.completed)?"green":"amber"}>{Number(row.completed)?"Selesai":"Belum"}</Status></td><td><DataActions row={row} onEdit={onEdit} onDelete={onDelete}/></td></tr>)}</tbody></table></div></section>
     </>
@@ -427,12 +448,15 @@ function MutabaahPage({ rows, onAdd, onEdit, onDelete }: { rows:Row[]; onAdd:()=
 }
 
 function HealthPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void }) {
+  const monitored=rows.filter(row=>row.status==="Dipantau").length;
+  const recovered=rows.filter(row=>row.status==="Membaik"||row.status==="Selesai").length;
+  const referred=rows.filter(row=>row.status==="Dirujuk").length;
   return (
     <>
       <section className="stats-grid three">
-        <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Kondisi Sehat</span><strong>473</strong><small>97,3% total santri</small></div></article>
-        <article className="metric-card"><MiniIcon tone="amber">✚</MiniIcon><div><span>Dalam Perawatan</span><strong>9</strong><small>Keluhan ringan</small></div></article>
-        <article className="metric-card"><MiniIcon tone="red">!</MiniIcon><div><span>Dirujuk</span><strong>4</strong><small>Fasilitas kesehatan</small></div></article>
+        <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Membaik / Selesai</span><strong>{recovered}</strong><small>Dari catatan tersimpan</small></div></article>
+        <article className="metric-card"><MiniIcon tone="amber">✚</MiniIcon><div><span>Dalam Pemantauan</span><strong>{monitored}</strong><small>Perlu tindak lanjut</small></div></article>
+        <article className="metric-card"><MiniIcon tone="red">!</MiniIcon><div><span>Dirujuk</span><strong>{referred}</strong><small>Fasilitas kesehatan</small></div></article>
       </section>
       <section className="card data-card"><header className="card-header"><div><h3>Kunjungan Klinik Terbaru</h3><p>{rows.length} catatan pemeriksaan tersimpan</p></div><button className="primary-button" onClick={onAdd}>+ Pemeriksaan Baru</button></header>
         <div className="table-wrap"><table><thead><tr><th>Santri</th><th>Keluhan</th><th>Diagnosis</th><th>Penanganan</th><th>Status</th></tr></thead><tbody>
@@ -630,12 +654,15 @@ function SinurpayPage({ notify }: { notify:(message:string)=>void }) {
 
 function FinancePage({ rows, bills, onAdd, onBill, onNotify, onPayment }: { rows: Row[]; bills:Row[]; onAdd: () => void; onBill:()=>void; onNotify: () => void; onPayment:(row:Row)=>void }) {
   const incoming = rows.filter(x=>x.type==="Masuk").reduce((sum,x)=>sum+Number(x.amount||0),0);
+  const allowance=rows.filter(x=>x.type==="Masuk"&&x.category==="Uang Saku").reduce((sum,x)=>sum+Number(x.amount||0),0);
+  const unpaid=bills.filter(row=>row.status!=="Lunas");
+  const unpaidTotal=unpaid.reduce((sum,row)=>sum+Number(row.amount||0),0);
   return (
     <>
       <section className="stats-grid three">
         <article className="metric-card"><MiniIcon tone="blue">Rp</MiniIcon><div><span>Pemasukan Tercatat</span><strong>Rp{money.format(incoming)}</strong><small>Data transaksi permanen</small></div></article>
-        <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Uang Saku Masuk</span><strong>Rp46,8jt</strong><small>486 rekening aktif</small></div></article>
-        <article className="metric-card"><MiniIcon tone="amber">!</MiniIcon><div><span>Belum Dibayar</span><strong>Rp11,2jt</strong><small>38 wali santri</small></div></article>
+        <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Uang Saku Masuk</span><strong>Rp{money.format(allowance)}</strong><small>Transaksi tersimpan</small></div></article>
+        <article className="metric-card"><MiniIcon tone="amber">!</MiniIcon><div><span>Belum Dibayar</span><strong>Rp{money.format(unpaidTotal)}</strong><small>{unpaid.length} tagihan aktif</small></div></article>
       </section>
       <section className="dashboard-grid">
         <article className="card balance-card"><span>Kelola Pembayaran & Uang Saku</span><strong>Rp {money.format(incoming)}</strong><p>{rows.length} transaksi tercatat dan siap dilaporkan</p><div><button className="primary-button" onClick={onAdd}>+ Catat Pembayaran</button><button className="secondary-button" onClick={onNotify}>Kirim Pengingat WA</button></div></article>
@@ -647,14 +674,25 @@ function FinancePage({ rows, bills, onAdd, onBill, onNotify, onPayment }: { rows
   );
 }
 
-function CharacterPage({ onAdd }: { onAdd: () => void }) {
-  const traits = [["Adab & Akhlak",92,"green"],["Kedisiplinan",86,"blue"],["Kemandirian",81,"amber"],["Tanggung Jawab",88,"violet"],["Kebersihan",84,"green"]];
+function CharacterPage({ data, onAdd, onEdit, onDelete }: { data:AppData; onAdd:()=>void; onEdit:(row:Row)=>void; onDelete:(row:Row)=>void }) {
+  const [selectedId,setSelectedId]=useState(String(data.students[0]?.id||""));
+  const selected=data.students.find(student=>String(student.id)===selectedId)||data.students[0];
+  const records=data.characters.filter(row=>String(row.student_id)===String(selected?.id));
+  const categories=["Adab & Akhlak","Kedisiplinan","Kemandirian","Tanggung Jawab","Kebersihan"];
+  const traits=categories.map((category,index)=>{
+    const record=records.find(row=>row.category===category);
+    return {category,score:Number(record?.score||0),tone:["green","blue","amber","violet","green"][index],record};
+  });
+  const average=records.length?Math.round(records.reduce((sum,row)=>sum+Number(row.score||0),0)/records.length):0;
+  const predicate=average>=90?"Sangat Baik":average>=80?"Baik":average>=70?"Cukup":"Perlu Pembinaan";
+  const grade=average>=90?"A":average>=80?"B":average>=70?"C":"D";
+  const note=records.find(row=>String(row.note||"").trim())?.note;
   return (
     <section className="dashboard-grid">
-      <article className="card character-profile"><span className="large-avatar">MF</span><h3>Muhammad Fikri</h3><p>VIII A · Ibnu Sina 03</p><strong>A</strong><small>Predikat: Sangat Baik</small><button className="secondary-button">Pilih Santri</button></article>
+      <article className="card character-profile"><span className="large-avatar">{selected?String(selected.name).split(" ").map(value=>value[0]).slice(0,2).join(""):"—"}</span><h3>{selected?.name||"Belum ada santri"}</h3><p>{selected?`${selected.class_name} · ${selected.room}`:"Tambahkan data santri terlebih dahulu"}</p><strong>{records.length?grade:"—"}</strong><small>Predikat: {records.length?predicate:"Belum dinilai"}</small><label className="character-student-picker">Pilih Santri<select value={String(selected?.id||"")} onChange={event=>setSelectedId(event.target.value)}>{data.students.map(student=><option key={String(student.id)} value={String(student.id)}>{student.name} · {student.class_name}</option>)}</select></label></article>
       <article className="card compact-list"><header className="card-header"><div><h3>Penilaian Karakter</h3><p>Semester Ganjil 2026/2027</p></div><button className="primary-button" onClick={onAdd}>Input Nilai</button></header>
-        {traits.map(([t,v,c])=><div className="trait-row" key={String(t)}><div><strong>{t}</strong><small>{Number(v)>=90?"Istiqamah":"Baik"}</small></div><Progress value={Number(v)} tone={String(c)} /><b>{v}</b></div>)}
-        <div className="teacher-note"><span>“</span><p>Fikri menunjukkan perkembangan adab yang sangat baik dan konsisten membantu teman satu kamar.</p><small>— Ustadz Hasan, Wali Kelas</small></div>
+        {traits.map(item=><div className="trait-row" key={item.category}><div><strong>{item.category}</strong><small>{item.score>=90?"Istiqamah":item.score>=80?"Baik":item.score?"Perlu ditingkatkan":"Belum dinilai"}</small></div><Progress value={item.score} tone={item.tone} /><b>{item.score||"—"}</b>{item.record&&<DataActions row={item.record} onEdit={onEdit} onDelete={onDelete}/>}</div>)}
+        <div className="teacher-note"><span>“</span><p>{note||"Belum ada catatan pembina untuk santri ini."}</p><small>— Catatan pembina SINURMAN</small></div>
       </article>
     </section>
   );
@@ -664,8 +702,8 @@ function InventoryPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: 
   return <section className="card data-card"><header className="card-header"><div><h3>Daftar Inventaris</h3><p>{rows.reduce((sum,x)=>sum+Number(x.quantity||0),0)} item tercatat</p></div><button className="primary-button" onClick={onAdd}>+ Tambah Barang</button></header><div className="table-wrap"><table><thead><tr><th>Nama Barang</th><th>Lokasi</th><th>Jumlah</th><th>Kondisi</th><th /></tr></thead><tbody>{rows.map((r,i)=><tr key={String(r.id)}><td><strong>{r.name}</strong></td><td>{r.location}</td><td>{r.quantity} {r.unit}</td><td><Status tone={i===2?"amber":"green"}>{r.condition}</Status></td><td><div className="row-actions"><button onClick={()=>onEdit(r)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(r)}>Hapus</button></div></td></tr>)}</tbody></table></div></section>;
 }
 
-function AnnouncementsPage({ rows, onAdd, onEdit, onDelete, onNotify }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onNotify: () => void }) {
-  return <section className="card announcements-page"><header className="card-header"><div><h3>Semua Pengumuman</h3><p>Informasi resmi Pondok Pesantren Nurul Iman</p></div><div className="header-actions"><button className="secondary-button" onClick={onNotify}>Kirim WhatsApp</button><button className="primary-button" onClick={onAdd}>+ Buat Pengumuman</button></div></header>{rows.map((x,i)=><article key={String(x.id)}><span className="date-box"><b>{new Date(String(x.published_at)).getDate()}</b>JUL</span><div><Status tone={["blue","green","violet"][i%3]}>{x.category}</Status><h3>{x.title}</h3><p>{x.content}</p><small>Dipublikasikan oleh {x.author} · {x.audience}</small></div><div className="row-actions"><button onClick={()=>onEdit(x)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(x)}>Hapus</button></div></article>)}</section>;
+function AnnouncementsPage({ rows, editable, onAdd, onEdit, onDelete, onNotify }: { rows: Row[]; editable:boolean; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onNotify: () => void }) {
+  return <section className="card announcements-page"><header className="card-header"><div><h3>Semua Pengumuman</h3><p>Informasi resmi Pondok Pesantren Nurul Iman</p></div>{editable&&<div className="header-actions"><button className="secondary-button" onClick={onNotify}>Kirim WhatsApp</button><button className="primary-button" onClick={onAdd}>+ Buat Pengumuman</button></div>}</header>{rows.map((x,i)=>{const date=new Date(String(x.published_at));return <article key={String(x.id)}><span className="date-box"><b>{date.getDate()}</b>{date.toLocaleDateString("id-ID",{month:"short"}).toUpperCase()}</span><div><Status tone={["blue","green","violet"][i%3]}>{x.category}</Status><h3>{x.title}</h3><p>{x.content}</p><small>Dipublikasikan oleh {x.author} · {x.audience}</small></div>{editable&&<div className="row-actions"><button onClick={()=>onEdit(x)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(x)}>Hapus</button></div>}</article>})}</section>;
 }
 
 function DataActions({ row, onEdit, onDelete }: { row:Row; onEdit:(r:Row)=>void; onDelete:(r:Row)=>void }) {
@@ -709,15 +747,16 @@ function AttendancePage({ data, edit, remove, reload, notify }: { data:AppData; 
   <section className="card data-card guardian-request-admin"><header className="card-header responsive"><div><h3>Kunjungan & Penjemputan</h3><p>Setujui permintaan dan validasi QR sekali pakai di gerbang</p></div><div className="gate-validator"><input value={token} onChange={e=>setToken(e.target.value)} placeholder="Tempel token hasil scan QR" /><button disabled={checking||!token.trim()} className="primary-button" onClick={()=>void processRequest(undefined,"use")}>Validasi QR</button></div></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Jenis & Jadwal</th><th>Penjemput/Pengunjung</th><th>Status</th><th /></tr></thead><tbody>{data.guardianRequests.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong><small className="cell-note">{x.nis}</small></td><td><strong>{x.type}</strong><small className="cell-note">{x.visit_date} · {x.start_time}–{x.end_time}<br/>{x.purpose}</small></td><td>{x.visitor_name}<small className="cell-note">{x.visitor_phone}</small></td><td><Status tone={x.status==="Disetujui"?"green":x.status==="Ditolak"?"red":x.status==="Digunakan"?"blue":"amber"}>{x.status}</Status></td><td><div className="row-actions">{x.status==="Diajukan"&&<><button onClick={()=>void processRequest(x,"approve")}>Setujui</button><button className="danger-link" onClick={()=>void processRequest(x,"reject")}>Tolak</button></>}{x.status==="Disetujui"&&<button onClick={()=>void processRequest(x,"use")}>Tandai Masuk</button>}</div></td></tr>)}{!data.guardianRequests.length&&<tr><td colSpan={5} className="muted">Belum ada permintaan kunjungan atau penjemputan.</td></tr>}</tbody></table></div></section></>;
 }
 
-function SchedulePage({ data, edit, remove }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
+function SchedulePage({ data, role, edit, remove }: { data:AppData; role:Role; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
   const [level,setLevel]=useState("SMP");
   const classes=Array.from(new Set(data.schedules.filter(x=>x.education_level===level).map(x=>String(x.class_name)))).sort();
   const [selectedClass,setSelectedClass]=useState("VII A");
   const [day,setDay]=useState("Senin");
   const activeClass=classes.includes(selectedClass)?selectedClass:(classes[0]??selectedClass);
   const filtered=data.schedules.filter(x=>x.education_level===level&&x.class_name===activeClass&&x.day_name===day);
-  return <><section className="schedule-toolbar card"><div className="level-tabs"><button className={level==="SMP"?"active":""} onClick={()=>setLevel("SMP")}>SMP</button><button className={level==="SMK"?"active":""} onClick={()=>setLevel("SMK")}>SMK</button></div><label>Kelas<select value={activeClass} onChange={e=>setSelectedClass(e.target.value)}>{classes.map(x=><option key={x}>{x}</option>)}</select></label><label>Hari<select value={day} onChange={e=>setDay(e.target.value)}>{["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"].map(x=><option key={x}>{x}</option>)}</select></label><button className="primary-button" onClick={()=>edit("schedules",{education_level:level,class_name:activeClass,day_name:day})}>+ Tambah Pelajaran</button></section><section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Jadwal Harian {activeClass}</h3><p>{day} · {level} · {filtered.length} jam pelajaran</p></div><Status tone={level==="SMP"?"blue":"violet"}>{level}</Status></header><div className="daily-timetable">{filtered.length?filtered.map((x,i)=><div key={String(x.id)}><span className="period-number">{i+1}</span><span className={`schedule-time tone-${i%4}`}>{x.start_time}<small>{x.end_time}</small></span><div><Status tone={x.category==="Produktif"?"violet":x.category==="Tahfidz"?"green":"blue"}>{x.category}</Status><strong>{x.title}</strong><small>{x.teacher} · {x.location}</small></div><DataActions row={x} onEdit={r=>edit("schedules",r)} onDelete={r=>remove("schedules",r)} /></div>):<div className="empty-schedule">Belum ada jadwal untuk kelas dan hari ini.</div>}</div></article>
-  <article className="card data-card"><header className="card-header"><div><h3>Kamar & Hunian</h3><p>Kapasitas dan pembina asrama</p></div><button className="primary-button" onClick={()=>edit("rooms")}>+ Kamar</button></header><div className="room-grid">{data.rooms.map(x=><div className="room-card" key={String(x.id)}><span>◇</span><div><strong>{x.name}</strong><small>{x.supervisor}</small><p>Kapasitas {x.capacity} santri</p></div><Status>{x.status}</Status><DataActions row={x} onEdit={r=>edit("rooms",r)} onDelete={r=>remove("rooms",r)} /></div>)}</div></article></section></>;
+  const canEditSchedule=role==="Admin"||role==="Ustadz";
+  return <><section className="schedule-toolbar card"><div className="level-tabs"><button className={level==="SMP"?"active":""} onClick={()=>setLevel("SMP")}>SMP</button><button className={level==="SMK"?"active":""} onClick={()=>setLevel("SMK")}>SMK</button></div><label>Kelas<select value={activeClass} onChange={e=>setSelectedClass(e.target.value)}>{classes.map(x=><option key={x}>{x}</option>)}</select></label><label>Hari<select value={day} onChange={e=>setDay(e.target.value)}>{["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"].map(x=><option key={x}>{x}</option>)}</select></label>{canEditSchedule&&<button className="primary-button" onClick={()=>edit("schedules",{education_level:level,class_name:activeClass,day_name:day})}>+ Tambah Pelajaran</button>}</section><section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Jadwal Harian {activeClass}</h3><p>{day} · {level} · {filtered.length} jam pelajaran</p></div><Status tone={level==="SMP"?"blue":"violet"}>{level}</Status></header><div className="daily-timetable">{filtered.length?filtered.map((x,i)=><div key={String(x.id)}><span className="period-number">{i+1}</span><span className={`schedule-time tone-${i%4}`}>{x.start_time}<small>{x.end_time}</small></span><div><Status tone={x.category==="Produktif"?"violet":x.category==="Tahfidz"?"green":"blue"}>{x.category}</Status><strong>{x.title}</strong><small>{x.teacher} · {x.location}</small></div>{canEditSchedule&&<DataActions row={x} onEdit={r=>edit("schedules",r)} onDelete={r=>remove("schedules",r)} />}</div>):<div className="empty-schedule">Belum ada jadwal untuk kelas dan hari ini.</div>}</div></article>
+  <article className="card data-card"><header className="card-header"><div><h3>Kamar & Hunian</h3><p>Kapasitas dan pembina asrama</p></div>{role==="Admin"&&<button className="primary-button" onClick={()=>edit("rooms")}>+ Kamar</button>}</header><div className="room-grid">{data.rooms.map(x=><div className="room-card" key={String(x.id)}><span>◇</span><div><strong>{x.name}</strong><small>{x.supervisor}</small><p>Kapasitas {x.capacity} santri</p></div><Status>{x.status}</Status>{role==="Admin"&&<DataActions row={x} onEdit={r=>edit("rooms",r)} onDelete={r=>remove("rooms",r)} />}</div>)}</div></article></section></>;
 }
 
 const ppdbDocumentTypes = ["Kartu Keluarga","Akta Kelahiran","Rapor Terakhir","Pas Foto","KIP / SKTM"];
@@ -872,15 +911,98 @@ function GuardianAccessAdmin({ data, reload, notify }: { data:AppData; reload:()
     if(!response.ok){notify(result.error||"Status akun gagal diubah.");return;}
     notify(`Akses wali ${next.toLowerCase()}.`);await reload();
   }
-  return <><section className="guardian-access-admin card"><div><span>PORTAL WALI SANTRI</span><h3>Masuk dengan nomor HP dan PIN</h3><p>Nomor diambil dari “Nomor WhatsApp wali” pada Data Santri. Buat PIN 6 angka, lalu bagikan nomor dan PIN tersebut langsung kepada wali.</p></div><a className="primary-button link-button" href="/wali" target="_blank" rel="noreferrer">Buka & Bagikan Portal Wali →</a></section>
-  <section className="card data-card guardian-access-table"><header className="card-header"><div><h3>Akses Portal Wali</h3><p>Satu nomor dapat terhubung dengan beberapa anak</p></div><Status tone="blue">{guardians.length} wali</Status></header><div className="table-wrap"><table><thead><tr><th>Wali</th><th>Santri Terhubung</th><th>Status Akses</th><th /></tr></thead><tbody>{guardians.map(guardian=>{const account=data.guardianAccounts.find(row=>String(row.phone)===guardian.phone);const status=String(account?.status||"Belum dibuat");return <tr key={guardian.phone}><td><strong>{guardian.name}</strong><small className="cell-note">+{guardian.phone}</small></td><td>{guardian.students.join(", ")}</td><td><Status tone={status==="Aktif"?"green":status==="Diblokir"?"red":"amber"}>{status}</Status></td><td><div className="guardian-access-actions"><button className="text-button" onClick={()=>{setSelected({phone:guardian.phone,name:guardian.name,students:guardian.students.join(", ")});setPin("");}}>{account?"Reset PIN":"Buat PIN"}</button>{account&&<button className="text-button" onClick={()=>void toggle(guardian.phone,status)}>{status==="Aktif"?"Blokir":"Aktifkan"}</button>}</div></td></tr>})}{!guardians.length&&<tr><td colSpan={4} className="muted">Isi nomor WhatsApp pada Data Santri terlebih dahulu.</td></tr>}</tbody></table></div></section>
+  return <><section className="guardian-access-admin card"><div><span>PORTAL WALI SANTRI</span><h3>Pendaftaran wali dengan nomor HP</h3><p>Wali dapat membuat PIN sendiri jika nomor WhatsApp-nya sudah tercatat pada Data Santri. Akun baru tetap menunggu persetujuan Admin sebelum dapat melihat laporan anak.</p></div><a className="primary-button link-button" href="/wali" target="_blank" rel="noreferrer">Buka & Bagikan Portal Wali →</a></section>
+  <section className="card data-card guardian-access-table"><header className="card-header"><div><h3>Akses Portal Wali</h3><p>Periksa akun yang menunggu, lalu setujui atau blokir aksesnya</p></div><Status tone="blue">{guardians.length} wali</Status></header><div className="table-wrap"><table><thead><tr><th>Wali</th><th>Santri Terhubung</th><th>Status Akses</th><th /></tr></thead><tbody>{guardians.map(guardian=>{const account=data.guardianAccounts.find(row=>String(row.phone)===guardian.phone);const status=String(account?.status||"Belum mendaftar");return <tr key={guardian.phone}><td><strong>{guardian.name}</strong><small className="cell-note">+{guardian.phone}</small></td><td>{guardian.students.join(", ")}</td><td><Status tone={status==="Aktif"?"green":status==="Diblokir"?"red":"amber"}>{status}</Status></td><td><div className="guardian-access-actions"><button className="text-button" onClick={()=>{setSelected({phone:guardian.phone,name:guardian.name,students:guardian.students.join(", ")});setPin("");}}>{account?"Reset PIN":"Buat PIN"}</button>{account&&<button className="text-button" onClick={()=>void toggle(guardian.phone,status)}>{status==="Aktif"?"Blokir":status==="Menunggu Persetujuan"?"Setujui":"Aktifkan"}</button>}</div></td></tr>})}{!guardians.length&&<tr><td colSpan={4} className="muted">Isi nomor WhatsApp pada Data Santri terlebih dahulu.</td></tr>}</tbody></table></div></section>
   {selected&&<div className="modal-backdrop" onMouseDown={()=>setSelected(null)}><form className="record-modal guardian-pin-modal" onSubmit={savePin} onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={()=>setSelected(null)}>×</button><span className="modal-eyebrow">AKSES PORTAL WALI</span><h2>Atur PIN {selected.name}</h2><p>+{selected.phone} · {selected.students}. Mengganti PIN akan mengeluarkan sesi lama dari semua perangkat.</p><label>PIN 6 angka<input required autoFocus inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={pin} onChange={event=>setPin(event.target.value.replace(/\D/g,"").slice(0,6))} placeholder="Contoh: 482731"/></label><div className="modal-actions"><button type="button" className="secondary-button" onClick={()=>setSelected(null)}>Batal</button><button className="primary-button" disabled={saving}>{saving?"Menyimpan…":"Simpan PIN"}</button></div></form></div>}</>;
 }
 
-function UsersPage({ data, edit, remove, reply, reload, notify }: { data:AppData; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void; reply:(row:Row)=>void; reload:()=>Promise<void>; notify:(message:string)=>void }) {
+function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row[]; onClose:()=>void; onSaved:(message:string)=>Promise<void> }) {
+  const [name,setName]=useState(String(row?.name||""));
+  const [email,setEmail]=useState(String(row?.email||""));
+  const [role,setRole]=useState<Role>((row?.role as Role)||"Ustadz");
+  const [roomScope,setRoomScope]=useState(String(row?.roomScope||row?.room_scope||""));
+  const [password,setPassword]=useState("");
+  const [saving,setSaving]=useState(false);
+  const [error,setError]=useState("");
+  async function submit(event:React.FormEvent) {
+    event.preventDefault();setSaving(true);setError("");
+    const response=await fetch("/api/admin-users",{
+      method:row?"PATCH":"POST",
+      headers:{"content-type":"application/json"},
+      body:JSON.stringify(row
+        ? {id:Number(row.id),action:"update",name,role,roomScope}
+        : {name,email,role,roomScope,password}),
+    });
+    const result=await response.json() as {error?:string;message?:string};
+    if(!response.ok){setError(result.error||"Akun gagal disimpan.");setSaving(false);return;}
+    await onSaved(result.message||"Akun berhasil disimpan.");onClose();
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><form className="record-modal user-access-modal" onSubmit={submit} onMouseDown={event=>event.stopPropagation()}>
+    <button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">AKSES INTERNAL SINURMAN</span>
+    <h2>{row?"Ubah hak akses":"Buat akun sekolah"}</h2><p>{row?"Perubahan peran akan mengeluarkan sesi lama pengguna.":"Email dan sandi ini dapat langsung dipakai pada halaman login Admin."}</p>
+    <div className="form-grid"><label>Nama lengkap<input required value={name} onChange={event=>setName(event.target.value)}/></label>
+      <label>Email login<input required type="email" autoComplete="username" readOnly={!!row} value={email} onChange={event=>setEmail(event.target.value)}/></label>
+      <label>Peran<select required value={role} onChange={event=>setRole(event.target.value as Role)}><option>Admin</option><option>Kepala Asrama</option><option>Musyrif</option><option>Ustadz</option></select></label>
+      <label>Kamar/asrama penugasan<select required={role==="Musyrif"||role==="Kepala Asrama"} value={roomScope} onChange={event=>setRoomScope(event.target.value)}><option value="">Tidak dibatasi</option>{rooms.map(room=><option key={String(room.id)} value={String(room.name)}>{room.name}</option>)}</select></label>
+      {!row&&<label className="wide">Sandi sementara<input required minLength={8} type="password" autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} placeholder="Minimal 8 karakter, berisi huruf dan angka"/><small>Bagikan sandi secara pribadi dan minta pengguna segera menggantinya.</small></label>}
+    </div>{error&&<div className="form-error">{error}</div>}
+    <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button className="primary-button" disabled={saving}>{saving?"Menyimpan…":row?"Simpan Perubahan":"Buat Akun Login"}</button></div>
+  </form></div>;
+}
+
+function ResetUserPasswordModal({ row, onClose, onSaved }: { row:Row; onClose:()=>void; onSaved:(message:string)=>Promise<void> }) {
+  const [password,setPassword]=useState("");
+  const [saving,setSaving]=useState(false);
+  const [error,setError]=useState("");
+  async function submit(event:React.FormEvent){
+    event.preventDefault();setSaving(true);setError("");
+    const response=await fetch("/api/admin-users",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:Number(row.id),action:"reset-password",password})});
+    const result=await response.json() as {error?:string;message?:string};
+    if(!response.ok){setError(result.error||"Sandi gagal diatur ulang.");setSaving(false);return;}
+    await onSaved(result.message||"Sandi berhasil diatur ulang.");onClose();
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><form className="record-modal" onSubmit={submit} onMouseDown={event=>event.stopPropagation()}>
+    <button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">RESET SANDI PENGGUNA</span><h2>{row.name}</h2><p>{row.email}. Semua sesi lama pengguna akan dikeluarkan.</p>
+    <label>Sandi sementara baru<input required autoFocus minLength={8} type="password" autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} placeholder="Minimal 8 karakter, berisi huruf dan angka"/></label>
+    {error&&<div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button className="primary-button" disabled={saving}>{saving?"Menyimpan…":"Reset Sandi"}</button></div>
+  </form></div>;
+}
+
+function UsersPage({ data, reply, reload, notify }: { data:AppData; reply:(row:Row)=>void; reload:()=>Promise<void>; notify:(message:string)=>void }) {
+  const [users,setUsers]=useState<Row[]>([]);
+  const [loadingUsers,setLoadingUsers]=useState(true);
+  const [editor,setEditor]=useState<Row|null|undefined>(undefined);
+  const [resetUser,setResetUser]=useState<Row|null>(null);
+  const loadUsers=useCallback(async()=>{
+    setLoadingUsers(true);
+    const response=await fetch("/api/admin-users",{cache:"no-store"});
+    const result=await response.json() as {users?:Row[];error?:string};
+    setLoadingUsers(false);
+    if(!response.ok){notify(result.error||"Daftar pengguna gagal dimuat.");return;}
+    setUsers(result.users||[]);
+  },[notify]);
+  useEffect(()=>{const timer=window.setTimeout(()=>void loadUsers(),0);return()=>window.clearTimeout(timer);},[loadUsers]);
+  async function refresh(message:string){notify(message);await Promise.all([loadUsers(),reload()]);}
+  async function toggle(row:Row){
+    const next=String(row.status)==="Aktif"?"blokir":"aktifkan";
+    if(!window.confirm(`Yakin ingin ${next} akun ${row.email}?`))return;
+    const response=await fetch("/api/admin-users",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:Number(row.id),action:"toggle"})});
+    const result=await response.json() as {error?:string;message?:string};
+    if(!response.ok){notify(result.error||"Status akun gagal diubah.");return;}
+    await refresh(result.message||"Status akun berhasil diubah.");
+  }
+  async function remove(row:Row){
+    if(!window.confirm(`Hapus akun ${row.email} beserta akses loginnya?`))return;
+    const response=await fetch("/api/admin-users",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({id:Number(row.id)})});
+    const result=await response.json() as {error?:string;message?:string};
+    if(!response.ok){notify(result.error||"Akun gagal dihapus.");return;}
+    await refresh(result.message||"Akun berhasil dihapus.");
+  }
   return <><GuardianAccessAdmin data={data} reload={reload} notify={notify}/>
-  <section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Manajemen Pengguna</h3><p>Hak akses server-side</p></div><button className="primary-button" onClick={()=>edit("users")}>+ Pengguna</button></header><div className="table-wrap"><table><thead><tr><th>Pengguna</th><th>Peran</th><th /></tr></thead><tbody>{data.users.map(x=><tr key={String(x.id)}><td><strong>{x.name}</strong><small className="cell-note">{x.email}</small></td><td><Status tone={x.role==="Admin"?"violet":x.role==="Ustadz"?"blue":"green"}>{x.role}</Status></td><td><DataActions row={x} onEdit={r=>edit("users",r)} onDelete={r=>remove("users",r)} /></td></tr>)}</tbody></table></div></article><article className="card data-card"><header className="card-header"><div><h3>Audit Aktivitas</h3><p>Jejak perubahan terbaru</p></div></header><div className="audit-list">{data.audit.map(x=><div key={String(x.id)}><MiniIcon tone={x.action==="Hapus"?"red":x.action==="Tambah"?"green":"blue"}>{String(x.action).slice(0,1)}</MiniIcon><div><strong>{x.action} · {x.resource}</strong><p>{x.detail}</p><small>{x.user_email} · {new Date(String(x.created_at)).toLocaleString("id-ID")}</small></div></div>)}</div></article></section>
-  <section className="card data-card guardian-inbox"><header className="card-header"><div><h3>Pesan dari Wali Santri</h3><p>Pertanyaan dari Portal Wali yang menunggu tindak lanjut</p></div><Status tone={data.guardianMessages.some(x=>x.status==="Baru")?"amber":"green"}>{data.guardianMessages.filter(x=>x.status==="Baru").length} baru</Status></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Subjek & Pesan</th><th>Pengirim</th><th>Status</th><th /></tr></thead><tbody>{data.guardianMessages.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong></td><td><strong>{x.subject}</strong><small className="cell-note">{x.message}{x.reply?` · Balasan: ${x.reply}`:""}</small></td><td className="muted">{x.sender_email}</td><td><Status tone={x.status==="Dibalas"?"green":"amber"}>{x.status}</Status></td><td><button className="text-button" onClick={()=>reply(x)}>{x.status==="Dibalas"?"Balas lagi":"Balas"}</button></td></tr>)}{!data.guardianMessages.length&&<tr><td colSpan={5} className="muted">Belum ada pesan dari wali santri.</td></tr>}</tbody></table></div></section></>;
+  <section className="dashboard-grid operations-grid"><article className="card data-card"><header className="card-header"><div><h3>Admin & Pengguna Sekolah</h3><p>Akun Firebase, peran, penugasan, dan status login</p></div><button className="primary-button" onClick={()=>setEditor(null)}>+ Buat Akun</button></header><div className="table-wrap"><table><thead><tr><th>Pengguna</th><th>Peran & Penugasan</th><th>Status Login</th><th /></tr></thead><tbody>{users.map(x=><tr key={String(x.id)}><td><strong>{x.name}</strong><small className="cell-note">{x.email}</small></td><td><Status tone={x.role==="Admin"?"violet":x.role==="Ustadz"?"blue":"green"}>{x.role}</Status><small className="cell-note">{x.roomScope||"Akses sesuai peran"}</small></td><td><Status tone={x.status==="Aktif"?"green":x.status==="Diblokir"?"red":"amber"}>{x.status}</Status></td><td><div className="user-access-actions"><button className="text-button" onClick={()=>setEditor(x)}>Ubah</button><button className="text-button" onClick={()=>setResetUser(x)}>Reset sandi</button><button className="text-button" onClick={()=>void toggle(x)}>{x.status==="Aktif"?"Blokir":"Aktifkan"}</button><button className="danger-link" onClick={()=>void remove(x)}>Hapus</button></div></td></tr>)}{!users.length&&<tr><td colSpan={4} className="muted">{loadingUsers?"Memuat pengguna…":"Belum ada akun internal."}</td></tr>}</tbody></table></div></article><article className="card data-card"><header className="card-header"><div><h3>Audit Aktivitas</h3><p>Jejak perubahan terbaru</p></div></header><div className="audit-list">{data.audit.map(x=><div key={String(x.id)}><MiniIcon tone={x.action==="Hapus"?"red":x.action==="Tambah"?"green":"blue"}>{String(x.action).slice(0,1)}</MiniIcon><div><strong>{x.action} · {x.resource}</strong><p>{x.detail}</p><small>{x.user_email} · {new Date(String(x.created_at)).toLocaleString("id-ID")}</small></div></div>)}</div></article></section>
+  <section className="card data-card guardian-inbox"><header className="card-header"><div><h3>Pesan dari Wali Santri</h3><p>Pertanyaan dari Portal Wali yang menunggu tindak lanjut</p></div><Status tone={data.guardianMessages.some(x=>x.status==="Baru")?"amber":"green"}>{data.guardianMessages.filter(x=>x.status==="Baru").length} baru</Status></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Subjek & Pesan</th><th>Pengirim</th><th>Status</th><th /></tr></thead><tbody>{data.guardianMessages.map(x=><tr key={String(x.id)}><td><strong>{x.student_name}</strong></td><td><strong>{x.subject}</strong><small className="cell-note">{x.message}{x.reply?` · Balasan: ${x.reply}`:""}</small></td><td className="muted">{x.sender_email}</td><td><Status tone={x.status==="Dibalas"?"green":"amber"}>{x.status}</Status></td><td><button className="text-button" onClick={()=>reply(x)}>{x.status==="Dibalas"?"Balas lagi":"Balas"}</button></td></tr>)}{!data.guardianMessages.length&&<tr><td colSpan={5} className="muted">Belum ada pesan dari wali santri.</td></tr>}</tbody></table></div></section>
+  {editor!==undefined&&<UserAccessModal row={editor||undefined} rooms={data.rooms} onClose={()=>setEditor(undefined)} onSaved={refresh}/>}
+  {resetUser&&<ResetUserPasswordModal row={resetUser} onClose={()=>setResetUser(null)} onSaved={refresh}/>}</>;
 }
 
 function PaymentQrModal({ bill, onClose, onUpdated, notify }: { bill:Row; onClose:()=>void; onUpdated:()=>Promise<void>; notify:(message:string)=>void }) {
@@ -1055,7 +1177,7 @@ function IntegrationsPage({ data, onImported, notify }: { data:AppData; onImport
 
 function StudentCardModal({ student, onClose }: { student:Row; onClose:()=>void }) {
   const [qr,setQr]=useState(""); useEffect(()=>{void (async()=>{const response=await fetch(`/api/student-card?id=${student.id}`);const result=await response.json() as {qr?:string};setQr(result.qr||"");})();},[student.id]);
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="student-card-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close no-print" onClick={onClose}>×</button><div className="student-id-card"><header><span className="brand-mark">ن</span><div><strong>SINURMAN</strong><small>Pondok Pesantren Nurul Iman</small></div></header><div className="student-card-body"><div><span className="student-photo">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><h3>{student.name}</h3><p>{student.nis}</p><dl><dt>Kelas</dt><dd>{student.class_name}</dd><dt>Kamar</dt><dd>{student.room}</dd><dt>Status</dt><dd>{student.status}</dd></dl></div>{qr?<img src={qr} alt={`QR ${student.name}`} />:<span className="qr-loading">Memuat QR…</span>}</div><footer>Kartu Santri Digital · Tahun Ajaran 2026/2027</footer></div><button className="primary-button print-card no-print" onClick={()=>window.print()}>Cetak Kartu</button></div></div>;
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="student-card-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close no-print" onClick={onClose}>×</button><div className="student-id-card"><header><BrandMark className="brand-mark"/><div><strong>SINURMAN</strong><small>Pondok Pesantren Nurul Iman</small></div></header><div className="student-card-body"><div><span className="student-photo">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><h3>{student.name}</h3><p>{student.nis}</p><dl><dt>Kelas</dt><dd>{student.class_name}</dd><dt>Kamar</dt><dd>{student.room}</dd><dt>Status</dt><dd>{student.status}</dd></dl></div>{qr?<img src={qr} alt={`QR ${student.name}`} />:<span className="qr-loading">Memuat QR…</span>}</div><footer>Kartu Santri Digital · Tahun Ajaran 2026/2027</footer></div><button className="primary-button print-card no-print" onClick={()=>window.print()}>Cetak Kartu</button></div></div>;
 }
 
 function ReportsPage({ role }: { role:Role }) {
@@ -1211,7 +1333,7 @@ function RecordModal({ editor, students, subjects, classes, onClose, onSave }: {
       :field.type==="class"||field.type==="class-optional"?<select required={field.type==="class"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">{field.type==="class"?"Pilih kelas":"Otomatis berdasarkan tingkat"}</option>{classes.filter(row=>row.status==="Aktif"&&row.name!==editor.row?.name).map(row=><option key={String(row.id)} value={String(row.name)}>{row.name} · {row.education_level}</option>)}</select>
       :field.options?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih</option>{field.options.map(o=><option key={o}>{o}</option>)}</select>
       :field.type==="textarea"?<textarea required={!["note","address"].includes(field.key)} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />
-      :<input required={!["status","note","room_scope","guardian_email","birth_place","birth_date","phone","email","education","major","homeroom_teacher"].includes(field.key)} readOnly={editor.resource==="tahfidz"&&field.key==="amount"} min={["verse_from","verse_to","amount","grade_order","capacity"].includes(field.key)?1:undefined} max={["minimum_score","assignment_score","midterm_score","exam_score"].includes(field.key)?100:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
+      :<input required={!["status","note","room_scope","guardian_email","birth_place","birth_date","phone","email","education","major","homeroom_teacher"].includes(field.key)} readOnly={editor.resource==="tahfidz"&&field.key==="amount"} min={field.key==="score"?0:["verse_from","verse_to","amount","grade_order","capacity"].includes(field.key)?1:undefined} max={["score","minimum_score","assignment_score","midterm_score","exam_score"].includes(field.key)?100:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
     </label>)}</div>
     {error&&<div className="form-error">{error}</div>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button disabled={saving} className="primary-button">{saving?"Menyimpan...":"Simpan Data"}</button></div>
@@ -1270,34 +1392,97 @@ function HelpModal({ role, onClose, onNavigate, onRefresh }: { role:Role; onClos
 
 function AccountModal({ user, role, onClose, onLogout }: { user:AppData["user"]; role:Role; onClose:()=>void; onLogout:()=>void }) {
   const closeButtonRef=useRef<HTMLButtonElement>(null);
+  const [currentPassword,setCurrentPassword]=useState("");
+  const [newPassword,setNewPassword]=useState("");
+  const [confirmation,setConfirmation]=useState("");
+  const [savingPassword,setSavingPassword]=useState(false);
+  const [passwordError,setPasswordError]=useState("");
+  const [passwordMessage,setPasswordMessage]=useState("");
   useEffect(()=>{
     closeButtonRef.current?.focus();
     const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==="Escape") onClose();};
     window.addEventListener("keydown",closeOnEscape);
     return()=>window.removeEventListener("keydown",closeOnEscape);
   },[onClose]);
+  async function changePassword(event:React.FormEvent) {
+    event.preventDefault();setPasswordError("");setPasswordMessage("");
+    if(newPassword.length<8){setPasswordError("Sandi baru minimal 8 karakter.");return;}
+    if(!/[A-Za-z]/.test(newPassword)||!/\d/.test(newPassword)){setPasswordError("Sandi baru harus memuat huruf dan angka.");return;}
+    if(newPassword!==confirmation){setPasswordError("Konfirmasi sandi baru belum sama.");return;}
+    if(!user?.email){setPasswordError("Email akun tidak tersedia.");return;}
+    setSavingPassword(true);
+    try {
+      const auth=firebaseClient().auth;
+      let firebaseUser=auth.currentUser;
+      if(!firebaseUser||firebaseUser.email?.toLowerCase()!==user.email.toLowerCase()) {
+        firebaseUser=(await signInWithEmailAndPassword(auth,user.email,currentPassword)).user;
+      } else {
+        await reauthenticateWithCredential(firebaseUser,EmailAuthProvider.credential(user.email,currentPassword));
+      }
+      await updatePassword(firebaseUser,newPassword);
+      const idToken=await firebaseUser.getIdToken(true);
+      const response=await fetch("/api/firebase-auth",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({idToken})});
+      const result=await response.json() as {error?:string;message?:string};
+      if(!response.ok) throw new Error(result.error||"Sesi baru gagal dibuat.");
+      setCurrentPassword("");setNewPassword("");setConfirmation("");
+      setPasswordMessage(result.message||"Kata sandi berhasil diubah.");
+    } catch(error) {
+      const raw=error instanceof Error?error.message:"Kata sandi gagal diubah.";
+      setPasswordError(raw.includes("invalid-credential")?"Sandi saat ini tidak sesuai.":raw);
+    } finally {setSavingPassword(false);}
+  }
   const initials=(user?.name||"Pengguna").split(" ").map(value=>value[0]).slice(0,2).join("").toUpperCase();
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="account-modal-title" onMouseDown={event=>event.stopPropagation()}>
     <button ref={closeButtonRef} type="button" className="modal-close" aria-label="Tutup profil akun" onClick={onClose}>×</button>
     <span className="modal-eyebrow">AKUN SINURMAN</span><h2 id="account-modal-title">Profil pengguna</h2><p>{user?.guardianPhone?"Identitas wali terhubung dengan nomor HP pada Data Santri.":"Identitas ini berasal dari akun internal yang sedang masuk."}</p>
     <div className="account-summary"><span>{initials}</span><div><strong>{user?.name||"Pengguna SINURMAN"}</strong><small>{user?.guardianPhone?`+${user.guardianPhone}`:user?.email||"Identitas belum tersedia"}</small></div></div>
     <dl className="account-details"><div><dt>Peran</dt><dd>{role}</dd></div><div><dt>Penugasan kamar</dt><dd>{user?.roomScope||"Tidak dibatasi"}</dd></div><div><dt>Status akun</dt><dd><Status tone="green">Aktif</Status></dd></div></dl>
+    {role!=="Wali Santri"&&<form className="change-password-form" onSubmit={changePassword}><div><strong>Ubah kata sandi</strong><small>Masukkan sandi saat ini untuk melindungi akun Anda.</small></div>
+      <label>Sandi saat ini<input required type="password" autoComplete="current-password" value={currentPassword} onChange={event=>setCurrentPassword(event.target.value)}/></label>
+      <div className="password-pair"><label>Sandi baru<input required minLength={8} type="password" autoComplete="new-password" value={newPassword} onChange={event=>setNewPassword(event.target.value)}/></label><label>Ulangi sandi baru<input required minLength={8} type="password" autoComplete="new-password" value={confirmation} onChange={event=>setConfirmation(event.target.value)}/></label></div>
+      {passwordError&&<div className="form-error">{passwordError}</div>}{passwordMessage&&<div className="form-success">{passwordMessage}</div>}
+      <button type="submit" className="secondary-button" disabled={savingPassword}>{savingPassword?"Mengubah…":"Ubah Kata Sandi"}</button>
+    </form>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onLogout}>Keluar dari akun</button><button type="button" className="primary-button" onClick={onClose}>Selesai</button></div>
   </div></div>;
 }
 
-function SettingsModal({ dark, onDarkChange, onHelp, onClose }: { dark:boolean; onDarkChange:(value:boolean)=>void; onHelp:()=>void; onClose:()=>void }) {
+function SettingsModal({ dark, role, onDarkChange, onHelp, notify, onClose }: { dark:boolean; role:Role; onDarkChange:(value:boolean)=>void; onHelp:()=>void; notify:(message:string)=>void; onClose:()=>void }) {
   const closeButtonRef=useRef<HTMLButtonElement>(null);
+  const [logo,setLogo]=useState<File|null>(null);
+  const [savingLogo,setSavingLogo]=useState(false);
+  const [logoError,setLogoError]=useState("");
   useEffect(()=>{
     closeButtonRef.current?.focus();
     const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==="Escape") onClose();};
     window.addEventListener("keydown",closeOnEscape);
     return()=>window.removeEventListener("keydown",closeOnEscape);
   },[onClose]);
+  async function uploadLogo() {
+    if(!logo){setLogoError("Pilih berkas logo terlebih dahulu.");return;}
+    setSavingLogo(true);setLogoError("");
+    const body=new FormData();body.set("logo",logo);
+    const response=await fetch("/api/branding/logo",{method:"POST",body});
+    const result=await response.json() as {error?:string;message?:string};
+    setSavingLogo(false);
+    if(!response.ok){setLogoError(result.error||"Logo gagal diperbarui.");return;}
+    setLogo(null);notify(result.message||"Logo sekolah berhasil diperbarui.");
+    window.dispatchEvent(new Event("sinurman-logo-updated"));
+  }
+  async function resetLogo() {
+    setSavingLogo(true);setLogoError("");
+    const response=await fetch("/api/branding/logo",{method:"DELETE"});
+    const result=await response.json() as {error?:string;message?:string};
+    setSavingLogo(false);
+    if(!response.ok){setLogoError(result.error||"Logo gagal dikembalikan.");return;}
+    notify(result.message||"Logo bawaan digunakan kembali.");
+    window.dispatchEvent(new Event("sinurman-logo-updated"));
+  }
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" onMouseDown={event=>event.stopPropagation()}>
     <button ref={closeButtonRef} type="button" className="modal-close" aria-label="Tutup pengaturan" onClick={onClose}>×</button>
     <span className="modal-eyebrow">PENGATURAN TAMPILAN</span><h2 id="settings-modal-title">Sesuaikan dashboard</h2><p>Pilihan tampilan disimpan pada perangkat ini.</p>
     <div className="theme-options"><button type="button" className={!dark?"active":""} aria-pressed={!dark} onClick={()=>onDarkChange(false)}><span>☀</span><strong>Terang</strong><small>Nyaman untuk penggunaan siang hari</small></button><button type="button" className={dark?"active":""} aria-pressed={dark} onClick={()=>onDarkChange(true)}><span>☾</span><strong>Gelap</strong><small>Mengurangi silau pada malam hari</small></button></div>
+    {role==="Admin"&&<section className="branding-settings"><div className="branding-settings-head"><BrandMark className="brand-mark"/><div><strong>Logo sekolah</strong><small>Tampil di dashboard, login, Portal Wali, PPDB, kartu, dan laporan cetak.</small></div></div><label>Pilih logo baru<input type="file" accept=".png,.jpg,.jpeg,.webp" onChange={event=>setLogo(event.target.files?.[0]||null)}/><small>PNG, JPG, atau WebP · maksimal 2 MB · disarankan gambar persegi.</small></label>{logoError&&<div className="form-error">{logoError}</div>}<div className="branding-settings-actions"><button type="button" className="primary-button" disabled={savingLogo||!logo} onClick={()=>void uploadLogo()}>{savingLogo?"Menyimpan…":"Unggah Logo"}</button><button type="button" className="secondary-button" disabled={savingLogo} onClick={()=>void resetLogo()}>Gunakan Logo Bawaan</button></div></section>}
     <div className="settings-help"><div><strong>Kesulitan menggunakan SINURMAN?</strong><small>Buka panduan sesuai dengan peran akun Anda.</small></div><button type="button" onClick={()=>{onClose();onHelp();}}>Buka Bantuan</button></div>
     <div className="modal-actions"><button type="button" className="primary-button" onClick={onClose}>Simpan & Tutup</button></div>
   </div></div>;
@@ -1421,7 +1606,7 @@ export default function DashboardClient() {
     ];
     const allowed=new Set(visibleNavGroups.flatMap(group=>group.items.map(item=>item.key)));
     return items.filter(item=>allowed.has(item.page));
-  }, [data, visibleNavGroups, role]);
+  }, [data, visibleNavGroups]);
 
   const searchResults = useMemo(() => {
     const query = normalizeSearch(searchQuery).trim();
@@ -1459,32 +1644,32 @@ export default function DashboardClient() {
     notify("Balasan berhasil dikirim ke Portal Wali."); await loadData();
   }
 
-  const content = useMemo(() => {
+  const content = (() => {
     const actions=(resource:Resource)=>({onAdd:()=>setEditor({resource}),onEdit:(row:Row)=>setEditor({resource,row}),onDelete:(row:Row)=>void deleteRecord(resource,row)});
     switch (page) {
-      case "dashboard": return <Overview data={data} />;
-      case "santri": return <StudentsPage rows={data.students} {...actions("students")} onCard={setCardStudent} />;
+      case "dashboard": return <Overview data={data} onNavigate={selectPage} />;
+      case "santri": return <StudentsPage rows={data.students} editable={role==="Admin"} {...actions("students")} onCard={setCardStudent} />;
       case "pegawai": return <EmployeesPage rows={data.employees} {...actions("employees")} />;
       case "kelas": return <ClassesPromotionPage data={data} {...actions("classes")} reload={loadData} notify={notify} />;
       case "tahfidz": return <TahfidzPage rows={data.tahfidz} {...actions("tahfidz")} />;
       case "akademik": return <AcademicPage data={data} role={role} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
-      case "mutabaah": return <MutabaahPage rows={data.mutabaah} {...actions("mutabaah")} />;
+      case "mutabaah": return <MutabaahPage data={data} {...actions("mutabaah")} notify={notify} />;
       case "kesehatan": return <HealthPage rows={data.health} {...actions("health")} />;
       case "keuangan": return <FinancePage rows={data.transactions} bills={data.bills} onAdd={()=>setEditor({resource:"transactions"})} onBill={()=>setEditor({resource:"bills"})} onNotify={()=>setShowNotification(true)} onPayment={row=>void openPayment(row)} />;
       case "sinurpay": return <SinurpayPage notify={notify} />;
-      case "karakter": return <CharacterPage onAdd={()=>setEditor({resource:"characters"})} />;
+      case "karakter": return <CharacterPage data={data} onAdd={()=>setEditor({resource:"characters"})} onEdit={row=>setEditor({resource:"characters",row})} onDelete={row=>void deleteRecord("characters",row)} />;
       case "inventaris": return <InventoryPage rows={data.inventory} {...actions("inventory")} />;
-      case "pengumuman": return <AnnouncementsPage rows={data.announcements} {...actions("announcements")} onNotify={()=>setShowNotification(true)} />;
+      case "pengumuman": return <AnnouncementsPage rows={data.announcements} editable={role==="Admin"} {...actions("announcements")} onNotify={()=>setShowNotification(true)} />;
       case "laporan": return <ReportsPage role={role} />;
       case "absensi": return <AttendancePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} reload={loadData} notify={notify} />;
-      case "jadwal": return <SchedulePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
+      case "jadwal": return <SchedulePage data={data} role={role} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "penerimaan": return <AdmissionsPage data={data} role={role} reload={loadData} notify={notify} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "konseling": return <CounselingPage rows={data.counseling} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
-      case "pengguna": return <UsersPage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} reply={row=>void replyGuardianMessage(row)} reload={loadData} notify={notify} />;
+      case "pengguna": return <UsersPage data={data} reply={row=>void replyGuardianMessage(row)} reload={loadData} notify={notify} />;
       case "integrasi": return <IntegrationsPage data={data} onImported={loadData} notify={notify} />;
       case "portalwali": return <GuardianPortal data={data} onCard={setCardStudent} onPayment={row=>void openPayment(row)} reload={loadData} notify={notify} />;
     }
-  }, [page,data]);
+  })();
 
   function selectPage(key: PageKey) {
     if(role==="Wali Santri"&&key!=="portalwali") {
@@ -1544,7 +1729,7 @@ export default function DashboardClient() {
   return (
     <div className={`app-shell ${dark ? "dark" : ""}`}>
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="brand"><button className="brand-home" aria-label={role==="Wali Santri"?"Kembali ke Portal Wali":"Kembali ke dashboard"} onClick={()=>selectPage(role==="Wali Santri"?"portalwali":"dashboard")}><span className="brand-mark">ن</span><span><strong>SINURMAN</strong><small>Nurul Iman</small></span></button><button className="close-sidebar" onClick={()=>setSidebarOpen(false)}>×</button></div>
+        <div className="brand"><button className="brand-home" aria-label={role==="Wali Santri"?"Kembali ke Portal Wali":"Kembali ke dashboard"} onClick={()=>selectPage(role==="Wali Santri"?"portalwali":"dashboard")}><BrandMark className="brand-mark"/><span><strong>SINURMAN</strong><small>Nurul Iman</small></span></button><button className="close-sidebar" onClick={()=>setSidebarOpen(false)}>×</button></div>
         <nav>{visibleNavGroups.map(group=><div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><ToolIcon name={item.icon} /><span>{item.label}</span>{item.key==="pengumuman"&&<b>3</b>}</button>)}</div>)}</nav>
         <button type="button" className="sidebar-help" aria-haspopup="dialog" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}><span>?</span><span><strong>Butuh bantuan?</strong><small>Buka pusat bantuan</small></span></button>
         <div className="sidebar-footer"><span>© 2026 SINURMAN</span><button type="button" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}>Bantuan · v1.3</button></div>
@@ -1631,7 +1816,7 @@ export default function DashboardClient() {
       {paymentBill&&<PaymentQrModal bill={paymentBill} onClose={()=>setPaymentBill(null)} onUpdated={loadData} notify={notify}/>}
       {showHelp&&<HelpModal role={role} onClose={()=>setShowHelp(false)} onNavigate={selectPage} onRefresh={async()=>{await loadData();notify("Data berhasil disinkronkan.");}}/>}
       {showAccount&&<AccountModal user={data.user} role={role} onClose={()=>setShowAccount(false)} onLogout={()=>void logout()}/>}
-      {showSettings&&<SettingsModal dark={dark} onDarkChange={changeTheme} onHelp={()=>setShowHelp(true)} onClose={()=>setShowSettings(false)}/>}
+      {showSettings&&<SettingsModal dark={dark} role={role} onDarkChange={changeTheme} onHelp={()=>setShowHelp(true)} notify={notify} onClose={()=>setShowSettings(false)}/>}
       {toast&&<div className="toast"><span>✓</span>{toast}</div>}
     </div>
   );

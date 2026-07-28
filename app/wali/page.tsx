@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import BrandMark from "../brand-mark";
 import GuardianLoginClient from "./wali-login-client";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export default function GuardianLoginPage() {
     <main className="guardian-login-page">
       <header className="guardian-login-header">
         <Link className="guardian-login-brand" href="/wali">
-          <span>ن</span>
+          <BrandMark />
           <div>
             <strong>SINURMAN</strong>
             <small>Portal Wali Santri Nurul Iman</small>
@@ -49,35 +50,44 @@ export default function GuardianLoginPage() {
 
         <aside className="guardian-login-guide">
           <span>CARA MASUK</span>
-          <h2>Tiga langkah sederhana</h2>
+          <h2>Empat langkah sederhana</h2>
           <ol>
             <li>
               <b>1</b>
               <div>
-                <strong>Pastikan email sudah terdaftar</strong>
+                <strong>Pastikan nomor HP sudah terdaftar</strong>
                 <p>
-                  Admin mengisi “Nomor WhatsApp wali” pada Data Santri dan
-                  membuat PIN 6 angka untuk Anda.
+                  Nomor WhatsApp Anda harus sama dengan nomor wali pada Data
+                  Santri.
                 </p>
               </div>
             </li>
             <li>
               <b>2</b>
               <div>
-                <strong>Masuk memakai nomor HP dan PIN</strong>
+                <strong>Daftar memakai nomor HP</strong>
                 <p>
-                  Masukkan nomor WhatsApp yang terdaftar dan PIN dari Admin
-                  pesantren.
+                  Buat PIN 6 angka sendiri melalui tab “Daftar Akun Wali”.
                 </p>
               </div>
             </li>
             <li>
               <b>3</b>
               <div>
-                <strong>Lihat laporan anak</strong>
+                <strong>Tunggu persetujuan Admin</strong>
                 <p>
-                  Sistem membuka Portal Wali dan menampilkan anak yang terhubung
-                  secara otomatis.
+                  Admin sekolah memeriksa dan mengaktifkan akun yang Anda
+                  daftarkan.
+                </p>
+              </div>
+            </li>
+            <li>
+              <b>4</b>
+              <div>
+                <strong>Masuk dan lihat laporan anak</strong>
+                <p>
+                  Gunakan nomor HP dan PIN. Sistem hanya menampilkan anak yang
+                  terhubung dengan nomor Anda.
                 </p>
               </div>
             </li>

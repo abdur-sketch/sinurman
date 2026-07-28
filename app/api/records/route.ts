@@ -121,6 +121,9 @@ export async function POST(request: Request) {
     if (!resource || !(resource in resourceConfig)) {
       return Response.json({ error: "Modul tidak valid." }, { status: 400 });
     }
+    if (resource === "users") {
+      return Response.json({ error: "Gunakan Manajemen Pengguna agar akun Firebase dan hak akses tetap sinkron." }, { status: 400 });
+    }
     if (!canWrite(user.role, resource)) {
       return Response.json({ error: "Peran Anda tidak memiliki izin untuk tindakan ini." }, { status: 403 });
     }
@@ -174,6 +177,12 @@ export async function POST(request: Request) {
       const finalScore=Math.round(scores[0]*0.3+scores[1]*0.3+scores[2]*0.4);
       source.final_score=finalScore;
       source.predicate=finalScore>=90?"A":finalScore>=80?"B":finalScore>=70?"C":"D";
+    }
+    if (resource === "characters") {
+      const score=Number(source.score);
+      if(!Number.isFinite(score)||score<0||score>100) {
+        return Response.json({error:"Nilai karakter harus berada pada rentang 0–100."},{status:400});
+      }
     }
     if (action === "update") {
       if (!payload.id) return Response.json({ error: "ID wajib diisi." }, { status: 400 });

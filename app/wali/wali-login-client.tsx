@@ -3,13 +3,16 @@
 import { useEffect, useState } from "react";
 
 export default function GuardianLoginClient() {
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [activePhone, setActivePhone] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -44,6 +47,30 @@ export default function GuardianLoginClient() {
     }
   }
 
+  async function register(event: React.FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      if (pin !== confirmation) throw new Error("Ulangi PIN dengan angka yang sama.");
+      const response = await fetch("/api/wali-register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ phone, pin }),
+      });
+      const result = await response.json() as { error?:string; message?:string };
+      if (!response.ok) throw new Error(result.error || "Pendaftaran akun gagal.");
+      setMessage(result.message || "Pendaftaran terkirim dan menunggu persetujuan Admin.");
+      setPin("");
+      setConfirmation("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Pendaftaran akun gagal.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (checking) {
     return <div className="guardian-login-form guardian-login-checking">Memeriksa sesi Portal Wali…</div>;
   }
@@ -57,15 +84,25 @@ export default function GuardianLoginClient() {
     </div>;
   }
 
-  return <form className="guardian-login-form" onSubmit={submit}>
+  return <div className="guardian-auth-box">
+    <div className="guardian-auth-tabs">
+      <button type="button" className={mode==="login"?"active":""} onClick={()=>{setMode("login");setError("");setMessage("");}}>Masuk</button>
+      <button type="button" className={mode==="register"?"active":""} onClick={()=>{setMode("register");setError("");setMessage("");}}>Daftar Akun Wali</button>
+    </div>
+  <form className={`guardian-login-form ${mode==="register"?"guardian-register-form":""}`} onSubmit={mode==="login"?submit:register}>
     <label>Nomor HP / WhatsApp
       <div className="guardian-phone-input"><span>+62</span><input required inputMode="tel" autoComplete="tel" value={phone} onChange={event=>setPhone(event.target.value)} placeholder="812 3456 7890" /></div>
     </label>
     <label>PIN Portal Wali
-      <input required inputMode="numeric" autoComplete="current-password" minLength={6} maxLength={6} pattern="[0-9]{6}" value={pin} onChange={event=>setPin(event.target.value.replace(/\D/g,"").slice(0,6))} placeholder="6 angka" />
+      <input required inputMode="numeric" autoComplete={mode==="login"?"current-password":"new-password"} minLength={6} maxLength={6} pattern="[0-9]{6}" value={pin} onChange={event=>setPin(event.target.value.replace(/\D/g,"").slice(0,6))} placeholder="6 angka" />
     </label>
+    {mode==="register"&&<label>Ulangi PIN
+      <input required inputMode="numeric" autoComplete="new-password" minLength={6} maxLength={6} pattern="[0-9]{6}" value={confirmation} onChange={event=>setConfirmation(event.target.value.replace(/\D/g,"").slice(0,6))} placeholder="Ulangi 6 angka" />
+    </label>}
     {error && <div className="form-error">{error}</div>}
-    <button className="primary-button guardian-login-primary" disabled={loading}>{loading ? "Memeriksa…" : "Masuk ke Portal Wali →"}</button>
-    <small>PIN dibuat oleh Admin pesantren dan tidak boleh dibagikan kepada orang lain.</small>
-  </form>;
+    {message && <div className="form-success">{message}</div>}
+    <button className="primary-button guardian-login-primary" disabled={loading}>{loading ? "Memproses…" : mode==="login" ? "Masuk ke Portal Wali →" : "Kirim Pendaftaran Akun →"}</button>
+    <small>{mode==="login"?"Gunakan nomor HP yang terdaftar dan PIN 6 angka Anda.":"Nomor HP harus sama dengan Data Santri. Akun aktif setelah disetujui Admin."}</small>
+  </form>
+  </div>;
 }

@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Seluruh data operasional diakses melalui server SINURMAN.
+    // Client browser tidak boleh membaca atau mengubah koleksi secara langsung.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

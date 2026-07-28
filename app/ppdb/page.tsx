@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import BrandMark from "../brand-mark";
 
 const documentTypes = ["Kartu Keluarga","Akta Kelahiran","Rapor Terakhir","Pas Foto","KIP / SKTM"];
 type Result = { id:number; registrationNo:string; trackingToken:string; message:string };
@@ -48,7 +49,7 @@ export default function PublicPpdbPage() {
   }
 
   return <main className="public-ppdb">
-    <header className="ppdb-public-header"><a className="ppdb-public-brand" href="/ppdb"><span>ن</span><div><strong>SINURMAN</strong><small>PPDB Pondok Pesantren Nurul Iman</small></div></a><a className="secondary-button link-button" href="/wali">Masuk Portal Wali</a></header>
+    <header className="ppdb-public-header"><a className="ppdb-public-brand" href="/ppdb"><BrandMark/><div><strong>SINURMAN</strong><small>PPDB Pondok Pesantren Nurul Iman</small></div></a><a className="secondary-button link-button" href="/wali">Masuk Portal Wali</a></header>
     <section className="ppdb-public-hero"><div><span>PPDB ONLINE 2026/2027</span><h1>Tumbuh dalam ilmu,<br/>adab, dan iman.</h1><p>Pendaftaran santri baru jenjang SMP dan SMK. Isi formulir, unggah berkas, lalu pantau verifikasi secara daring.</p><div className="ppdb-public-points"><span>✓ Pendaftaran daring</span><span>✓ Dokumen aman</span><span>✓ Status transparan</span></div></div><aside><strong>Alur Pendaftaran</strong>{["Lengkapi formulir","Unggah dokumen","Verifikasi panitia","Tes dan pengumuman"].map((step,index)=><div key={step}><i>{index+1}</i><span>{step}</span></div>)}</aside></section>
     <section className="ppdb-public-panel">
       <div className="ppdb-public-tabs"><button className={tab==="daftar"?"active":""} onClick={()=>{setTab("daftar");setError("");}}>Formulir Pendaftaran</button><button className={tab==="status"?"active":""} onClick={()=>{setTab("status");setError("");}}>Cek Status</button></div>

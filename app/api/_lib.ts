@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { getFirebaseSession } from "../../lib/firebase/session";
 
 export type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
 export type AuthenticatedUser = {
@@ -215,6 +216,45 @@ export async function setGuardianPin(phoneInput: unknown, pin: string) {
   return phone;
 }
 
+export async function registerGuardianAccount(phoneInput: unknown, pin: string) {
+  await ensureDatabaseSchema();
+  const phone = normalizeGuardianPhone(phoneInput);
+  if (!/^62\d{8,13}$/.test(phone)) throw new Error("Nomor HP wali tidak valid.");
+  if (!/^\d{6}$/.test(pin)) throw new Error("PIN harus terdiri dari 6 angka.");
+  const linked = await database().prepare(
+    "SELECT COUNT(*) AS total FROM students WHERE guardian_phone=? AND status='Aktif'",
+  ).bind(phone).first<{ total:number }>();
+  if (!Number(linked?.total ?? 0)) {
+    throw new Error("Nomor HP belum terhubung dengan Data Santri. Hubungi Admin pesantren.");
+  }
+  const existing = await database().prepare(
+    "SELECT id,status FROM guardian_accounts WHERE phone=?",
+  ).bind(phone).first<{ id:number; status:string }>();
+  if (existing?.status === "Aktif") {
+    throw new Error("Akun sudah aktif. Silakan masuk atau hubungi Admin untuk mereset PIN.");
+  }
+  if (existing?.status === "Diblokir") {
+    throw new Error("Akun diblokir. Hubungi Admin pesantren.");
+  }
+
+  const salt = randomHex(16);
+  const hash = await deriveGuardianPin(pin, salt);
+  const now = new Date().toISOString();
+  if (existing) {
+    await database().prepare(
+      "UPDATE guardian_accounts SET pin_hash=?,pin_salt=?,status='Menunggu Persetujuan',failed_attempts=0,locked_until='',updated_at=? WHERE id=?",
+    ).bind(hash, salt, now, existing.id).run();
+    await database().prepare("DELETE FROM guardian_sessions WHERE account_id=?").bind(existing.id).run();
+  } else {
+    await database().prepare(
+      `INSERT INTO guardian_accounts
+       (phone,pin_hash,pin_salt,status,failed_attempts,locked_until,created_at,updated_at)
+       VALUES (?,?,?,'Menunggu Persetujuan',0,'',?,?)`,
+    ).bind(phone, hash, salt, now, now).run();
+  }
+  return { phone, status: "Menunggu Persetujuan", created: !existing };
+}
+
 export async function verifyGuardianPin(phoneInput: unknown, pin: string) {
   await ensureDatabaseSchema();
   const phone = normalizeGuardianPhone(phoneInput);
@@ -244,15 +284,22 @@ export async function verifyGuardianPin(phoneInput: unknown, pin: string) {
 }
 
 export async function currentIdentity(request: Request) {
-  const email = request.headers.get("oai-authenticated-user-email");
-  if (email) {
-    const encodedName = request.headers.get("oai-authenticated-user-full-name");
-    const encoding = request.headers.get("oai-authenticated-user-full-name-encoding");
-    let name = email.split("@")[0];
-    if (encodedName && encoding === "percent-encoded-utf-8") {
-      try { name = decodeURIComponent(encodedName); } catch { /* use fallback */ }
+  if (process.env.FIREBASE_RUNTIME === "true") {
+    const firebaseSession = await getFirebaseSession(request);
+    if (firebaseSession) {
+      return { email: firebaseSession.email, name: firebaseSession.name };
     }
-    return { email, name };
+  } else {
+    const email = request.headers.get("oai-authenticated-user-email");
+    if (email) {
+      const encodedName = request.headers.get("oai-authenticated-user-full-name");
+      const encoding = request.headers.get("oai-authenticated-user-full-name-encoding");
+      let name = email.split("@")[0];
+      if (encodedName && encoding === "percent-encoded-utf-8") {
+        try { name = decodeURIComponent(encodedName); } catch { /* use fallback */ }
+      }
+      return { email, name };
+    }
   }
   const guardian = await getGuardianSession(request);
   if (guardian) {
@@ -348,18 +395,33 @@ export async function seedIfNeeded() {
     db.prepare("INSERT INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .bind("Faris Abdullah", "SN-240212", "IX A", "Ibnu Khaldun 02", "Abdullah Karim", "6281234567805", "wali.faris@sinurman.id", "Aktif", now),
   ]);
-  await db.prepare(
-    `INSERT OR IGNORE INTO school_classes
-      (name,education_level,grade_order,major,homeroom_teacher,capacity,next_class_name,academic_year,status,created_at,updated_at)
-     SELECT DISTINCT class_name,
-       CASE WHEN class_name LIKE 'VII%' OR class_name LIKE 'VIII%' OR class_name LIKE 'IX%' THEN 'SMP' ELSE 'SMK' END,
-       CASE WHEN class_name LIKE 'XII%' THEN 12 WHEN class_name LIKE 'XI%' THEN 11 WHEN class_name LIKE 'X %' OR class_name='X' THEN 10
-            WHEN class_name LIKE 'IX%' THEN 9 WHEN class_name LIKE 'VIII%' THEN 8 ELSE 7 END,
-       CASE WHEN class_name LIKE 'X %' THEN substr(class_name,3) WHEN class_name LIKE 'XI %' THEN substr(class_name,4)
-            WHEN class_name LIKE 'XII %' THEN substr(class_name,5) ELSE '' END,
-       '',32,'','2026/2027','Aktif',?,?
-     FROM students WHERE class_name<>'' AND class_name NOT LIKE 'Alumni%'`,
-  ).bind(now,now).run();
+  const studentClasses = await db.prepare(
+    "SELECT DISTINCT class_name FROM students WHERE class_name<>'' AND class_name NOT LIKE 'Alumni%'",
+  ).all<{ class_name:string }>();
+  const standardClasses = [
+    "VII A","VIII A","IX A",
+    "X RPL","XI RPL","XII RPL",
+    "X TKJ","XI TKJ","XII TKJ",
+  ];
+  const classNames = [...new Set([
+    ...studentClasses.results.map(row => row.class_name),
+    ...standardClasses,
+  ])];
+  await db.batch(classNames.map(className => {
+    const educationLevel = /^(X|XI|XII)\s/.test(className) ? "SMK" : "SMP";
+    const gradeOrder = className.startsWith("XII") ? 12
+      : className.startsWith("XI") ? 11
+      : className.startsWith("X ") ? 10
+      : className.startsWith("IX") ? 9
+      : className.startsWith("VIII") ? 8
+      : 7;
+    const major = educationLevel === "SMK" ? className.replace(/^(XII|XI|X)\s+/, "") : "";
+    return db.prepare(
+      `INSERT OR IGNORE INTO school_classes
+       (name,education_level,grade_order,major,homeroom_teacher,capacity,next_class_name,academic_year,status,created_at,updated_at)
+       VALUES (?,?,?,?,?,32,?,'2026/2027','Aktif',?,?)`,
+    ).bind(className,educationLevel,gradeOrder,major,"","",now,now);
+  }));
   if (Number(count?.total ?? 0) === 0) await db.batch([
     db.prepare("INSERT INTO tahfidz_records (student_id, surah, verses, amount, grade, teacher, recorded_at) VALUES (1, ?, ?, ?, ?, ?, ?)")
       .bind("Al-Mulk", "1–15", 15, "Mumtaz", "Ustadz Hasan", now),
@@ -455,6 +517,12 @@ export async function seedIfNeeded() {
     const teachers: Record<string,string> = {
       Tahfidz:"Ustadz Hasan",Matematika:"Ibu Nur Aini","Bahasa Indonesia":"Ibu Salma",IPA:"Bapak Arif",IPS:"Bapak Rizal",PAI:"Ustadz Fauzi","Bahasa Inggris":"Ibu Nadia","Bahasa Arab":"Ustadz Karim",Informatika:"Bapak Ilham",PJOK:"Bapak Fadli","Akidah Akhlak":"Ustadz Rahmat",Fiqih:"Ustadz Fauzi","Seni Budaya":"Ibu Hana",Prakarya:"Ibu Hana",Literasi:"Ibu Salma",BK:"Ibu Laila",IPAS:"Bapak Arif",PKK:"Bapak Dimas","Projek P5":"Tim Projek",Muhadharah:"Ustadz Hasan","Evaluasi Pekanan":"Wali Kelas","Praktik Kejuruan":"Guru Produktif",
     };
+    const existingSchedules = await db.prepare(
+      "SELECT class_name,day_name,start_time FROM schedules",
+    ).all<{class_name:string;day_name:string;start_time:string}>();
+    const scheduleKeys = new Set(
+      existingSchedules.results.map(row => `${row.class_name}|${row.day_name}|${row.start_time}`),
+    );
     const statements: D1PreparedStatement[] = [];
     for (const [level,className] of classes) {
       for (let dayIndex=0; dayIndex<days.length; dayIndex++) {
@@ -464,23 +532,18 @@ export async function seedIfNeeded() {
           if(subject==="Praktik Kejuruan") subject=className.includes("RPL")?"Praktik Pemrograman":"Praktik Jaringan";
           const category=subject==="Tahfidz"?"Tahfidz":subject.includes("Pemrograman")||subject.includes("Jaringan")||subject==="Basis Data"||subject==="Administrasi Sistem"||subject==="PKK"?"Produktif":"Pelajaran Umum";
           const teacher=teachers[subject]??(category==="Produktif"?"Bapak Dimas":"Wali Kelas");
-          statements.push(db.prepare("INSERT INTO schedules (education_level, class_name, title, category, teacher, location, day_name, start_time, end_time) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM schedules WHERE class_name=? AND day_name=? AND start_time=?)")
-            .bind(level,className,subject,category,teacher,`Kelas ${className}`,days[dayIndex],slots[slotIndex][0],slots[slotIndex][1],className,days[dayIndex],slots[slotIndex][0]));
+          const key = `${className}|${days[dayIndex]}|${slots[slotIndex][0]}`;
+          if (!scheduleKeys.has(key)) {
+            scheduleKeys.add(key);
+            statements.push(db.prepare(
+              "INSERT INTO schedules (education_level,class_name,title,category,teacher,location,day_name,start_time,end_time) VALUES (?,?,?,?,?,?,?,?,?)",
+            ).bind(level,className,subject,category,teacher,`Kelas ${className}`,days[dayIndex],slots[slotIndex][0],slots[slotIndex][1]));
+          }
         }
       }
     }
     for(let index=0;index<statements.length;index+=75) await db.batch(statements.slice(index,index+75));
   }
-  await db.prepare(
-    `INSERT OR IGNORE INTO school_classes
-      (name,education_level,grade_order,major,homeroom_teacher,capacity,next_class_name,academic_year,status,created_at,updated_at)
-     SELECT DISTINCT class_name,education_level,
-       CASE WHEN class_name LIKE 'XII%' THEN 12 WHEN class_name LIKE 'XI%' THEN 11 WHEN class_name LIKE 'X %' OR class_name='X' THEN 10
-            WHEN class_name LIKE 'IX%' THEN 9 WHEN class_name LIKE 'VIII%' THEN 8 ELSE 7 END,
-       CASE WHEN education_level='SMK' THEN replace(replace(replace(class_name,'XII ',''),'XI ',''),'X ','') ELSE '' END,
-       '',32,'','2026/2027','Aktif',?,?
-     FROM schedules WHERE class_name<>''`,
-  ).bind(now,now).run();
   const roomCount = await db.prepare("SELECT COUNT(*) AS total FROM rooms").first<{ total:number }>();
   if (Number(roomCount?.total ?? 0) === 0) await db.batch([
     db.prepare("INSERT INTO rooms (name, capacity, supervisor, status) VALUES (?, ?, ?, ?)")

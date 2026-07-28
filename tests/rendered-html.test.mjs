@@ -259,6 +259,41 @@ test("portal wali memiliki halaman masuk khusus dan pengunci akses anak", async 
   assert.match(ppdb, /href="\/wali">Masuk Portal Wali/);
 });
 
+test("wali dapat mendaftar memakai nomor HP dengan persetujuan Admin", async () => {
+  const [registration, auth, client, admin] = await Promise.all([
+    file("app/api/wali-register/route.ts"),
+    file("app/api/_lib.ts"),
+    file("app/wali/wali-login-client.tsx"),
+    file("app/dashboard-client.tsx"),
+  ]);
+  assert.match(registration, /registerGuardianAccount/);
+  assert.match(auth, /Menunggu Persetujuan/);
+  assert.match(auth, /guardian_phone=\? AND status='Aktif'/);
+  assert.match(client, /Daftar Akun Wali/);
+  assert.match(client, /\/api\/wali-register/);
+  assert.match(admin, /Setujui/);
+});
+
+test("Admin dapat mengganti logo sekolah yang dipakai di seluruh portal", async () => {
+  const [route, brand, dashboard, wali, login, ppdb, print] = await Promise.all([
+    file("app/api/branding/logo/route.ts"),
+    file("app/brand-mark.tsx"),
+    file("app/dashboard-client.tsx"),
+    file("app/wali/page.tsx"),
+    file("app/login/page.tsx"),
+    file("app/ppdb/page.tsx"),
+    file("app/cetak/print-report-client.tsx"),
+  ]);
+  assert.match(route, /user\.role !== "Admin"/);
+  assert.match(route, /image\/webp/);
+  assert.match(route, /2 \* 1024 \* 1024/);
+  assert.match(route, /env\.FILES\.put/);
+  assert.match(brand, /\/api\/branding\/logo/);
+  for (const source of [dashboard, wali, login, ppdb, print]) assert.match(source, /BrandMark/);
+  assert.match(dashboard, /Unggah Logo/);
+  assert.match(dashboard, /Gunakan Logo Bawaan/);
+});
+
 test("login nomor HP memakai PIN aman, sesi HttpOnly, dan penguncian percobaan", async () => {
   const [lib, authRoute, portalPage, migration] = await Promise.all([
     file("app/api/_lib.ts"),
@@ -337,6 +372,45 @@ test("master kelas, kenaikan otomatis, dan arsip alumni tersedia untuk Admin", a
   assert.match(tablesMigration, /CREATE TABLE `school_classes`/);
   assert.match(tablesMigration, /CREATE TABLE `student_promotions`/);
   assert.match(indexMigration, /student_promotions_year_idx/);
+});
+
+test("target Firebase App Hosting memiliki SDK, emulator, aturan keamanan, dan health check", async () => {
+  const [packageJson, appHosting, firebaseConfig, firestoreRules, storageRules, health, admin, client, nextConfig] = await Promise.all([
+    file("package.json"),
+    file("apphosting.yaml"),
+    file("firebase.json"),
+    file("firestore.rules"),
+    file("storage.rules"),
+    file("app/api/firebase-health/route.ts"),
+    file("lib/firebase/admin.ts"),
+    file("lib/firebase/client.ts"),
+    file("next.config.ts"),
+  ]);
+  assert.match(packageJson, /build:firebase/);
+  assert.match(packageJson, /firebase:emulators/);
+  assert.match(packageJson, /firebase-admin/);
+  assert.match(appHosting, /FIREBASE_RUNTIME/);
+  assert.match(firebaseConfig, /firestore/);
+  assert.match(firebaseConfig, /storage/);
+  assert.match(firebaseConfig, /emulators/);
+  assert.match(firestoreRules, /allow read, write: if false/);
+  assert.match(storageRules, /allow read, write: if false/);
+  assert.match(health, /firebase-app-hosting/);
+  assert.match(admin, /applicationDefault/);
+  assert.match(client, /initializeApp/);
+  assert.match(nextConfig, /cloudflare:workers/);
+});
+
+test("runtime Firebase menolak header lama dan membatasi sesi dashboard internal", async () => {
+  const [api, serverAuth, session] = await Promise.all([
+    file("app/api/_lib.ts"),
+    file("app/chatgpt-auth.ts"),
+    file("lib/firebase/session.ts"),
+  ]);
+  assert.match(api, /\} else \{\s+const email = request\.headers\.get\("oai-authenticated-user-email"\)/);
+  assert.match(serverAuth, /if \(process\.env\.FIREBASE_RUNTIME === "true"\)[\s\S]*return null;/);
+  assert.match(session, /const internalRoles = new Set\(\["Admin", "Kepala Asrama", "Musyrif", "Ustadz"\]\)/);
+  assert.match(session, /Akun belum diberi akses oleh Admin SINURMAN/);
 });
 
 test("Musyrif dan Kepala Asrama dibatasi modul serta kamar penugasan", async () => {
@@ -477,4 +551,47 @@ test("top-up SINURPAY memakai payment gateway, webhook idempoten, dan isolasi wa
   assert.match(runtime, /CREATE TABLE IF NOT EXISTS wallet_topups/);
   assert.match(migration, /CREATE TABLE `wallet_topups`/);
   assert.match(guardMigration, /UNIQUE INDEX `wallet_topup_settlements_topup_id_unique`/);
+});
+
+test("Admin dapat mengubah sandi dan mengelola akun login sekolah melalui Firebase", async () => {
+  const [dashboard, users, auth, session, records] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/admin-users/route.ts"),
+    file("app/api/firebase-auth/route.ts"),
+    file("lib/firebase/session.ts"),
+    file("app/api/records/route.ts"),
+  ]);
+  assert.match(dashboard, /Ubah kata sandi/);
+  assert.match(dashboard, /reauthenticateWithCredential/);
+  assert.match(dashboard, /Buat Akun Login/);
+  assert.match(dashboard, /Reset sandi/);
+  assert.match(users, /createUser/);
+  assert.match(users, /updateUser/);
+  assert.match(users, /revokeRefreshTokens/);
+  assert.match(users, /Akun pemilik utama tidak dapat diblokir/);
+  assert.match(users, /managedRoles/);
+  assert.match(auth, /rotateFirebaseSession/);
+  assert.match(session, /verifyIdToken\(idToken, true\)/);
+  assert.match(session, /revokeFirebaseSessions/);
+  assert.match(records, /Manajemen Pengguna agar akun Firebase dan hak akses tetap sinkron/);
+});
+
+test("tombol dashboard utama terhubung ke data nyata dan menghormati hak akses", async () => {
+  const [dashboard, records, login] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/records/route.ts"),
+    file("app/login/login-client.tsx"),
+  ]);
+  assert.match(dashboard, /onClick=\{\(\)=>onNavigate\("pengumuman"\)\}/);
+  assert.match(dashboard, /visibleRows=filtered\.slice/);
+  assert.match(dashboard, /setPage\(value=>Math\.min\(pageCount,value\+1\)\)/);
+  assert.match(dashboard, /window\.open\(`https:\/\/wa\.me/);
+  assert.match(dashboard, /data\.characters\.filter/);
+  assert.match(dashboard, /character-student-picker/);
+  assert.match(dashboard, /editable=\{role==="Admin"\}/);
+  assert.match(dashboard, /canEditSchedule=role==="Admin"\|\|role==="Ustadz"/);
+  assert.doesNotMatch(dashboard, /<strong>473<\/strong>/);
+  assert.doesNotMatch(dashboard, /Rp46,8jt/);
+  assert.match(records, /Nilai karakter harus berada pada rentang 0–100/);
+  assert.match(login, /Masuk ke Dashboard/);
 });

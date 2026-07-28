@@ -42,3 +42,8 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+
+# firebase local state
+/.firebase/
+firebase-debug.log
+firebase-debug.*.log
