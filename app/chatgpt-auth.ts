@@ -1,6 +1,5 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getFirebaseSession } from "../lib/firebase/session";
 
 export type ChatGPTUser = {
   displayName: string;
@@ -13,6 +12,7 @@ const SIGN_IN_PATH = "/signin-with-chatgpt";
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   if (process.env.FIREBASE_RUNTIME === "true") {
+    const { getFirebaseSession } = await import("../lib/firebase/session");
     const session = await getFirebaseSession(
       new Request("https://sinurman.local/", { headers: requestHeaders }),
     );

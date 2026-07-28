@@ -1,8 +1,10 @@
-import { firebaseAdmin } from "../../../lib/firebase/admin";
-
 export const runtime="nodejs";
 
 export async function GET() {
+  if(process.env.FIREBASE_RUNTIME!=="true") {
+    return Response.json({ready:false,runtime:"sites",services:{},missing:[]},{status:404});
+  }
+  const {firebaseAdmin}=await import("../../../lib/firebase/admin");
   const required=[
     "FIREBASE_PROJECT_ID",
     "FIREBASE_STORAGE_BUCKET",

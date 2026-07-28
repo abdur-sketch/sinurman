@@ -1,5 +1,4 @@
 import { env } from "cloudflare:workers";
-import { getFirebaseSession } from "../../lib/firebase/session";
 
 export type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
 export type AuthenticatedUser = {
@@ -285,6 +284,7 @@ export async function verifyGuardianPin(phoneInput: unknown, pin: string) {
 
 export async function currentIdentity(request: Request) {
   if (process.env.FIREBASE_RUNTIME === "true") {
+    const { getFirebaseSession } = await import("../../lib/firebase/session");
     const firebaseSession = await getFirebaseSession(request);
     if (firebaseSession) {
       return { email: firebaseSession.email, name: firebaseSession.name };

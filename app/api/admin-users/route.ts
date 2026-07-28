@@ -1,11 +1,20 @@
 import { database, ensureUser, type Role } from "../_lib";
-import { firebaseAdmin } from "../../../lib/firebase/admin";
-import { revokeFirebaseSessions } from "../../../lib/firebase/session";
 
 export const runtime = "nodejs";
 
 const ownerEmail = "baikganteng88@gmail.com";
 const managedRoles = new Set<Role>(["Admin", "Kepala Asrama", "Musyrif", "Ustadz"]);
+
+async function firebaseServices() {
+  if (process.env.FIREBASE_RUNTIME !== "true") {
+    throw new Error("Pengelolaan akun sekolah tersedia pada Firebase App Hosting.");
+  }
+  const [{ firebaseAdmin }, { revokeFirebaseSessions }] = await Promise.all([
+    import("../../../lib/firebase/admin"),
+    import("../../../lib/firebase/session"),
+  ]);
+  return { firebaseAdmin, revokeFirebaseSessions };
+}
 
 function normalizeEmail(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
@@ -49,6 +58,7 @@ async function audit(actor: string, action: string, id: number | null, detail: s
 export async function GET(request: Request) {
   try {
     await requireAdmin(request);
+    const { firebaseAdmin } = await firebaseServices();
     const rows = await database().prepare(
       "SELECT id,email,name,role,room_scope AS roomScope,created_at AS createdAt FROM users ORDER BY id",
     ).all<{id:number;email:string;name:string;role:Role;roomScope:string;createdAt:string}>();
@@ -74,8 +84,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   let createdUid = "";
+  let firebaseAdmin: Awaited<ReturnType<typeof firebaseServices>>["firebaseAdmin"] | null = null;
   try {
     const actor = await requireAdmin(request);
+    ({ firebaseAdmin } = await firebaseServices());
     const body = await request.json() as {
       email?:string;
       name?:string;
@@ -117,7 +129,7 @@ export async function POST(request: Request) {
     await audit(actor.email, "Tambah", Number(result.meta.last_row_id ?? 0), `Membuat akun ${email} sebagai ${role}`);
     return Response.json({ ok:true, id:result.meta.last_row_id, message:"Akun login berhasil dibuat." }, { status:201 });
   } catch (error) {
-    if (createdUid) await firebaseAdmin().auth.deleteUser(createdUid).catch(() => undefined);
+    if (createdUid && firebaseAdmin) await firebaseAdmin().auth.deleteUser(createdUid).catch(() => undefined);
     const message = error instanceof Error ? error.message : "Akun gagal dibuat.";
     const status = message.includes("Hanya Admin") ? 403
       : message.includes("sudah") || message.includes("wajib") || message.includes("valid") || message.includes("minimal") || message.includes("harus") ? 400
@@ -129,6 +141,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const actor = await requireAdmin(request);
+    const { firebaseAdmin, revokeFirebaseSessions } = await firebaseServices();
     const body = await request.json() as {
       id?:number;
       action?:"update"|"toggle"|"reset-password";
@@ -189,6 +202,7 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const actor = await requireAdmin(request);
+    const { firebaseAdmin, revokeFirebaseSessions } = await firebaseServices();
     const body = await request.json() as { id?:number };
     const id = Number(body.id ?? 0);
     const target = await targetById(id);
