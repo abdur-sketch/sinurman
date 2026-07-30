@@ -12,7 +12,7 @@ type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
 type Resource = "students" | "employees" | "classes" | "tahfidz" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
 type Row = Record<string, string | number | null>;
 type AppData = {
-  user?: { name: string; email: string; role: Role; roomScope?: string; guardianPhone?: string };
+  user?: { name: string; email: string; role: Role; roomScope?: string; guardianPhone?: string; authProvider?: "firebase"|"chatgpt"|"guardian" };
   warning?: string;
   students: Row[];
   employees: Row[];
@@ -1437,7 +1437,7 @@ function AccountModal({ user, role, onClose, onLogout }: { user:AppData["user"];
     <span className="modal-eyebrow">AKUN SINURMAN</span><h2 id="account-modal-title">Profil pengguna</h2><p>{user?.guardianPhone?"Identitas wali terhubung dengan nomor HP pada Data Santri.":"Identitas ini berasal dari akun internal yang sedang masuk."}</p>
     <div className="account-summary"><span>{initials}</span><div><strong>{user?.name||"Pengguna SINURMAN"}</strong><small>{user?.guardianPhone?`+${user.guardianPhone}`:user?.email||"Identitas belum tersedia"}</small></div></div>
     <dl className="account-details"><div><dt>Peran</dt><dd>{role}</dd></div><div><dt>Penugasan kamar</dt><dd>{user?.roomScope||"Tidak dibatasi"}</dd></div><div><dt>Status akun</dt><dd><Status tone="green">Aktif</Status></dd></div></dl>
-    {role!=="Wali Santri"&&<form className="change-password-form" onSubmit={changePassword}><div><strong>Ubah kata sandi</strong><small>Masukkan sandi saat ini untuk melindungi akun Anda.</small></div>
+    {role!=="Wali Santri"&&user?.authProvider==="firebase"&&<form className="change-password-form" onSubmit={changePassword}><div><strong>Ubah kata sandi</strong><small>Masukkan sandi saat ini untuk melindungi akun Anda.</small></div>
       <label>Sandi saat ini<input required type="password" autoComplete="current-password" value={currentPassword} onChange={event=>setCurrentPassword(event.target.value)}/></label>
       <div className="password-pair"><label>Sandi baru<input required minLength={8} type="password" autoComplete="new-password" value={newPassword} onChange={event=>setNewPassword(event.target.value)}/></label><label>Ulangi sandi baru<input required minLength={8} type="password" autoComplete="new-password" value={confirmation} onChange={event=>setConfirmation(event.target.value)}/></label></div>
       {passwordError&&<div className="form-error">{passwordError}</div>}{passwordMessage&&<div className="form-success">{passwordMessage}</div>}
@@ -1721,6 +1721,11 @@ export default function DashboardClient() {
     if(data.user?.guardianPhone) {
       await fetch("/api/wali-auth",{method:"DELETE"});
       window.location.assign("/wali");
+      return;
+    }
+    if(data.user?.authProvider==="firebase") {
+      await fetch("/api/firebase-auth",{method:"DELETE"});
+      window.location.assign("/login");
       return;
     }
     window.location.assign("/signout-with-chatgpt?return_to=%2F");

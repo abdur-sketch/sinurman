@@ -8,6 +8,7 @@ export type AuthenticatedUser = {
   role: Role;
   roomScope: string;
   guardianPhone?: string;
+  authProvider?: "firebase" | "chatgpt" | "guardian";
 };
 const ownerEmail = "baikganteng88@gmail.com";
 const guardianCookieName = "sinurman_wali_session";
@@ -287,7 +288,7 @@ export async function currentIdentity(request: Request) {
     const { getFirebaseSession } = await import("../../lib/firebase/session");
     const firebaseSession = await getFirebaseSession(request);
     if (firebaseSession) {
-      return { email: firebaseSession.email, name: firebaseSession.name };
+      return { email: firebaseSession.email, name: firebaseSession.name, authProvider: "firebase" as const };
     }
   } else {
     const email = request.headers.get("oai-authenticated-user-email");
@@ -298,7 +299,7 @@ export async function currentIdentity(request: Request) {
       if (encodedName && encoding === "percent-encoded-utf-8") {
         try { name = decodeURIComponent(encodedName); } catch { /* use fallback */ }
       }
-      return { email, name };
+      return { email, name, authProvider: "chatgpt" as const };
     }
   }
   const guardian = await getGuardianSession(request);
@@ -310,6 +311,7 @@ export async function currentIdentity(request: Request) {
       name: student?.guardian_name || `Wali ${guardian.phone.slice(-4)}`,
       guardianPhone: guardian.phone,
       guardianAccountId: guardian.id,
+      authProvider: "guardian" as const,
     };
   }
   throw new Error("Silakan masuk untuk membuka SINURMAN.");
@@ -327,6 +329,7 @@ export async function ensureUser(request: Request) {
       role: "Wali Santri" as const,
       roomScope: "",
       guardianPhone: identity.guardianPhone,
+      authProvider: "guardian" as const,
     };
   }
   const existing = await db
@@ -337,9 +340,9 @@ export async function ensureUser(request: Request) {
   if (existing) {
     if (identity.email.toLowerCase() === ownerEmail && existing.role !== "Admin") {
       await db.prepare("UPDATE users SET role='Admin' WHERE id=?").bind(existing.id).run();
-      return { ...existing, role: "Admin" as const } as AuthenticatedUser;
+      return { ...existing, role: "Admin" as const, authProvider: identity.authProvider } as AuthenticatedUser;
     }
-    return existing as AuthenticatedUser;
+    return { ...existing, authProvider: identity.authProvider } as AuthenticatedUser;
   }
 
   const count = await db.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>();
@@ -349,10 +352,11 @@ export async function ensureUser(request: Request) {
     .prepare("INSERT INTO users (email, name, role, room_scope, created_at) VALUES (?, ?, ?, '', ?)")
     .bind(identity.email, identity.name, role, now)
     .run();
-  return (await db
+  const created = (await db
     .prepare("SELECT id, email, name, role, room_scope AS roomScope FROM users WHERE email = ?")
     .bind(identity.email)
     .first()) as AuthenticatedUser;
+  return { ...created, authProvider: identity.authProvider };
 }
 
 export async function guardianOwnsStudent(user: Pick<AuthenticatedUser,"email"|"role"|"guardianPhone">, studentId: number) {

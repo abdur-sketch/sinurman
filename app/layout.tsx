@@ -3,6 +3,10 @@ import "@flaticon/flaticon-uicons/css/regular/rounded.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ||
+      "https://sinurman--sinurman-2026.asia-southeast1.hosted.app",
+  ),
   title: "SINURMAN — Sistem Informasi Nurul Iman",
   description:
     "Platform terpadu untuk memantau perkembangan, tahfidz, ibadah, kesehatan, dan keuangan santri Pondok Pesantren Nurul Iman.",

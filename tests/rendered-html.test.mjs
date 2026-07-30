@@ -576,6 +576,30 @@ test("Admin dapat mengubah sandi dan mengelola akun login sekolah melalui Fireba
   assert.match(records, /Manajemen Pengguna agar akun Firebase dan hak akses tetap sinkron/);
 });
 
+test("keluar akun dan ubah sandi mengikuti penyedia login yang benar", async () => {
+  const [dashboard, auth] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("app/api/_lib.ts"),
+  ]);
+  assert.match(auth, /authProvider: "firebase"/);
+  assert.match(auth, /authProvider: "chatgpt"/);
+  assert.match(auth, /authProvider: "guardian"/);
+  assert.match(dashboard, /data\.user\?\.authProvider==="firebase"/);
+  assert.match(dashboard, /fetch\("\/api\/firebase-auth",\{method:"DELETE"\}\)/);
+  assert.match(dashboard, /window\.location\.assign\("\/login"\)/);
+  assert.match(dashboard, /user\?\.authProvider==="firebase"/);
+});
+
+test("API terlindungi menolak permintaan tanpa sesi sebagai 401", async () => {
+  const proxy = await file("proxy.ts");
+  assert.match(proxy, /sinurman_admin_session/);
+  assert.match(proxy, /sinurman_wali_session/);
+  assert.match(proxy, /oai-authenticated-user-email/);
+  assert.match(proxy, /status:\s*401/);
+  assert.match(proxy, /request\.method === "GET"/);
+  assert.match(proxy, /matcher:\s*"\/api\/:path\*"/);
+});
+
 test("tombol dashboard utama terhubung ke data nyata dan menghormati hak akses", async () => {
   const [dashboard, records, login] = await Promise.all([
     file("app/dashboard-client.tsx"),
