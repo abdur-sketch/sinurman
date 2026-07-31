@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     if (!body.idToken) {
       return Response.json({ error: "Token login tidak tersedia." }, { status: 400 });
     }
-    const result = await createFirebaseSession(body.idToken);
+    const result = await createFirebaseSession(body.idToken,request);
     return Response.json(
       { ok: true, email: result.session.email, redirectTo: "/" },
       { headers: { "set-cookie": result.cookie } },

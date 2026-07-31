@@ -8,6 +8,7 @@ const publicApiRoutes = new Set([
   "/api/ppdb/documents",
   "/api/wali-auth",
   "/api/wali-register",
+  "/api/wali-pin-reset",
 ]);
 
 function hasSession(request: NextRequest) {

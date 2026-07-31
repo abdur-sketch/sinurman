@@ -64,7 +64,7 @@ async function getPayload(user:{email:string;role:string;guardianPhone?:string})
     ? db.prepare(`SELECT t.*,s.name AS student_name,s.nis FROM wallet_topups t JOIN students s ON s.id=t.student_id
                   WHERE ${guardianField} ORDER BY t.id DESC LIMIT 100`).bind(guardianKey)
     : db.prepare(`SELECT t.*,s.name AS student_name,s.nis FROM wallet_topups t JOIN students s ON s.id=t.student_id ORDER BY t.id DESC LIMIT 200`);
-  const [accounts,entries,topups,sales,products,items]=await Promise.all([
+  const [accounts,entries,topups,sales,products,items,ledgerTotal]=await Promise.all([
     accountQuery.all(),entryQuery.all(),topupQuery.all(),
     saleQuery.all(),
     db.prepare("SELECT * FROM canteen_products ORDER BY status DESC,category,name").all(),
@@ -72,9 +72,15 @@ async function getPayload(user:{email:string;role:string;guardianPhone?:string})
       ? db.prepare(`SELECT i.* FROM canteen_sale_items i JOIN canteen_sales c ON c.id=i.sale_id JOIN students s ON s.id=c.student_id
                     WHERE ${guardianField} ORDER BY i.id DESC LIMIT 400`).bind(guardianKey).all()
       : db.prepare("SELECT * FROM canteen_sale_items ORDER BY id DESC LIMIT 600").all(),
+    guardian
+      ? db.prepare(`SELECT COALESCE(SUM(e.amount),0) AS total FROM wallet_entries e JOIN students s ON s.id=e.student_id
+                    WHERE ${guardianField}`).bind(guardianKey).first<{total:number}>()
+      : db.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM wallet_entries").first<{total:number}>(),
   ]);
   const today=new Date().toISOString().slice(0,10);
   const todaySales=(sales.results as Record<string,unknown>[]).filter(row=>String(row.created_at).slice(0,10)===today&&row.status==="Berhasil");
+  const totalBalance=(accounts.results as Record<string,unknown>[]).reduce((sum,row)=>sum+Number(row.balance||0),0);
+  const ledgerBalance=Number(ledgerTotal?.total||0);
   return {
     accounts:accounts.results,
     entries:entries.results,
@@ -83,10 +89,14 @@ async function getPayload(user:{email:string;role:string;guardianPhone?:string})
     sales:sales.results,
     saleItems:items.results,
     stats:{
-      totalBalance:(accounts.results as Record<string,unknown>[]).reduce((sum,row)=>sum+Number(row.balance||0),0),
+      totalBalance,
       todayRevenue:todaySales.reduce((sum,row)=>sum+Number(row.total||0),0),
       todayTransactions:todaySales.length,
       lowStock:(products.results as Record<string,unknown>[]).filter(row=>Number(row.stock)<=10&&row.status==="Aktif").length,
+      ledgerBalance,
+      reconciliationVariance:totalBalance-ledgerBalance,
+      stockValue:(products.results as Record<string,unknown>[]).reduce((sum,row)=>sum+Number(row.price||0)*Number(row.stock||0),0),
+      reversedTransactions:(sales.results as Record<string,unknown>[]).filter(row=>row.status==="Dibatalkan").length,
     },
   };
 }

@@ -430,3 +430,12 @@ export const guardianSessions = sqliteTable("guardian_sessions", {
   createdAt: text("created_at").notNull(),
   lastSeenAt: text("last_seen_at").notNull(),
 });
+
+export const guardianPinResets = sqliteTable("guardian_pin_resets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  phone: text("phone").notNull().unique(),
+  codeHash: text("code_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull(),
+});

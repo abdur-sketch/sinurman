@@ -571,7 +571,7 @@ test("Admin dapat mengubah sandi dan mengelola akun login sekolah melalui Fireba
   assert.match(users, /Akun pemilik utama tidak dapat diblokir/);
   assert.match(users, /managedRoles/);
   assert.match(auth, /rotateFirebaseSession/);
-  assert.match(session, /verifyIdToken\(idToken, true\)/);
+  assert.match(session, /verifyIdToken\(idToken,\s*true\)/);
   assert.match(session, /revokeFirebaseSessions/);
   assert.match(records, /Manajemen Pengguna agar akun Firebase dan hak akses tetap sinkron/);
 });
@@ -618,4 +618,105 @@ test("tombol dashboard utama terhubung ke data nyata dan menghormati hak akses",
   assert.doesNotMatch(dashboard, /Rp46,8jt/);
   assert.match(records, /Nilai karakter harus berada pada rentang 0–100/);
   assert.match(login, /Masuk ke Dashboard/);
+});
+
+test("Firebase menyimpan tabel terpisah dan mempertahankan migrasi data lama", async () => {
+  const [adapter, session] = await Promise.all([
+    file("lib/firebase/firestore-d1.ts"),
+    file("lib/firebase/session.ts"),
+  ]);
+  assert.match(adapter, /collection\("_d1_tables"\)/);
+  assert.match(adapter, /doc\("d1-schema-v2"\)/);
+  assert.match(adapter, /doc\("d1-state-v1"\)/);
+  assert.match(adapter, /runTransaction/);
+  assert.match(adapter, /for \(const \[name, rows\] of Object\.entries\(legacy\.tables/);
+  assert.match(session, /collection\("_d1_tables"\)\.doc\("users"\)/);
+  assert.match(session, /legacy\.data\(\)\?\.tables\?\.users/);
+});
+
+test("PWA tersedia tanpa menyimpan API atau data rahasia saat offline", async () => {
+  const [manifest, register, worker, offline] = await Promise.all([
+    file("app/manifest.ts"),
+    file("app/pwa-register.tsx"),
+    file("public/sw.js"),
+    file("public/offline.html"),
+  ]);
+  assert.match(manifest, /display:\s*"standalone"/);
+  assert.match(register, /navigator\.serviceWorker\.register\("\/sw\.js"\)/);
+  assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
+  assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)\) return/);
+  assert.match(worker, /offline\.html/);
+  assert.match(offline, /Data SINURMAN dilindungi dan tidak disimpan/);
+});
+
+test("backup operasional dapat disimpan ke storage dan status integrasi dapat diaudit", async () => {
+  const [backup, integrations, dashboard] = await Promise.all([
+    file("app/api/backup/route.ts"),
+    file("app/api/integrations/route.ts"),
+    file("app/dashboard-client.tsx"),
+  ]);
+  assert.match(backup, /export async function POST/);
+  assert.match(backup, /env\.FILES\.put/);
+  assert.match(backup, /version:2/);
+  assert.match(integrations, /databaseMode/);
+  assert.match(integrations, /lastBackup/);
+  assert.match(integrations, /failedNotifications/);
+  assert.match(dashboard, /Backup ke Server/);
+});
+
+test("keamanan akun Firebase mendukung MFA opsional dan pencabutan sesi perangkat", async () => {
+  const [session, route, dashboard] = await Promise.all([
+    file("lib/firebase/session.ts"),
+    file("app/api/account-security/route.ts"),
+    file("app/dashboard-client.tsx"),
+  ]);
+  assert.match(session, /REQUIRE_ADMIN_MFA/);
+  assert.match(session, /sign_in_second_factor/);
+  assert.match(session, /lastSeenAt/);
+  assert.match(route, /listFirebaseSessions/);
+  assert.match(route, /removeFirebaseSessionById/);
+  assert.match(dashboard, /Keamanan perangkat/);
+  assert.match(dashboard, /MFA aktif/);
+});
+
+test("Admin dapat mencetak kartu santri massal per kelas", async () => {
+  const [route, client] = await Promise.all([
+    file("app/api/student-card/route.ts"),
+    file("app/kartu-santri/student-cards-client.tsx"),
+  ]);
+  assert.match(route, /searchParams\.get\("bulk"\)==="1"/);
+  assert.match(route, /user\.role!=="Admin"/);
+  assert.match(route, /results\.slice\(0,250\)/);
+  assert.match(client, /Tampilkan Kartu/);
+  assert.match(client, /window\.print/);
+});
+
+test("rekonsiliasi SINURPAY memakai seluruh buku besar, bukan daftar terbatas", async () => {
+  const [route, dashboard] = await Promise.all([
+    file("app/api/sinurpay/route.ts"),
+    file("app/dashboard-client.tsx"),
+  ]);
+  assert.match(route, /SELECT COALESCE\(SUM\(amount\),0\) AS total FROM wallet_entries/);
+  assert.match(route, /reconciliationVariance:totalBalance-ledgerBalance/);
+  assert.match(dashboard, /Rekonsiliasi Saldo/);
+  assert.match(dashboard, /Nilai Persediaan/);
+});
+
+test("reset PIN wali memakai OTP WhatsApp aman, kedaluwarsa, dan pembatasan percobaan", async () => {
+  const [route, notification, migration, login, proxy] = await Promise.all([
+    file("app/api/wali-pin-reset/route.ts"),
+    file("app/api/_notifications.ts"),
+    file("drizzle/0015_plain_thunderball.sql"),
+    file("app/wali/wali-login-client.tsx"),
+    file("proxy.ts"),
+  ]);
+  assert.match(route, /crypto\.subtle\.digest\("SHA-256"/);
+  assert.match(route, /10\*60\*1000/);
+  assert.match(route, /attempts>=5/);
+  assert.match(route, /60_000/);
+  assert.match(route, /if\(!notification\.automatic\)/);
+  assert.match(notification, /sensitive\?"Pesan keamanan rahasia telah dikirim/);
+  assert.match(migration, /CREATE TABLE `guardian_pin_resets`/);
+  assert.match(login, /Lupa PIN/);
+  assert.match(proxy, /\/api\/wali-pin-reset/);
 });

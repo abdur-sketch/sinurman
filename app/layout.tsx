@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "@flaticon/flaticon-uicons/css/regular/rounded.css";
 import "./globals.css";
+import PwaRegister from "./pwa-register";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -38,7 +39,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id">
-      <body>{children}</body>
+      <body>{children}<PwaRegister /></body>
     </html>
   );
 }

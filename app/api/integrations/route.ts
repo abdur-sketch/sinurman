@@ -5,10 +5,23 @@ import { database, ensureUser, guardianOwnsStudent } from "../_lib";
 export async function GET(request: Request) {
   const user = await ensureUser(request);
   if (user.role !== "Admin") return Response.json({ error:"Khusus Admin." },{status:403});
+  const [lastBackup,failedNotifications,pendingTopups,pendingAdmissions]=await Promise.all([
+    database().prepare("SELECT created_at,detail FROM audit_logs WHERE action='Backup Server' ORDER BY id DESC LIMIT 1").first<Record<string,unknown>>(),
+    database().prepare("SELECT COUNT(*) AS total FROM notification_logs WHERE status='Gagal'").first<{total:number}>(),
+    database().prepare("SELECT COUNT(*) AS total FROM wallet_topups WHERE status IN ('Menunggu Pembayaran','Menunggu Verifikasi')").first<{total:number}>(),
+    database().prepare("SELECT COUNT(*) AS total FROM admissions WHERE status IN ('Pendaftaran','Verifikasi Dokumen','Perlu Perbaikan')").first<{total:number}>(),
+  ]);
   return Response.json({
     midtrans: Boolean(env.MIDTRANS_SERVER_KEY),
     xendit: Boolean(env.XENDIT_API_KEY),
     whatsapp: Boolean(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID),
+    bank: Boolean(env.BANK_NAME && env.BANK_ACCOUNT_NUMBER),
+    storage: Boolean(env.FILES),
+    databaseMode: process.env.FIREBASE_RUNTIME === "true" ? "Firestore terpartisi" : "Cloudflare D1",
+    lastBackup: lastBackup?.created_at ?? "",
+    failedNotifications: Number(failedNotifications?.total ?? 0),
+    pendingTopups: Number(pendingTopups?.total ?? 0),
+    pendingAdmissions: Number(pendingAdmissions?.total ?? 0),
   });
 }
 

@@ -62,6 +62,7 @@ export function ensureDatabaseSchema() {
       "CREATE INDEX IF NOT EXISTS student_promotions_student_idx ON student_promotions(student_id)",
       "CREATE TABLE IF NOT EXISTS guardian_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT NOT NULL UNIQUE,pin_hash TEXT NOT NULL,pin_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Aktif',failed_attempts INTEGER NOT NULL DEFAULT 0,locked_until TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS guardian_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT,account_id INTEGER NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,created_at TEXT NOT NULL,last_seen_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS guardian_pin_resets (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT NOT NULL UNIQUE,code_hash TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,expires_at TEXT NOT NULL,created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS guardian_sessions_account_idx ON guardian_sessions(account_id)",
       "CREATE INDEX IF NOT EXISTS guardian_sessions_expiry_idx ON guardian_sessions(expires_at)",
     ];

@@ -6,6 +6,7 @@ export async function sendWhatsappNotification(input: {
   recipient: string;
   message: string;
   channel?: string;
+  sensitive?: boolean;
 }) {
   const phone=input.recipient.replace(/\D/g,"").replace(/^0/,"62");
   const whatsappUrl=`https://wa.me/${phone}?text=${encodeURIComponent(input.message)}`;
@@ -21,7 +22,7 @@ export async function sendWhatsappNotification(input: {
     status=response.ok?"Terkirim":"Gagal";
   }
   await database().prepare("INSERT INTO notification_logs (student_id, channel, recipient, message, status, sent_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(input.studentId??null,input.channel??"WhatsApp",input.recipient,input.message,status,new Date().toISOString()).run();
+    .bind(input.studentId??null,input.channel??"WhatsApp",input.recipient,input.sensitive?"Pesan keamanan rahasia telah dikirim.":input.message,status,new Date().toISOString()).run();
   return {whatsappUrl,automatic,status};
 }
 
