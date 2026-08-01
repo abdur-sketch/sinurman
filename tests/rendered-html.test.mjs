@@ -620,17 +620,23 @@ test("tombol dashboard utama terhubung ke data nyata dan menghormati hak akses",
   assert.match(login, /Masuk ke Dashboard/);
 });
 
-test("Firebase menyimpan tabel terpisah dan mempertahankan migrasi data lama", async () => {
+test("Firebase menyimpan setiap baris sebagai dokumen dan mempertahankan migrasi data lama", async () => {
   const [adapter, session] = await Promise.all([
     file("lib/firebase/firestore-d1.ts"),
     file("lib/firebase/session.ts"),
   ]);
   assert.match(adapter, /collection\("_d1_tables"\)/);
+  assert.match(adapter, /collection\("rows"\)/);
+  assert.match(adapter, /doc\("d1-schema-v3"\)/);
   assert.match(adapter, /doc\("d1-schema-v2"\)/);
   assert.match(adapter, /doc\("d1-state-v1"\)/);
   assert.match(adapter, /runTransaction/);
-  assert.match(adapter, /for \(const \[name, rows\] of Object\.entries\(legacy\.tables/);
+  assert.match(adapter, /sourceRows\.slice\(start,start\+400\)/);
+  assert.match(adapter, /version:3,rowCount/);
+  assert.match(adapter, /ADD COLUMN/);
+  assert.match(adapter, /tableRows\(name\)\.limit\(400\)/);
   assert.match(session, /collection\("_d1_tables"\)\.doc\("users"\)/);
+  assert.match(session, /collection\("rows"\)/);
   assert.match(session, /legacy\.data\(\)\?\.tables\?\.users/);
 });
 
@@ -650,33 +656,72 @@ test("PWA tersedia tanpa menyimpan API atau data rahasia saat offline", async ()
 });
 
 test("backup operasional dapat disimpan ke storage dan status integrasi dapat diaudit", async () => {
-  const [backup, integrations, dashboard] = await Promise.all([
+  const [backup, integrations, dashboard, restore] = await Promise.all([
     file("app/api/backup/route.ts"),
     file("app/api/integrations/route.ts"),
     file("app/dashboard-client.tsx"),
+    file("app/pemulihan/restore-client.tsx"),
   ]);
   assert.match(backup, /export async function POST/);
+  assert.match(backup, /export async function PUT/);
   assert.match(backup, /env\.FILES\.put/);
-  assert.match(backup, /version:2/);
+  assert.match(backup, /version:3/);
+  assert.match(backup, /automaticInterval=20\*60\*60\*1000/);
+  assert.match(backup, /retentionDays=90/);
+  assert.match(backup, /confirm!=="PULIHKAN"/);
   assert.match(integrations, /databaseMode/);
   assert.match(integrations, /lastBackup/);
   assert.match(integrations, /failedNotifications/);
   assert.match(dashboard, /Backup ke Server/);
+  assert.match(dashboard, /action:"automatic"/);
+  assert.match(restore, /Validasi backup/);
+  assert.match(restore, /confirm:"PULIHKAN"/);
 });
 
-test("keamanan akun Firebase mendukung MFA opsional dan pencabutan sesi perangkat", async () => {
-  const [session, route, dashboard] = await Promise.all([
+test("keamanan akun Firebase mewajibkan MFA adaptif dan pencabutan sesi perangkat", async () => {
+  const [session, route, dashboard, login] = await Promise.all([
     file("lib/firebase/session.ts"),
     file("app/api/account-security/route.ts"),
     file("app/dashboard-client.tsx"),
+    file("app/login/login-client.tsx"),
   ]);
-  assert.match(session, /REQUIRE_ADMIN_MFA/);
+  assert.match(session, /enrolledMfa/);
+  assert.match(session, /access\.role==="Admin"&&enrolledMfa/);
   assert.match(session, /sign_in_second_factor/);
   assert.match(session, /lastSeenAt/);
   assert.match(route, /listFirebaseSessions/);
   assert.match(route, /removeFirebaseSessionById/);
+  assert.match(route, /required:user\.role==="Admin"/);
   assert.match(dashboard, /Keamanan perangkat/);
   assert.match(dashboard, /MFA aktif/);
+  assert.match(dashboard, /TotpMultiFactorGenerator\.generateSecret/);
+  assert.match(dashboard, /assertionForEnrollment/);
+  assert.match(login, /auth\/multi-factor-auth-required/);
+  assert.match(login, /getMultiFactorResolver/);
+  assert.match(login, /assertionForSignIn/);
+});
+
+test("impor spreadsheet tidak memakai xlsx rentan dan membatasi transaksi", async () => {
+  const [packageJson, importer] = await Promise.all([
+    file("package.json"),
+    file("app/api/import/route.ts"),
+  ]);
+  assert.doesNotMatch(packageJson, /"xlsx"/);
+  assert.match(packageJson, /"read-excel-file"/);
+  assert.match(importer, /readSheet/);
+  assert.match(importer, /file\.size>3_000_000/);
+  assert.match(importer, /start\+=350/);
+});
+
+test("health check produksi memeriksa database dan backup otomatis", async () => {
+  const [health, proxy] = await Promise.all([
+    file("app/api/health/route.ts"),
+    file("proxy.ts"),
+  ]);
+  assert.match(health, /SELECT COUNT\(\*\) AS total FROM users/);
+  assert.match(health, /backups\/\.automatic-backup\.json/);
+  assert.match(health, /latencyMs/);
+  assert.match(proxy, /\/api\/health/);
 });
 
 test("Admin dapat mencetak kartu santri massal per kelas", async () => {

@@ -1,10 +1,15 @@
 import alasql from "alasql";
+import { createHash } from "node:crypto";
+import type { QuerySnapshot, Transaction } from "firebase-admin/firestore";
 import { firebaseAdmin } from "./admin";
 
 type Row = Record<string, unknown>;
 type LegacyState = { version: 1; ddl: string[]; tables: Record<string, Row[]> };
-type SchemaState = { version: 2; ddl: string[]; migratedAt: string; updatedAt: string };
-type TableState = { version: 2; rows: Row[]; updatedAt: string };
+type V2SchemaState = { version: 2; ddl: string[]; migratedAt: string; updatedAt: string };
+type V2TableState = { version: 2; rows: Row[]; updatedAt: string };
+type SchemaState = { version: 3; ddl: string[]; migratedAt: string; updatedAt: string };
+type TableState = { version: 3; rowCount: number; migratedAt: string; updatedAt: string };
+type StoredRow = { data: Row; updatedAt: string };
 type EngineTable = {
   columns: Array<{ columnid: string }>;
   data: Row[];
@@ -18,12 +23,20 @@ type RuntimeState = { ddl: string[]; tables: Record<string, Row[]> };
 type RunMeta = { changes: number; last_row_id?: number };
 
 const systemCollection = () => firebaseAdmin().firestore.collection("_system");
-const schemaDocument = () => systemCollection().doc("d1-schema-v2");
+const schemaDocument = () => systemCollection().doc("d1-schema-v3");
+const v2SchemaDocument = () => systemCollection().doc("d1-schema-v2");
 const legacyDocument = () => systemCollection().doc("d1-state-v1");
 const tableDocument = (name: string) => firebaseAdmin().firestore.collection("_d1_tables").doc(name);
+const tableRows = (name: string) => tableDocument(name).collection("rows");
 
 function cleanRows(rows: Row[]) {
   return JSON.parse(JSON.stringify(rows)) as Row[];
+}
+
+function rowDocumentId(row: Row) {
+  const id=row.id;
+  if(id!==undefined&&id!==null&&String(id)!=="") return `id-${String(id).replace(/[^A-Za-z0-9_-]/g,"_")}`;
+  return `row-${createHash("sha256").update(JSON.stringify(row)).digest("hex").slice(0,40)}`;
 }
 
 function mutationTable(sql: string) {
@@ -41,6 +54,10 @@ function referencedTables(sql: string) {
 
 function createTableName(sql: string) {
   return sql.match(/^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_]\w*)/i)?.[1] ?? "";
+}
+
+function clearTableName(sql:string) {
+  return sql.match(/^\s*DELETE\s+FROM\s+([A-Za-z_]\w*)\s*;?\s*$/i)?.[1]??"";
 }
 
 function normalizeSql(sql: string, params: unknown[]) {
@@ -75,7 +92,12 @@ function execute(engine: Engine, state: RuntimeState, rawSql: string, rawParams:
   const sql = rawSql.trim().replace(/\btotal\b/gi, "[total]");
   if (/^CREATE\s+(?:UNIQUE\s+)?INDEX/i.test(sql)) return { value: 0, meta: { changes: 0 } satisfies RunMeta };
   if (/^PRAGMA\s+table_info/i.test(sql)) return { value: pragmaRows(engine, sql), meta: { changes: 0 } satisfies RunMeta };
-  if (/^ALTER\s+TABLE/i.test(sql)) return { value: 0, meta: { changes: 0 } satisfies RunMeta };
+  if (/^ALTER\s+TABLE/i.test(sql)) {
+    const normalized=sql.replace(/\s+ADD\s+(?!COLUMN\b)/i," ADD COLUMN ");
+    if (!state.ddl.includes(normalized)) state.ddl.push(normalized);
+    const value=engine.exec(normalized);
+    return { value, meta: { changes: 0 } satisfies RunMeta };
+  }
   if (/instr\(/i.test(sql) || /^UPDATE\s+students\s+SET\s+guardian_phone=CASE/i.test(sql)) {
     return { value: 0, meta: { changes: 0 } satisfies RunMeta };
   }
@@ -108,56 +130,95 @@ function execute(engine: Engine, state: RuntimeState, rawSql: string, rawParams:
   }
 }
 
-let migrationReady: Promise<SchemaState> | null = null;
+let schemaReady: Promise<SchemaState> | null = null;
+const tableMigrations = new Map<string,Promise<void>>();
 
-async function ensureShardedState() {
-  if (migrationReady) return migrationReady;
-  migrationReady = firebaseAdmin().firestore.runTransaction(async (transaction) => {
-    const schemaRef = schemaDocument();
-    const legacyRef = legacyDocument();
-    const [schemaSnapshot, legacySnapshot] = await Promise.all([
-      transaction.get(schemaRef),
-      transaction.get(legacyRef),
+async function ensureSchema() {
+  if (schemaReady) return schemaReady;
+  schemaReady = firebaseAdmin().firestore.runTransaction(async (transaction) => {
+    const [current,v2,legacy]=await Promise.all([
+      transaction.get(schemaDocument()),
+      transaction.get(v2SchemaDocument()),
+      transaction.get(legacyDocument()),
     ]);
-    if (schemaSnapshot.exists) return schemaSnapshot.data() as SchemaState;
-
-    const legacy = legacySnapshot.exists
-      ? legacySnapshot.data() as LegacyState
-      : { version: 1 as const, ddl: [], tables: {} };
-    const now = new Date().toISOString();
-    const schema: SchemaState = { version: 2, ddl: legacy.ddl ?? [], migratedAt: now, updatedAt: now };
-    transaction.set(schemaRef, schema);
-    for (const [name, rows] of Object.entries(legacy.tables ?? {})) {
-      transaction.set(tableDocument(name), { version: 2, rows: cleanRows(rows), updatedAt: now } satisfies TableState);
-    }
+    if(current.exists) return current.data() as SchemaState;
+    const v2State=v2.exists?v2.data() as V2SchemaState:null;
+    const legacyState=legacy.exists?legacy.data() as LegacyState:null;
+    const now=new Date().toISOString();
+    const schema:SchemaState={version:3,ddl:v2State?.ddl??legacyState?.ddl??[],migratedAt:now,updatedAt:now};
+    transaction.set(schemaDocument(),schema);
     return schema;
-  }).catch((error) => {
-    migrationReady = null;
-    throw error;
-  });
-  return migrationReady;
+  }).catch((error)=>{schemaReady=null;throw error;});
+  return schemaReady;
+}
+
+async function ensureTableMigrated(name:string) {
+  const pending=tableMigrations.get(name);
+  if(pending)return pending;
+  const migration=(async()=>{
+    await ensureSchema();
+    const metadataRef=tableDocument(name);
+    const metadata=await metadataRef.get();
+    if(metadata.exists&&Number(metadata.data()?.version)===3)return;
+    let sourceRows:Row[]=[];
+    if(metadata.exists&&Number(metadata.data()?.version)===2) sourceRows=cleanRows((metadata.data() as V2TableState).rows??[]);
+    else {
+      const legacy=await legacyDocument().get();
+      sourceRows=legacy.exists?cleanRows(((legacy.data() as LegacyState).tables??{})[name]??[]):[];
+    }
+    const now=new Date().toISOString();
+    for(let start=0;start<sourceRows.length;start+=400) {
+      const batch=firebaseAdmin().firestore.batch();
+      sourceRows.slice(start,start+400).forEach(row=>batch.set(tableRows(name).doc(rowDocumentId(row)),{data:row,updatedAt:now} satisfies StoredRow));
+      await batch.commit();
+    }
+    await metadataRef.set({version:3,rowCount:sourceRows.length,migratedAt:now,updatedAt:now} satisfies TableState);
+  })().catch(error=>{tableMigrations.delete(name);throw error;});
+  tableMigrations.set(name,migration);
+  return migration;
+}
+
+async function readTable(name:string) {
+  await ensureTableMigrated(name);
+  const snapshot=await tableRows(name).get();
+  return cleanRows(snapshot.docs.map(document=>(document.data() as StoredRow).data??{}));
 }
 
 async function readState(sql: string) {
-  const schema = await ensureShardedState();
+  const schema = await ensureSchema();
   const names = referencedTables(sql);
-  const snapshots = await Promise.all(names.map((name) => tableDocument(name).get()));
-  const tables: Record<string, Row[]> = {};
-  snapshots.forEach((snapshot, index) => {
-    tables[names[index]] = snapshot.exists ? cleanRows((snapshot.data() as TableState).rows ?? []) : [];
-  });
-  return { ddl: [...schema.ddl], tables } satisfies RuntimeState;
+  const rows=await Promise.all(names.map(readTable));
+  return { ddl: [...schema.ddl], tables: Object.fromEntries(names.map((name,index)=>[name,rows[index]])) } satisfies RuntimeState;
+}
+
+async function clearTable(name:string) {
+  await ensureTableMigrated(name);
+  let removed=0;
+  for(;;) {
+    const snapshot=await tableRows(name).limit(400).get();
+    if(snapshot.empty)break;
+    const batch=firebaseAdmin().firestore.batch();
+    snapshot.docs.forEach(document=>batch.delete(document.ref));
+    await batch.commit();removed+=snapshot.size;
+  }
+  await tableDocument(name).set({version:3,rowCount:0,updatedAt:new Date().toISOString()},{merge:true});
+  return {success:true,meta:{changes:removed} satisfies RunMeta,results:[]};
+}
+
+function writeChangedTable(transaction:Transaction,name:string,before:Row[],after:Row[],now:string) {
+  const previous=new Map(before.map(row=>[rowDocumentId(row),row]));
+  const next=new Map(after.map(row=>[rowDocumentId(row),row]));
+  for(const [id,row] of next) {
+    if(JSON.stringify(previous.get(id))!==JSON.stringify(row)) transaction.set(tableRows(name).doc(id),{data:row,updatedAt:now} satisfies StoredRow);
+  }
+  for(const id of previous.keys()) if(!next.has(id)) transaction.delete(tableRows(name).doc(id));
+  transaction.set(tableDocument(name),{version:3,rowCount:after.length,updatedAt:now},{merge:true});
 }
 
 class FirestoreStatement {
   private params: unknown[] = [];
-
   constructor(private readonly sql: string) {}
-
-  bind(...values: unknown[]) {
-    this.params = values;
-    return this;
-  }
+  bind(...values: unknown[]) { this.params = values; return this; }
 
   async all<T = Row>() {
     const state = await readState(this.sql);
@@ -166,39 +227,24 @@ class FirestoreStatement {
     return { success: true, results: (Array.isArray(result) ? result : []) as T[] };
   }
 
-  async first<T = Row>() {
-    const result = await this.all<T>();
-    return result.results[0] ?? null;
-  }
+  async first<T = Row>() { const result = await this.all<T>(); return result.results[0] ?? null; }
 
   async run() {
-    await ensureShardedState();
-    return firebaseAdmin().firestore.runTransaction(async (transaction) => {
-      const schemaRef = schemaDocument();
-      const names = [...new Set([...referencedTables(this.sql), createTableName(this.sql)].filter(Boolean))];
-      const refs = names.map(tableDocument);
-      const snapshots = await Promise.all([transaction.get(schemaRef), ...refs.map((ref) => transaction.get(ref))]);
-      const schema = snapshots[0].data() as SchemaState;
-      const state: RuntimeState = { ddl: [...(schema?.ddl ?? [])], tables: {} };
-      names.forEach((name, index) => {
-        const snapshot = snapshots[index + 1];
-        state.tables[name] = snapshot.exists ? cleanRows((snapshot.data() as TableState).rows ?? []) : [];
-      });
-      const engine = createEngine(state);
-      const result = execute(engine, state, this.sql, this.params);
-      const now = new Date().toISOString();
-      if (state.ddl.length !== (schema?.ddl ?? []).length) {
-        transaction.set(schemaRef, { ...schema, version: 2, ddl: state.ddl, updatedAt: now } satisfies SchemaState);
-      }
-      const changed = mutationTable(this.sql) || createTableName(this.sql);
-      if (changed) {
-        transaction.set(tableDocument(changed), {
-          version: 2,
-          rows: cleanRows(engine.tables[changed]?.data ?? []),
-          updatedAt: now,
-        } satisfies TableState);
-      }
-      return { success: true, meta: result.meta, results: [] };
+    const cleared=clearTableName(this.sql);
+    if(cleared)return clearTable(cleared);
+    const names=[...new Set([...referencedTables(this.sql),createTableName(this.sql)].filter(Boolean))];
+    await ensureSchema();await Promise.all(names.map(ensureTableMigrated));
+    return firebaseAdmin().firestore.runTransaction(async transaction=>{
+      const schemaSnapshot=await transaction.get(schemaDocument());
+      const snapshots:QuerySnapshot[]=[];for(const name of names)snapshots.push(await transaction.get(tableRows(name)));
+      const schema=schemaSnapshot.data() as SchemaState;
+      const state:RuntimeState={ddl:[...(schema?.ddl??[])],tables:Object.fromEntries(names.map((name,index)=>[name,cleanRows(snapshots[index].docs.map(document=>(document.data() as StoredRow).data??{}))]))};
+      const before=Object.fromEntries(Object.entries(state.tables).map(([name,rows])=>[name,cleanRows(rows)]));
+      const engine=createEngine(state);const result=execute(engine,state,this.sql,this.params);const now=new Date().toISOString();
+      if(state.ddl.length!==(schema?.ddl??[]).length)transaction.set(schemaDocument(),{...schema,version:3,ddl:state.ddl,updatedAt:now} satisfies SchemaState);
+      const changed=mutationTable(this.sql)||createTableName(this.sql);
+      if(changed)writeChangedTable(transaction,changed,before[changed]??[],engine.tables[changed]?.data??[],now);
+      return {success:true,meta:result.meta,results:[]};
     });
   }
 
@@ -210,48 +256,24 @@ export class FirestoreD1Database {
   prepare(sql: string) { return new FirestoreStatement(sql); }
 
   async batch(statements: FirestoreStatement[]) {
-    await ensureShardedState();
-    return firebaseAdmin().firestore.runTransaction(async (transaction) => {
-      const schemaRef = schemaDocument();
-      const names = [...new Set(statements.flatMap((statement) => [
-        ...referencedTables(statement.query()),
-        createTableName(statement.query()),
-      ]).filter(Boolean))];
-      const refs = names.map(tableDocument);
-      const snapshots = await Promise.all([transaction.get(schemaRef), ...refs.map((ref) => transaction.get(ref))]);
-      const schema = snapshots[0].data() as SchemaState;
-      const state: RuntimeState = { ddl: [...(schema?.ddl ?? [])], tables: {} };
-      names.forEach((name, index) => {
-        const snapshot = snapshots[index + 1];
-        state.tables[name] = snapshot.exists ? cleanRows((snapshot.data() as TableState).rows ?? []) : [];
-      });
-      const engine = createEngine(state);
-      const changed = new Set<string>();
-      const results = statements.map((statement) => {
-        const result = execute(engine, state, statement.query(), statement.values());
-        const name = mutationTable(statement.query()) || createTableName(statement.query());
-        if (name) changed.add(name);
-        return { success: true, meta: result.meta, results: [] };
-      });
-      const now = new Date().toISOString();
-      if (state.ddl.length !== (schema?.ddl ?? []).length) {
-        transaction.set(schemaRef, { ...schema, version: 2, ddl: state.ddl, updatedAt: now } satisfies SchemaState);
-      }
-      for (const name of changed) {
-        transaction.set(tableDocument(name), {
-          version: 2,
-          rows: cleanRows(engine.tables[name]?.data ?? []),
-          updatedAt: now,
-        } satisfies TableState);
-      }
+    if(statements.length>400) throw new Error("Maksimal 400 perubahan database dalam satu transaksi.");
+    const names=[...new Set(statements.flatMap(statement=>[...referencedTables(statement.query()),createTableName(statement.query())]).filter(Boolean))];
+    await ensureSchema();await Promise.all(names.map(ensureTableMigrated));
+    return firebaseAdmin().firestore.runTransaction(async transaction=>{
+      const schemaSnapshot=await transaction.get(schemaDocument());
+      const snapshots:QuerySnapshot[]=[];for(const name of names)snapshots.push(await transaction.get(tableRows(name)));
+      const schema=schemaSnapshot.data() as SchemaState;
+      const state:RuntimeState={ddl:[...(schema?.ddl??[])],tables:Object.fromEntries(names.map((name,index)=>[name,cleanRows(snapshots[index].docs.map(document=>(document.data() as StoredRow).data??{}))]))};
+      const before=Object.fromEntries(Object.entries(state.tables).map(([name,rows])=>[name,cleanRows(rows)]));
+      const engine=createEngine(state);const changed=new Set<string>();
+      const results=statements.map(statement=>{const result=execute(engine,state,statement.query(),statement.values());const name=mutationTable(statement.query())||createTableName(statement.query());if(name)changed.add(name);return {success:true,meta:result.meta,results:[]};});
+      const now=new Date().toISOString();
+      if(state.ddl.length!==(schema?.ddl??[]).length)transaction.set(schemaDocument(),{...schema,version:3,ddl:state.ddl,updatedAt:now} satisfies SchemaState);
+      for(const name of changed)writeChangedTable(transaction,name,before[name]??[],engine.tables[name]?.data??[],now);
       return results;
     });
   }
 }
 
 let database: FirestoreD1Database | undefined;
-
-export function firestoreD1Database() {
-  database ??= new FirestoreD1Database();
-  return database;
-}
+export function firestoreD1Database() { database ??= new FirestoreD1Database(); return database; }

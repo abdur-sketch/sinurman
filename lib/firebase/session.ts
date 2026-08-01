@@ -36,11 +36,13 @@ function requestFingerprint(request?:Request) {
 
 async function internalAccess(email:string) {
   const firestore=firebaseAdmin().firestore;
-  const [sharded,legacy]=await Promise.all([
+  const [records,sharded,legacy]=await Promise.all([
+    firestore.collection("_d1_tables").doc("users").collection("rows").get(),
     firestore.collection("_d1_tables").doc("users").get(),
     firestore.collection("_system").doc("d1-state-v1").get(),
   ]);
-  const users=(sharded.data()?.rows??legacy.data()?.tables?.users??[]) as Array<{email?:string;role?:string}>;
+  const recordUsers=records.docs.map(document=>document.data().data) as Array<{email?:string;role?:string}>;
+  const users=(recordUsers.length?recordUsers:sharded.data()?.rows??legacy.data()?.tables?.users??[]) as Array<{email?:string;role?:string}>;
   return users.find(user=>String(user.email??"").toLowerCase()===email&&internalRoles.has(String(user.role??"")));
 }
 
@@ -51,7 +53,9 @@ export async function createFirebaseSession(idToken:string,request?:Request) {
   const access=email===ownerEmail?{role:"Admin"}:await internalAccess(email);
   if(!access) throw new Error("Akun belum diberi akses oleh Admin SINURMAN.");
   const firebaseClaims=decoded.firebase as {sign_in_second_factor?:string}|undefined;
-  if(process.env.REQUIRE_ADMIN_MFA==="true"&&access.role==="Admin"&&!firebaseClaims?.sign_in_second_factor) {
+  const firebaseUser=access.role==="Admin"?await firebaseAdmin().auth.getUser(decoded.uid):null;
+  const enrolledMfa=Boolean(firebaseUser?.multiFactor?.enrolledFactors?.length);
+  if(access.role==="Admin"&&enrolledMfa&&!firebaseClaims?.sign_in_second_factor) {
     throw new Error("Admin wajib menyelesaikan verifikasi dua langkah sebelum masuk.");
   }
   const token=randomBytes(32).toString("base64url");

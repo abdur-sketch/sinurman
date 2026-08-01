@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EmailAuthProvider, reauthenticateWithCredential, signInWithEmailAndPassword, updatePassword } from "firebase/auth";
+import { EmailAuthProvider, multiFactor, reauthenticateWithCredential, signInWithEmailAndPassword, TotpMultiFactorGenerator, type TotpSecret, updatePassword } from "firebase/auth";
 import BrandMark from "./brand-mark";
 import { QURAN_SURAHS, quranRangeAmount } from "./quran-data";
 import { firebaseClient } from "../lib/firebase/client";
@@ -1401,6 +1401,10 @@ function AccountModal({ user, role, onClose, onLogout }: { user:AppData["user"];
   const [savingPassword,setSavingPassword]=useState(false);
   const [passwordError,setPasswordError]=useState("");
   const [passwordMessage,setPasswordMessage]=useState("");
+  const [mfaPassword,setMfaPassword]=useState("");
+  const [mfaCode,setMfaCode]=useState("");
+  const [mfaSecret,setMfaSecret]=useState<TotpSecret|null>(null);
+  const [mfaWorking,setMfaWorking]=useState(false);
   const [security,setSecurity]=useState<{sessions:Array<{id:string;current:boolean;createdAt:string;lastSeenAt:string;userAgent:string;ipHash:string}>;mfa:{available:boolean;enrolled:boolean;required:boolean}}|null>(null);
   const loadSecurity=useCallback(async()=>{if(user?.authProvider!=="firebase")return;try{const response=await fetch("/api/account-security",{cache:"no-store"});const result=await response.json() as typeof security&{error?:string};if(response.ok&&result)setSecurity(result);}catch{/* profile remains available */}},[user?.authProvider]);
   useEffect(()=>{
@@ -1416,6 +1420,29 @@ function AccountModal({ user, role, onClose, onLogout }: { user:AppData["user"];
     if(!response.ok)return;
     if(current){onLogout();return;}
     await loadSecurity();
+  }
+  async function startMfaEnrollment() {
+    if(!user?.email||!mfaPassword){setPasswordError("Masukkan sandi saat ini untuk mengaktifkan MFA.");return;}
+    setMfaWorking(true);setPasswordError("");setPasswordMessage("");
+    try {
+      const auth=firebaseClient().auth;
+      let firebaseUser=auth.currentUser;
+      if(!firebaseUser||firebaseUser.email?.toLowerCase()!==user.email.toLowerCase()) firebaseUser=(await signInWithEmailAndPassword(auth,user.email,mfaPassword)).user;
+      else await reauthenticateWithCredential(firebaseUser,EmailAuthProvider.credential(user.email,mfaPassword));
+      const session=await multiFactor(firebaseUser).getSession();
+      setMfaSecret(await TotpMultiFactorGenerator.generateSecret(session));
+    } catch(error){setPasswordError(error instanceof Error?error.message:"MFA gagal disiapkan.");}
+    finally{setMfaWorking(false);}
+  }
+  async function finishMfaEnrollment() {
+    const firebaseUser=firebaseClient().auth.currentUser;
+    if(!firebaseUser||!mfaSecret||!/^\d{6}$/.test(mfaCode)){setPasswordError("Masukkan kode Authenticator 6 angka yang valid.");return;}
+    setMfaWorking(true);setPasswordError("");
+    try {
+      await multiFactor(firebaseUser).enroll(TotpMultiFactorGenerator.assertionForEnrollment(mfaSecret,mfaCode),"SINURMAN Authenticator");
+      setMfaSecret(null);setMfaPassword("");setMfaCode("");setPasswordMessage("MFA Authenticator aktif dan akan diminta pada login berikutnya.");await loadSecurity();
+    } catch(error){setPasswordError(error instanceof Error?error.message:"Kode Authenticator tidak sesuai.");}
+    finally{setMfaWorking(false);}
   }
   async function changePassword(event:React.FormEvent) {
     event.preventDefault();setPasswordError("");setPasswordMessage("");
@@ -1456,7 +1483,7 @@ function AccountModal({ user, role, onClose, onLogout }: { user:AppData["user"];
       {passwordError&&<div className="form-error">{passwordError}</div>}{passwordMessage&&<div className="form-success">{passwordMessage}</div>}
       <button type="submit" className="secondary-button" disabled={savingPassword}>{savingPassword?"Mengubah…":"Ubah Kata Sandi"}</button>
     </form>}
-    {user?.authProvider==="firebase"&&security&&<section className="account-security"><header><div><strong>Keamanan perangkat</strong><small>Sesi aktif dapat dicabut kapan saja.</small></div><Status tone={security.mfa.enrolled?"green":"amber"}>{security.mfa.enrolled?"MFA aktif":security.mfa.required?"MFA wajib":"MFA siap diaktifkan"}</Status></header><div>{security.sessions.map(session=><article key={session.id}><div><strong>{session.current?"Perangkat ini":"Perangkat lain"}</strong><small>{session.userAgent}<br/>Terakhir aktif {session.lastSeenAt?new Date(session.lastSeenAt).toLocaleString("id-ID"):"-"}{session.ipHash?` · ID jaringan ${session.ipHash}`:""}</small></div><button type="button" className={session.current?"text-button":"danger-link"} onClick={()=>void revokeSession(session.id,session.current)}>{session.current?"Keluar":"Cabut"}</button></article>)}</div><p>MFA dapat diwajibkan melalui konfigurasi Firebase setelah Identity Platform dan metode faktor kedua diaktifkan.</p></section>}
+    {user?.authProvider==="firebase"&&security&&<section className="account-security"><header><div><strong>Keamanan perangkat</strong><small>Sesi aktif dapat dicabut kapan saja.</small></div><Status tone={security.mfa.enrolled?"green":"amber"}>{security.mfa.enrolled?"MFA aktif":"MFA wajib disiapkan"}</Status></header>{!security.mfa.enrolled&&<div className="mfa-enrollment"><strong>Aktifkan Authenticator</strong>{!mfaSecret?<><label>Sandi saat ini<input type="password" autoComplete="current-password" value={mfaPassword} onChange={event=>setMfaPassword(event.target.value)}/></label><button type="button" className="secondary-button" disabled={mfaWorking} onClick={()=>void startMfaEnrollment()}>{mfaWorking?"Menyiapkan…":"Buat Kunci MFA"}</button></>:<><p>Tambahkan kunci berikut ke Google/Microsoft Authenticator:</p><code>{mfaSecret.secretKey}</code><label>Kode 6 angka<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event=>setMfaCode(event.target.value.replace(/\D/g,"").slice(0,6))}/></label><button type="button" className="primary-button" disabled={mfaWorking} onClick={()=>void finishMfaEnrollment()}>{mfaWorking?"Memverifikasi…":"Aktifkan MFA"}</button></>}</div>}<div>{security.sessions.map(session=><article key={session.id}><div><strong>{session.current?"Perangkat ini":"Perangkat lain"}</strong><small>{session.userAgent}<br/>Terakhir aktif {session.lastSeenAt?new Date(session.lastSeenAt).toLocaleString("id-ID"):"-"}{session.ipHash?` · ID jaringan ${session.ipHash}`:""}</small></div><button type="button" className={session.current?"text-button":"danger-link"} onClick={()=>void revokeSession(session.id,session.current)}>{session.current?"Keluar":"Cabut"}</button></article>)}</div><p>Admin yang sudah mendaftarkan Authenticator wajib menyelesaikan verifikasi dua langkah pada setiap login baru.</p></section>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onLogout}>Keluar dari akun</button><button type="button" className="primary-button" onClick={onClose}>Selesai</button></div>
   </div></div>;
 }
@@ -1506,6 +1533,7 @@ function SettingsModal({ dark, role, onDarkChange, onHelp, notify, onClose }: { 
     <div className="theme-options"><button type="button" className={!dark?"active":""} aria-pressed={!dark} onClick={()=>onDarkChange(false)}><span>☀</span><strong>Terang</strong><small>Nyaman untuk penggunaan siang hari</small></button><button type="button" className={dark?"active":""} aria-pressed={dark} onClick={()=>onDarkChange(true)}><span>☾</span><strong>Gelap</strong><small>Mengurangi silau pada malam hari</small></button></div>
     <div className="settings-help"><div><strong>Pasang aplikasi SINURMAN</strong><small>Akses seperti aplikasi HP dengan ikon pada layar utama.</small></div><button type="button" onClick={()=>void installApp()}>Pasang Aplikasi</button></div>
     {role==="Admin"&&<section className="branding-settings"><div className="branding-settings-head"><BrandMark className="brand-mark"/><div><strong>Logo sekolah</strong><small>Tampil di dashboard, login, Portal Wali, PPDB, kartu, dan laporan cetak.</small></div></div><label>Pilih logo baru<input type="file" accept=".png,.jpg,.jpeg,.webp" onChange={event=>setLogo(event.target.files?.[0]||null)}/><small>PNG, JPG, atau WebP · maksimal 2 MB · disarankan gambar persegi.</small></label>{logoError&&<div className="form-error">{logoError}</div>}<div className="branding-settings-actions"><button type="button" className="primary-button" disabled={savingLogo||!logo} onClick={()=>void uploadLogo()}>{savingLogo?"Menyimpan…":"Unggah Logo"}</button><button type="button" className="secondary-button" disabled={savingLogo} onClick={()=>void resetLogo()}>Gunakan Logo Bawaan</button></div></section>}
+    {role==="Admin"&&<div className="settings-help"><div><strong>Pemulihan backup</strong><small>Periksa dan pulihkan data dari berkas backup JSON.</small></div><a href="/pemulihan">Buka Pemulihan</a></div>}
     <div className="settings-help"><div><strong>Kesulitan menggunakan SINURMAN?</strong><small>Buka panduan sesuai dengan peran akun Anda.</small></div><button type="button" onClick={()=>{onClose();onHelp();}}>Buka Bantuan</button></div>
     <div className="modal-actions"><button type="button" className="primary-button" onClick={onClose}>Simpan & Tutup</button></div>
   </div></div>;
@@ -1562,6 +1590,7 @@ export default function DashboardClient() {
       if(result.user?.role) {
         setRole(result.user.role);
         if(result.user.role==="Wali Santri") setPage("portalwali");
+        if(result.user.role==="Admin") void fetch("/api/backup",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"automatic"})});
       }
     } catch (error) {
       setLoadError(error instanceof Error?error.message:"Data tidak dapat dimuat.");

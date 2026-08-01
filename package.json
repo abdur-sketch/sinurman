@@ -20,16 +20,16 @@
   },
   "dependencies": {
     "@flaticon/flaticon-uicons": "^3.3.1",
-    "alasql": "^4.17.0",
+    "alasql": "^4.17.3",
     "drizzle-orm": "0.45.2",
     "firebase": "^12.16.0",
     "firebase-admin": "^14.2.0",
-    "next": "16.2.6",
+    "next": "^16.2.12",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "xlsx": "^0.18.5"
+    "read-excel-file": "^9.3.5"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
@@ -43,7 +43,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "^16.2.12",
     "firebase-tools": "^15.24.0",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
@@ -51,6 +51,12 @@
     "vinext": "0.0.50",
     "vite": "8.0.13",
     "wrangler": "4.92.0"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.25",
+      "sharp": "0.35.3"
+    }
   },
   "type": "module"
 }

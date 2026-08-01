@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import {
+  getMultiFactorResolver,
+  type MultiFactorResolver,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  TotpMultiFactorGenerator,
 } from "firebase/auth";
 import { firebaseClient } from "../../lib/firebase/client";
 
@@ -16,6 +19,8 @@ export default function AdminLoginClient() {
   const [checking, setChecking] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [mfaResolver,setMfaResolver]=useState<MultiFactorResolver|null>(null);
+  const [mfaCode,setMfaCode]=useState("");
 
   useEffect(() => {
     void fetch("/api/firebase-auth", { cache: "no-store" })
@@ -38,16 +43,16 @@ export default function AdminLoginClient() {
         email.trim().toLowerCase(),
         password,
       );
-      const idToken = await credential.user.getIdToken();
-      const response = await fetch("/api/firebase-auth", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-      const result = await response.json() as { error?: string; redirectTo?: string };
-      if (!response.ok) throw new Error(result.error || "Sesi admin gagal dibuat.");
-      window.location.assign(result.redirectTo || "/");
+      await createServerSession(await credential.user.getIdToken());
     } catch (caught) {
+      const authError=caught as {code?:string};
+      if(authError.code==="auth/multi-factor-auth-required") {
+        const resolver=getMultiFactorResolver(firebaseClient().auth,caught as never);
+        if(!resolver.hints.some(hint=>hint.factorId===TotpMultiFactorGenerator.FACTOR_ID)) {
+          setError("Faktor keamanan akun ini belum didukung SINURMAN.");setLoading(false);return;
+        }
+        setMfaResolver(resolver);setLoading(false);return;
+      }
       const raw = caught instanceof Error ? caught.message : "Login gagal.";
       setError(
         raw.includes("invalid-credential")
@@ -56,6 +61,27 @@ export default function AdminLoginClient() {
       );
       setLoading(false);
     }
+  }
+
+  async function createServerSession(idToken:string) {
+      const response = await fetch("/api/firebase-auth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      const result = await response.json() as { error?: string; redirectTo?: string };
+      if (!response.ok) throw new Error(result.error || "Sesi admin gagal dibuat.");
+      window.location.assign(result.redirectTo || "/");
+  }
+
+  async function completeMfa(event:React.FormEvent) {
+    event.preventDefault();if(!mfaResolver)return;setLoading(true);setError("");
+    try {
+      const hint=mfaResolver.hints.find(item=>item.factorId===TotpMultiFactorGenerator.FACTOR_ID);
+      if(!hint)throw new Error("Faktor authenticator tidak tersedia.");
+      const credential=await mfaResolver.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(hint.uid,mfaCode));
+      await createServerSession(await credential.user.getIdToken());
+    } catch(caught){setError(caught instanceof Error?caught.message:"Kode authenticator tidak valid.");setLoading(false);}
   }
 
   async function resetPassword() {
@@ -72,6 +98,8 @@ export default function AdminLoginClient() {
   if (checking) {
     return <div className="guardian-login-form guardian-login-checking">Memeriksa sesi Admin…</div>;
   }
+
+  if(mfaResolver)return <form className="guardian-login-form admin-login-form" onSubmit={completeMfa}><h3>Verifikasi dua langkah</h3><p>Masukkan kode 6 angka dari aplikasi Authenticator.</p><label>Kode Authenticator<input required autoFocus inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} value={mfaCode} onChange={event=>setMfaCode(event.target.value.replace(/\D/g,"").slice(0,6))}/></label>{error&&<div className="form-error">{error}</div>}<button className="primary-button guardian-login-primary" disabled={loading}>{loading?"Memverifikasi…":"Verifikasi & Masuk →"}</button><button type="button" className="text-button" onClick={()=>{setMfaResolver(null);setMfaCode("");setPassword("");}}>Kembali</button></form>;
 
   return (
     <form className="guardian-login-form admin-login-form" onSubmit={submit}>

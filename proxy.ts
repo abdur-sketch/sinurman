@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const publicApiRoutes = new Set([
   "/api/firebase-health",
+  "/api/health",
   "/api/firebase-auth",
   "/api/payments/webhook",
   "/api/ppdb",

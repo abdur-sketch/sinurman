@@ -40,6 +40,10 @@ const firebaseFiles = {
   async delete(key:string) {
     await firebaseAdmin().storage.bucket().file(key).delete({ignoreNotFound:true});
   },
+  async list(options?:{prefix?:string;limit?:number}) {
+    const [files]=await firebaseAdmin().storage.bucket().getFiles({prefix:options?.prefix,maxResults:options?.limit??1000});
+    return {objects:await Promise.all(files.map(async file=>{const [metadata]=await file.getMetadata();return {key:file.name,uploaded:metadata.timeCreated?new Date(metadata.timeCreated):undefined,size:Number(metadata.size||0),customMetadata:metadata.metadata};}))};
+  },
 };
 
 export const env=new Proxy<Record<string,unknown>>({},{
