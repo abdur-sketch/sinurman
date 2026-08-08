@@ -22,6 +22,7 @@ test("scheduled backups are authenticated and carry integrity metadata",async()=
   assert.match(`${backup}\n${service}`,/sha256/);
   assert.match(service,/manifest\.json/);
   assert.match(scheduler,/CRON_SECRET/);
+  assert.match(scheduler,/CRON_SECRET\?\?""\)\.trim\(\)/);
   assert.match(scheduler,/automaticBackupDue/);
   assert.match(proxy,/\/api\/maintenance\/backup/);
 });

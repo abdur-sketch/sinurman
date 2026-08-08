@@ -3,8 +3,8 @@ import { automaticBackupDue, createStoredBackup } from "../../../../lib/backup-s
 export const runtime="nodejs";
 
 function authorized(request:Request) {
-  const configured=String(process.env.CRON_SECRET??"");
-  const supplied=String(request.headers.get("authorization")??"").replace(/^Bearer\s+/i,"");
+  const configured=String(process.env.CRON_SECRET??"").trim();
+  const supplied=String(request.headers.get("authorization")??"").replace(/^Bearer\s+/i,"").trim();
   if(!configured||!supplied||configured.length!==supplied.length)return false;
   let difference=0;
   for(let index=0;index<configured.length;index++)difference|=configured.charCodeAt(index)^supplied.charCodeAt(index);
