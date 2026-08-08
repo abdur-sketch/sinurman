@@ -656,18 +656,19 @@ test("PWA tersedia tanpa menyimpan API atau data rahasia saat offline", async ()
 });
 
 test("backup operasional dapat disimpan ke storage dan status integrasi dapat diaudit", async () => {
-  const [backup, integrations, dashboard, restore] = await Promise.all([
+  const [backup, backupService, integrations, dashboard, restore] = await Promise.all([
     file("app/api/backup/route.ts"),
+    file("lib/backup-service.ts"),
     file("app/api/integrations/route.ts"),
     file("app/dashboard-client.tsx"),
     file("app/pemulihan/restore-client.tsx"),
   ]);
   assert.match(backup, /export async function POST/);
   assert.match(backup, /export async function PUT/);
-  assert.match(backup, /env\.FILES\.put/);
-  assert.match(backup, /version:3/);
-  assert.match(backup, /automaticInterval=20\*60\*60\*1000/);
-  assert.match(backup, /retentionDays=90/);
+  assert.match(backupService, /env\.FILES\.put/);
+  assert.match(backupService, /version:3/);
+  assert.match(backupService, /automaticInterval=20\*60\*60\*1000/);
+  assert.match(backupService, /retentionDays=90/);
   assert.match(backup, /confirm!=="PULIHKAN"/);
   assert.match(integrations, /databaseMode/);
   assert.match(integrations, /lastBackup/);

@@ -18,9 +18,9 @@ test("admin mutations require MFA while enrollment remains reachable",async()=>{
 });
 
 test("scheduled backups are authenticated and carry integrity metadata",async()=>{
-  const [backup,scheduler]=await Promise.all([read("app/api/backup/route.ts"),read("app/api/maintenance/backup/route.ts")]);
-  assert.match(backup,/sha256/);
-  assert.match(backup,/manifest\.json/);
+  const [backup,scheduler,service]=await Promise.all([read("app/api/backup/route.ts"),read("app/api/maintenance/backup/route.ts"),read("lib/backup-service.ts")]);
+  assert.match(`${backup}\n${service}`,/sha256/);
+  assert.match(service,/manifest\.json/);
   assert.match(scheduler,/CRON_SECRET/);
   assert.match(scheduler,/automaticBackupDue/);
 });

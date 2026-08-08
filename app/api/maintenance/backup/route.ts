@@ -1,4 +1,4 @@
-import { automaticBackupDue, createStoredBackup } from "../../backup/route";
+import { automaticBackupDue, createStoredBackup } from "../../../../lib/backup-service";
 
 export const runtime="nodejs";
 
