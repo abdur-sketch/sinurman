@@ -1,6 +1,7 @@
 import { canWrite, database, ensureUser, normalizeGuardianPhone } from "../_lib";
 import { notifyRecordChange } from "../_notifications";
 import { quranRangeAmount } from "../../quran-data";
+import { reportServerError } from "../../../lib/observability";
 
 const resourceConfig = {
   students: {
@@ -20,17 +21,17 @@ const resourceConfig = {
   },
   tahfidz: {
     table: "tahfidz_records",
-    columns: ["student_id", "surah", "verses", "surah_from", "surah_to", "verse_from", "verse_to", "amount", "grade", "teacher", "recorded_at"],
+    columns: ["student_id", "surah", "verses", "surah_from", "surah_to", "verse_from", "verse_to", "amount", "grade", "teacher", "recorded_at", "workflow_status", "period_key"],
     required: ["student_id", "surah_from", "surah_to", "verse_from", "verse_to", "amount", "grade"],
   },
   mutabaah: {
     table: "mutabaah_records",
-    columns: ["student_id", "activity", "completed", "record_date", "recorded_by"],
+    columns: ["student_id", "activity", "completed", "record_date", "recorded_by", "workflow_status", "period_key"],
     required: ["student_id", "activity", "record_date"],
   },
   health: {
     table: "health_records",
-    columns: ["student_id", "complaint", "diagnosis", "treatment", "status", "recorded_at"],
+    columns: ["student_id", "complaint", "diagnosis", "treatment", "status", "recorded_at", "workflow_status", "period_key"],
     required: ["student_id", "complaint", "diagnosis", "treatment"],
   },
   transactions: {
@@ -50,12 +51,12 @@ const resourceConfig = {
   },
   characters: {
     table: "character_reports",
-    columns: ["student_id", "category", "score", "note", "semester", "recorded_at"],
+    columns: ["student_id", "category", "score", "note", "semester", "recorded_at", "workflow_status", "period_key"],
     required: ["student_id", "category", "score"],
   },
   attendance: {
     table: "attendance_records",
-    columns: ["student_id", "record_date", "status", "note", "recorded_by"],
+    columns: ["student_id", "record_date", "status", "note", "recorded_by", "workflow_status", "period_key"],
     required: ["student_id", "record_date", "status"],
   },
   subjects: {
@@ -65,7 +66,7 @@ const resourceConfig = {
   },
   grades: {
     table: "academic_grades",
-    columns: ["student_id","subject_id","assignment_score","midterm_score","exam_score","final_score","predicate","note","semester","academic_year","recorded_by","recorded_at"],
+    columns: ["student_id","subject_id","assignment_score","midterm_score","exam_score","final_score","predicate","note","semester","academic_year","recorded_by","recorded_at","workflow_status","period_key"],
     required: ["student_id","subject_id","assignment_score","midterm_score","exam_score"],
   },
   permits: {
@@ -106,6 +107,36 @@ const resourceConfig = {
 } as const;
 
 type Resource = keyof typeof resourceConfig;
+const governedResources = new Set<Resource>(["tahfidz","mutabaah","health","characters","attendance","grades"]);
+const workflowStatuses = new Set(["Draft","Diverifikasi","Dipublikasikan"]);
+
+function periodFromDate(value: unknown) {
+  const parsed = new Date(String(value ?? ""));
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const year = date.getUTCFullYear();
+  const secondHalf = date.getUTCMonth() >= 6;
+  const academicYear = secondHalf ? `${year}/${year + 1}` : `${year - 1}/${year}`;
+  return `${academicYear}|${secondHalf ? "Ganjil" : "Genap"}`;
+}
+
+function requestedPeriod(resource: Resource, source: Record<string,unknown>) {
+  const explicit=String(source.period_key ?? "").trim();
+  if(explicit) return explicit;
+  if(resource==="grades") return `${String(source.academic_year || "").trim()}|${String(source.semester || "").trim()}`;
+  if(resource==="characters") {
+    const semester=String(source.semester || "").trim();
+    if(semester.includes("/")) {
+      const match=semester.match(/(Ganjil|Genap).*?(\d{4}\/\d{4})|(\d{4}\/\d{4}).*?(Ganjil|Genap)/i);
+      if(match) return `${match[2]||match[3]}|${match[1]||match[4]}`;
+    }
+  }
+  return periodFromDate(source.record_date ?? source.recorded_at);
+}
+
+async function assertPeriodOpen(periodKey:string) {
+  const period=await database().prepare("SELECT status FROM academic_periods WHERE period_key=?").bind(periodKey).first<{status:string}>();
+  if(period?.status==="Dikunci") throw new Error(`Periode ${periodKey} sudah dikunci dan tidak dapat diubah.`);
+}
 
 export async function POST(request: Request) {
   try {
@@ -145,6 +176,10 @@ export async function POST(request: Request) {
     }
     if (action === "delete") {
       if (!payload.id) return Response.json({ error: "ID wajib diisi." }, { status: 400 });
+      if(governedResources.has(resource)) {
+        const current=await db.prepare(`SELECT period_key FROM ${config.table} WHERE id=?`).bind(payload.id).first<{period_key:string}>();
+        if(current?.period_key) await assertPeriodOpen(current.period_key);
+      }
       await db.prepare(`DELETE FROM ${config.table} WHERE id = ?`).bind(payload.id).run();
       await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(user.email, "Hapus", resource, payload.id, `Menghapus data ${resource}`, new Date().toISOString()).run();
@@ -152,6 +187,18 @@ export async function POST(request: Request) {
     }
 
     const source:Record<string,unknown> = { ...(payload.data ?? {}) };
+    if(governedResources.has(resource)) {
+      if(action==="update"&&payload.id&&!source.period_key) {
+        const current=await db.prepare(`SELECT period_key FROM ${config.table} WHERE id=?`).bind(payload.id).first<{period_key:string}>();
+        if(current?.period_key) source.period_key=current.period_key;
+      }
+      source.period_key=requestedPeriod(resource,source);
+      await assertPeriodOpen(String(source.period_key));
+      const requested=String(source.workflow_status??"");
+      if(user.role==="Admin") source.workflow_status=workflowStatuses.has(requested)?requested:(action==="create"?"Dipublikasikan":undefined);
+      else source.workflow_status="Draft";
+      if(source.workflow_status===undefined) delete source.workflow_status;
+    }
     if (resource === "students" && source.guardian_phone !== undefined) {
       source.guardian_phone = normalizeGuardianPhone(source.guardian_phone);
       if (!/^62\d{8,13}$/.test(String(source.guardian_phone))) {
@@ -195,7 +242,7 @@ export async function POST(request: Request) {
         .bind(user.email, "Ubah", resource, payload.id, `Memperbarui data ${resource}`, new Date().toISOString()).run();
       if(["permits","attendance","tahfidz","health","bills","grades","characters","counseling"].includes(resource)) {
         const updated=await db.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(payload.id).first<Record<string,unknown>>();
-        if(updated) try{await notifyRecordChange(resource,updated);}catch{/* notification must not block the record */}
+        if(updated&&updated.workflow_status!=="Draft") try{await notifyRecordChange(resource,updated);}catch{/* notification must not block the record */}
       }
       return Response.json({ ok: true });
     }
@@ -227,6 +274,7 @@ export async function POST(request: Request) {
       payment_url: "",
       role: "Wali Santri",
       academic_year: "2026/2027",
+      workflow_status: user.role==="Admin"?"Dipublikasikan":"Draft",
     };
     const data = { ...defaults, ...source };
     const columns = config.columns.filter((column) => data[column] !== undefined);
@@ -236,12 +284,13 @@ export async function POST(request: Request) {
       .bind(...values).run();
     await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(user.email, "Tambah", resource, result.meta.last_row_id, `Menambahkan data ${resource}`, now).run();
-    if(["attendance","tahfidz","health","bills","grades","characters","counseling"].includes(resource)) {
+    if(["attendance","tahfidz","health","bills","grades","characters","counseling"].includes(resource)&&data.workflow_status!=="Draft") {
       try{await notifyRecordChange(resource,data);}catch{/* notification must not block the record */}
     }
     return Response.json({ ok: true, id: result.meta.last_row_id }, { status: 201 });
   } catch (error) {
+    const requestId=reportServerError("records.mutation",error,request);
     const message = error instanceof Error ? error.message : "Tindakan gagal.";
-    return Response.json({ error: message.includes("UNIQUE") ? "Data unik tersebut sudah digunakan." : message }, { status: 500 });
+    return Response.json({ error: message.includes("UNIQUE") ? "Data unik tersebut sudah digunakan." : message, requestId }, { status: message.includes("MFA_REQUIRED")?403:500 });
   }
 }

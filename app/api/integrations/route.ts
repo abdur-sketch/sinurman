@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   const user = await ensureUser(request);
   if (user.role !== "Admin") return Response.json({ error:"Khusus Admin." },{status:403});
   const [lastBackup,failedNotifications,pendingTopups,pendingAdmissions]=await Promise.all([
-    database().prepare("SELECT created_at,detail FROM audit_logs WHERE action='Backup Server' ORDER BY id DESC LIMIT 1").first<Record<string,unknown>>(),
+    database().prepare("SELECT created_at,detail FROM audit_logs WHERE action IN ('Backup Server','Backup Otomatis') ORDER BY id DESC LIMIT 1").first<Record<string,unknown>>(),
     database().prepare("SELECT COUNT(*) AS total FROM notification_logs WHERE status='Gagal'").first<{total:number}>(),
     database().prepare("SELECT COUNT(*) AS total FROM wallet_topups WHERE status IN ('Menunggu Pembayaran','Menunggu Verifikasi')").first<{total:number}>(),
     database().prepare("SELECT COUNT(*) AS total FROM admissions WHERE status IN ('Pendaftaran','Verifikasi Dokumen','Perlu Perbaikan')").first<{total:number}>(),

@@ -1,8 +1,8 @@
 import { database, ensureUser, type Role } from "../_lib";
+import { isOwnerEmail } from "../../../lib/security-config";
 
 export const runtime = "nodejs";
 
-const ownerEmail = "baikganteng88@gmail.com";
 const managedRoles = new Set<Role>(["Admin", "Kepala Asrama", "Musyrif", "Ustadz"]);
 
 async function firebaseServices() {
@@ -155,7 +155,7 @@ export async function PATCH(request: Request) {
     if (!target) throw new Error("Pengguna tidak ditemukan.");
     const account = await firebaseAdmin().auth.getUserByEmail(target.email);
     if (body.action === "toggle") {
-      if (target.email.toLowerCase() === ownerEmail) throw new Error("Akun pemilik utama tidak dapat diblokir.");
+      if (isOwnerEmail(target.email)) throw new Error("Akun pemilik utama tidak dapat diblokir.");
       const disabled = !account.disabled;
       await firebaseAdmin().auth.updateUser(account.uid, { disabled });
       if (disabled) {
@@ -178,7 +178,7 @@ export async function PATCH(request: Request) {
     const roomScope = String(body.roomScope ?? "").trim();
     if (!name) throw new Error("Nama pengguna wajib diisi.");
     if (!managedRoles.has(role)) throw new Error("Peran pengguna internal tidak valid.");
-    if (target.email.toLowerCase() === ownerEmail && role !== "Admin") {
+    if (isOwnerEmail(target.email) && role !== "Admin") {
       throw new Error("Peran pemilik utama harus tetap Admin.");
     }
     if ((role === "Musyrif" || role === "Kepala Asrama") && !roomScope) {
@@ -207,7 +207,7 @@ export async function DELETE(request: Request) {
     const id = Number(body.id ?? 0);
     const target = await targetById(id);
     if (!target) throw new Error("Pengguna tidak ditemukan.");
-    if (target.email.toLowerCase() === ownerEmail) throw new Error("Akun pemilik utama tidak dapat dihapus.");
+    if (isOwnerEmail(target.email)) throw new Error("Akun pemilik utama tidak dapat dihapus.");
     if (target.email.toLowerCase() === actor.email.toLowerCase()) throw new Error("Anda tidak dapat menghapus akun yang sedang dipakai.");
     try {
       const account = await firebaseAdmin().auth.getUserByEmail(target.email);

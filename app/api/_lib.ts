@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { isOwnerEmail } from "../../lib/security-config";
 
 export type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
 export type AuthenticatedUser = {
@@ -10,7 +11,6 @@ export type AuthenticatedUser = {
   guardianPhone?: string;
   authProvider?: "firebase" | "chatgpt" | "guardian";
 };
-const ownerEmail = "baikganteng88@gmail.com";
 const guardianCookieName = "sinurman_wali_session";
 
 export function database() {
@@ -27,17 +27,17 @@ export function ensureDatabaseSchema() {
     const definitions = [
       "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,role TEXT NOT NULL,room_scope TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,nis TEXT NOT NULL UNIQUE,class_name TEXT NOT NULL,room TEXT NOT NULL,guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,guardian_email TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS tahfidz_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,surah TEXT NOT NULL,verses TEXT NOT NULL,surah_from TEXT NOT NULL DEFAULT '',surah_to TEXT NOT NULL DEFAULT '',verse_from INTEGER NOT NULL DEFAULT 0,verse_to INTEGER NOT NULL DEFAULT 0,amount INTEGER NOT NULL,grade TEXT NOT NULL,teacher TEXT NOT NULL,recorded_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS mutabaah_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,activity TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,record_date TEXT NOT NULL,recorded_by TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS health_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,complaint TEXT NOT NULL,diagnosis TEXT NOT NULL,treatment TEXT NOT NULL,status TEXT NOT NULL,recorded_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS tahfidz_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,surah TEXT NOT NULL,verses TEXT NOT NULL,surah_from TEXT NOT NULL DEFAULT '',surah_to TEXT NOT NULL DEFAULT '',verse_from INTEGER NOT NULL DEFAULT 0,verse_to INTEGER NOT NULL DEFAULT 0,amount INTEGER NOT NULL,grade TEXT NOT NULL,teacher TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
+      "CREATE TABLE IF NOT EXISTS mutabaah_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,activity TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,record_date TEXT NOT NULL,recorded_by TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
+      "CREATE TABLE IF NOT EXISTS health_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,complaint TEXT NOT NULL,diagnosis TEXT NOT NULL,treatment TEXT NOT NULL,status TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,type TEXT NOT NULL,category TEXT NOT NULL,amount INTEGER NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL,recorded_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS character_reports (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,category TEXT NOT NULL,score INTEGER NOT NULL,note TEXT NOT NULL,semester TEXT NOT NULL,recorded_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS character_reports (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,category TEXT NOT NULL,score INTEGER NOT NULL,note TEXT NOT NULL,semester TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS inventory_items (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,location TEXT NOT NULL,quantity INTEGER NOT NULL,unit TEXT NOT NULL,condition TEXT NOT NULL,updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL,content TEXT NOT NULL,audience TEXT NOT NULL,published_at TEXT NOT NULL,author TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS notification_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER,channel TEXT NOT NULL,recipient TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL,sent_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS attendance_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,record_date TEXT NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL,recorded_by TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS attendance_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,record_date TEXT NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL,recorded_by TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS academic_subjects (id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT NOT NULL UNIQUE,name TEXT NOT NULL,education_level TEXT NOT NULL,class_name TEXT NOT NULL,teacher TEXT NOT NULL,semester TEXT NOT NULL,academic_year TEXT NOT NULL,minimum_score INTEGER NOT NULL DEFAULT 75,created_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS academic_grades (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,subject_id INTEGER NOT NULL,assignment_score INTEGER NOT NULL,midterm_score INTEGER NOT NULL,exam_score INTEGER NOT NULL,final_score INTEGER NOT NULL,predicate TEXT NOT NULL,note TEXT NOT NULL,semester TEXT NOT NULL,academic_year TEXT NOT NULL,recorded_by TEXT NOT NULL,recorded_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS academic_grades (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,subject_id INTEGER NOT NULL,assignment_score INTEGER NOT NULL,midterm_score INTEGER NOT NULL,exam_score INTEGER NOT NULL,final_score INTEGER NOT NULL,predicate TEXT NOT NULL,note TEXT NOT NULL,semester TEXT NOT NULL,academic_year TEXT NOT NULL,recorded_by TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS leave_permits (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,start_date TEXT NOT NULL,end_date TEXT NOT NULL,reason TEXT NOT NULL,status TEXT NOT NULL,approved_by TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY AUTOINCREMENT,education_level TEXT NOT NULL DEFAULT 'SMP',class_name TEXT NOT NULL DEFAULT 'VII A',title TEXT NOT NULL,category TEXT NOT NULL,teacher TEXT NOT NULL,location TEXT NOT NULL,day_name TEXT NOT NULL,start_time TEXT NOT NULL,end_time TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,capacity INTEGER NOT NULL,supervisor TEXT NOT NULL,status TEXT NOT NULL)",
@@ -55,6 +55,7 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS canteen_sales (id INTEGER PRIMARY KEY AUTOINCREMENT,receipt_no TEXT NOT NULL UNIQUE,student_id INTEGER NOT NULL,total INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'Berhasil',cashier_email TEXT NOT NULL,created_at TEXT NOT NULL,reversed_at TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS canteen_sale_items (id INTEGER PRIMARY KEY AUTOINCREMENT,sale_id INTEGER NOT NULL,product_id INTEGER NOT NULL,product_name TEXT NOT NULL,quantity INTEGER NOT NULL,unit_price INTEGER NOT NULL,subtotal INTEGER NOT NULL)",
       "CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,user_email TEXT NOT NULL,action TEXT NOT NULL,resource TEXT NOT NULL,record_id INTEGER,detail TEXT NOT NULL,created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS academic_periods (id INTEGER PRIMARY KEY AUTOINCREMENT,period_key TEXT NOT NULL UNIQUE,academic_year TEXT NOT NULL,semester TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Terbuka',locked_by TEXT NOT NULL DEFAULT '',locked_at TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT,employee_no TEXT NOT NULL UNIQUE,name TEXT NOT NULL,gender TEXT NOT NULL,birth_place TEXT NOT NULL DEFAULT '',birth_date TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',position TEXT NOT NULL,work_unit TEXT NOT NULL,employment_type TEXT NOT NULL,education TEXT NOT NULL DEFAULT '',join_date TEXT NOT NULL,address TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS school_classes (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,education_level TEXT NOT NULL,grade_order INTEGER NOT NULL,major TEXT NOT NULL DEFAULT '',homeroom_teacher TEXT NOT NULL DEFAULT '',capacity INTEGER NOT NULL DEFAULT 32,next_class_name TEXT NOT NULL DEFAULT '',academic_year TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS student_promotions (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,student_name TEXT NOT NULL,nis TEXT NOT NULL,from_class TEXT NOT NULL,to_class TEXT NOT NULL,action TEXT NOT NULL,academic_year_from TEXT NOT NULL,academic_year_to TEXT NOT NULL,processed_by TEXT NOT NULL,processed_at TEXT NOT NULL)",
@@ -65,6 +66,15 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS guardian_pin_resets (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT NOT NULL UNIQUE,code_hash TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,expires_at TEXT NOT NULL,created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS guardian_sessions_account_idx ON guardian_sessions(account_id)",
       "CREATE INDEX IF NOT EXISTS guardian_sessions_expiry_idx ON guardian_sessions(expires_at)",
+      "CREATE INDEX IF NOT EXISTS students_guardian_phone_idx ON students(guardian_phone)",
+      "CREATE INDEX IF NOT EXISTS students_class_room_idx ON students(class_name,room)",
+      "CREATE INDEX IF NOT EXISTS tahfidz_student_period_idx ON tahfidz_records(student_id,period_key,workflow_status)",
+      "CREATE INDEX IF NOT EXISTS mutabaah_student_period_idx ON mutabaah_records(student_id,period_key,workflow_status)",
+      "CREATE INDEX IF NOT EXISTS health_student_period_idx ON health_records(student_id,period_key,workflow_status)",
+      "CREATE INDEX IF NOT EXISTS character_student_period_idx ON character_reports(student_id,period_key,workflow_status)",
+      "CREATE INDEX IF NOT EXISTS attendance_student_period_idx ON attendance_records(student_id,period_key,workflow_status)",
+      "CREATE INDEX IF NOT EXISTS grades_student_period_idx ON academic_grades(student_id,period_key,workflow_status)",
+      "CREATE INDEX IF NOT EXISTS audit_logs_created_idx ON audit_logs(created_at)",
     ];
     await db.batch(definitions.map((sql) => db.prepare(sql)));
 
@@ -76,7 +86,14 @@ export function ensureDatabaseSchema() {
         surah_to: "TEXT NOT NULL DEFAULT ''",
         verse_from: "INTEGER NOT NULL DEFAULT 0",
         verse_to: "INTEGER NOT NULL DEFAULT 0",
+        workflow_status: "TEXT NOT NULL DEFAULT 'Dipublikasikan'",
+        period_key: "TEXT NOT NULL DEFAULT ''",
       },
+      mutabaah_records: { workflow_status: "TEXT NOT NULL DEFAULT 'Dipublikasikan'", period_key: "TEXT NOT NULL DEFAULT ''" },
+      health_records: { workflow_status: "TEXT NOT NULL DEFAULT 'Dipublikasikan'", period_key: "TEXT NOT NULL DEFAULT ''" },
+      character_reports: { workflow_status: "TEXT NOT NULL DEFAULT 'Dipublikasikan'", period_key: "TEXT NOT NULL DEFAULT ''" },
+      attendance_records: { workflow_status: "TEXT NOT NULL DEFAULT 'Dipublikasikan'", period_key: "TEXT NOT NULL DEFAULT ''" },
+      academic_grades: { workflow_status: "TEXT NOT NULL DEFAULT 'Dipublikasikan'", period_key: "TEXT NOT NULL DEFAULT ''" },
       schedules: { education_level: "TEXT NOT NULL DEFAULT 'SMP'", class_name: "TEXT NOT NULL DEFAULT 'VII A'" },
       bills: {
         payment_method: "TEXT NOT NULL DEFAULT ''",
@@ -333,21 +350,31 @@ export async function ensureUser(request: Request) {
       authProvider: "guardian" as const,
     };
   }
+
+  const enforceAdminMfa=async(user:AuthenticatedUser) => {
+    if(process.env.FIREBASE_RUNTIME!=="true"||user.role!=="Admin"||["GET","HEAD","OPTIONS"].includes(request.method))return user;
+    const pathname=new URL(request.url).pathname;
+    if(pathname==="/api/account-security"||pathname==="/api/firebase-auth")return user;
+    const {firebaseAdmin}=await import("../../lib/firebase/admin");
+    const account=await firebaseAdmin().auth.getUserByEmail(user.email);
+    if(!account.multiFactor?.enrolledFactors?.length) throw new Error("MFA_REQUIRED: Aktifkan Authenticator dari Profil Akun sebelum melakukan perubahan Admin.");
+    return user;
+  };
   const existing = await db
     .prepare("SELECT id, email, name, role, room_scope AS roomScope FROM users WHERE email = ?")
     .bind(identity.email)
     .first<{ id: number; email: string; name: string; role: Role; roomScope: string }>();
 
   if (existing) {
-    if (identity.email.toLowerCase() === ownerEmail && existing.role !== "Admin") {
+    if (isOwnerEmail(identity.email) && existing.role !== "Admin") {
       await db.prepare("UPDATE users SET role='Admin' WHERE id=?").bind(existing.id).run();
-      return { ...existing, role: "Admin" as const, authProvider: identity.authProvider } as AuthenticatedUser;
+      return enforceAdminMfa({ ...existing, role: "Admin" as const, authProvider: identity.authProvider } as AuthenticatedUser);
     }
-    return { ...existing, authProvider: identity.authProvider } as AuthenticatedUser;
+    return enforceAdminMfa({ ...existing, authProvider: identity.authProvider } as AuthenticatedUser);
   }
 
   const count = await db.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>();
-  const role: Role = identity.email.toLowerCase() === ownerEmail || Number(count?.total ?? 0) === 0 ? "Admin" : "Wali Santri";
+  const role: Role = isOwnerEmail(identity.email) || Number(count?.total ?? 0) === 0 ? "Admin" : "Wali Santri";
   const now = new Date().toISOString();
   await db
     .prepare("INSERT INTO users (email, name, role, room_scope, created_at) VALUES (?, ?, ?, '', ?)")
@@ -357,7 +384,7 @@ export async function ensureUser(request: Request) {
     .prepare("SELECT id, email, name, role, room_scope AS roomScope FROM users WHERE email = ?")
     .bind(identity.email)
     .first()) as AuthenticatedUser;
-  return { ...created, authProvider: identity.authProvider };
+  return enforceAdminMfa({ ...created, authProvider: identity.authProvider });
 }
 
 export async function guardianOwnsStudent(user: Pick<AuthenticatedUser,"email"|"role"|"guardianPhone">, studentId: number) {

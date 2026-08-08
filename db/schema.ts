@@ -35,6 +35,8 @@ export const tahfidzRecords = sqliteTable("tahfidz_records", {
   grade: text("grade").notNull(),
   teacher: text("teacher").notNull(),
   recordedAt: text("recorded_at").notNull(),
+  workflowStatus: text("workflow_status").notNull().default("Dipublikasikan"),
+  periodKey: text("period_key").notNull().default(""),
 });
 
 export const mutabaahRecords = sqliteTable("mutabaah_records", {
@@ -44,6 +46,8 @@ export const mutabaahRecords = sqliteTable("mutabaah_records", {
   completed: integer("completed", { mode: "boolean" }).notNull().default(false),
   recordDate: text("record_date").notNull(),
   recordedBy: text("recorded_by").notNull(),
+  workflowStatus: text("workflow_status").notNull().default("Dipublikasikan"),
+  periodKey: text("period_key").notNull().default(""),
 });
 
 export const healthRecords = sqliteTable("health_records", {
@@ -54,6 +58,8 @@ export const healthRecords = sqliteTable("health_records", {
   treatment: text("treatment").notNull(),
   status: text("status").notNull(),
   recordedAt: text("recorded_at").notNull(),
+  workflowStatus: text("workflow_status").notNull().default("Dipublikasikan"),
+  periodKey: text("period_key").notNull().default(""),
 });
 
 export const transactions = sqliteTable("transactions", {
@@ -75,6 +81,8 @@ export const characterReports = sqliteTable("character_reports", {
   note: text("note").notNull(),
   semester: text("semester").notNull(),
   recordedAt: text("recorded_at").notNull(),
+  workflowStatus: text("workflow_status").notNull().default("Dipublikasikan"),
+  periodKey: text("period_key").notNull().default(""),
 });
 
 export const inventoryItems = sqliteTable("inventory_items", {
@@ -114,6 +122,8 @@ export const attendanceRecords = sqliteTable("attendance_records", {
   status: text("status").notNull(),
   note: text("note").notNull(),
   recordedBy: text("recorded_by").notNull(),
+  workflowStatus: text("workflow_status").notNull().default("Dipublikasikan"),
+  periodKey: text("period_key").notNull().default(""),
 });
 
 export const academicSubjects = sqliteTable("academic_subjects", {
@@ -143,6 +153,20 @@ export const academicGrades = sqliteTable("academic_grades", {
   academicYear: text("academic_year").notNull(),
   recordedBy: text("recorded_by").notNull(),
   recordedAt: text("recorded_at").notNull(),
+  workflowStatus: text("workflow_status").notNull().default("Dipublikasikan"),
+  periodKey: text("period_key").notNull().default(""),
+});
+
+export const academicPeriods = sqliteTable("academic_periods", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  periodKey: text("period_key").notNull().unique(),
+  academicYear: text("academic_year").notNull(),
+  semester: text("semester").notNull(),
+  status: text("status").notNull().default("Terbuka"),
+  lockedBy: text("locked_by").notNull().default(""),
+  lockedAt: text("locked_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
 });
 
 export const leavePermits = sqliteTable("leave_permits", {

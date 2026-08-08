@@ -146,8 +146,8 @@ test("dashboard aman untuk admin dan wali diarahkan ke portal terbatas", async (
   assert.match(page, /if\(result\.user\.role==="Wali Santri"\) setPage\("portalwali"\)/);
   assert.match(page, /role==="Wali Santri"\?"Kembali ke Portal Wali":"Kembali ke dashboard"/);
   assert.match(lib, /UPDATE users SET role='Admin'/);
-  assert.match(lib, /const ownerEmail = "baikganteng88@gmail.com"/);
-  assert.match(lib, /identity\.email\.toLowerCase\(\) === ownerEmail/);
+  assert.match(lib, /isOwnerEmail/);
+  assert.match(lib, /isOwnerEmail\(identity\.email\)/);
   assert.match(bootstrap, /const safe = async/);
   assert.match(page, /setRole\("Admin"\)/);
   assert.match(page, /\{role\} aktif/);

@@ -1,4 +1,5 @@
 import { database, ensureUser, seedIfNeeded } from "../_lib";
+import { reportServerError } from "../../../lib/observability";
 
 export async function GET(request: Request) {
   try {
@@ -81,15 +82,15 @@ export async function GET(request: Request) {
         ? all("SELECT * FROM student_promotions ORDER BY id DESC LIMIT 500")
         : all("SELECT * FROM student_promotions WHERE 1=0"),
       guardian
-        ? owned("SELECT t.*, s.name AS student_name FROM tahfidz_records t JOIN students s ON s.id=t.student_id WHERE lower(s.guardian_email)=? ORDER BY t.id DESC LIMIT 100")
+        ? owned("SELECT t.*, s.name AS student_name FROM tahfidz_records t JOIN students s ON s.id=t.student_id WHERE lower(s.guardian_email)=? AND t.workflow_status='Dipublikasikan' ORDER BY t.id DESC LIMIT 100")
         : staff ? scoped("SELECT t.*,s.name AS student_name FROM tahfidz_records t JOIN students s ON s.id=t.student_id WHERE s.room=? ORDER BY t.id DESC LIMIT 100")
         : all("SELECT t.*, s.name AS student_name FROM tahfidz_records t JOIN students s ON s.id=t.student_id ORDER BY t.id DESC LIMIT 100"),
       guardian
-        ? owned("SELECT m.*, s.name AS student_name FROM mutabaah_records m JOIN students s ON s.id=m.student_id WHERE lower(s.guardian_email)=? ORDER BY m.id DESC LIMIT 100")
+        ? owned("SELECT m.*, s.name AS student_name FROM mutabaah_records m JOIN students s ON s.id=m.student_id WHERE lower(s.guardian_email)=? AND m.workflow_status='Dipublikasikan' ORDER BY m.id DESC LIMIT 100")
         : staff ? scoped("SELECT m.*,s.name AS student_name FROM mutabaah_records m JOIN students s ON s.id=m.student_id WHERE s.room=? ORDER BY m.id DESC LIMIT 100")
         : all("SELECT m.*, s.name AS student_name FROM mutabaah_records m JOIN students s ON s.id=m.student_id ORDER BY m.id DESC LIMIT 100"),
       guardian
-        ? owned("SELECT h.*, s.name AS student_name FROM health_records h JOIN students s ON s.id=h.student_id WHERE lower(s.guardian_email)=? ORDER BY h.id DESC LIMIT 100")
+        ? owned("SELECT h.*, s.name AS student_name FROM health_records h JOIN students s ON s.id=h.student_id WHERE lower(s.guardian_email)=? AND h.workflow_status='Dipublikasikan' ORDER BY h.id DESC LIMIT 100")
         : staff ? scoped("SELECT h.*,s.name AS student_name FROM health_records h JOIN students s ON s.id=h.student_id WHERE s.room=? ORDER BY h.id DESC LIMIT 100")
         : all("SELECT h.*, s.name AS student_name FROM health_records h JOIN students s ON s.id=h.student_id ORDER BY h.id DESC LIMIT 100"),
       guardian
@@ -103,7 +104,7 @@ export async function GET(request: Request) {
         ? all("SELECT * FROM announcements WHERE audience IN ('Semua','Wali Santri') ORDER BY id DESC LIMIT 50")
         : all("SELECT * FROM announcements ORDER BY id DESC"),
       guardian
-        ? owned("SELECT c.*, s.name AS student_name FROM character_reports c JOIN students s ON s.id=c.student_id WHERE lower(s.guardian_email)=? ORDER BY c.id DESC LIMIT 100")
+        ? owned("SELECT c.*, s.name AS student_name FROM character_reports c JOIN students s ON s.id=c.student_id WHERE lower(s.guardian_email)=? AND c.workflow_status='Dipublikasikan' ORDER BY c.id DESC LIMIT 100")
         : staff ? scoped("SELECT c.*,s.name AS student_name FROM character_reports c JOIN students s ON s.id=c.student_id WHERE s.room=? ORDER BY c.id DESC LIMIT 100")
         : all("SELECT c.*, s.name AS student_name FROM character_reports c JOIN students s ON s.id=c.student_id ORDER BY c.id DESC LIMIT 100"),
       guardian
@@ -111,7 +112,7 @@ export async function GET(request: Request) {
         : staff ? scoped("SELECT n.* FROM notification_logs n JOIN students s ON s.id=n.student_id WHERE s.room=? ORDER BY n.id DESC LIMIT 30")
         : all("SELECT * FROM notification_logs ORDER BY id DESC LIMIT 30"),
       guardian
-        ? owned("SELECT a.*, s.name AS student_name FROM attendance_records a JOIN students s ON s.id=a.student_id WHERE lower(s.guardian_email)=? ORDER BY a.id DESC LIMIT 100")
+        ? owned("SELECT a.*, s.name AS student_name FROM attendance_records a JOIN students s ON s.id=a.student_id WHERE lower(s.guardian_email)=? AND a.workflow_status='Dipublikasikan' ORDER BY a.id DESC LIMIT 100")
         : staff ? scoped("SELECT a.*,s.name AS student_name FROM attendance_records a JOIN students s ON s.id=a.student_id WHERE s.room=? ORDER BY a.id DESC LIMIT 100")
         : all("SELECT a.*, s.name AS student_name FROM attendance_records a JOIN students s ON s.id=a.student_id ORDER BY a.id DESC LIMIT 100"),
       guardian
@@ -119,7 +120,7 @@ export async function GET(request: Request) {
         : staff ? scoped("SELECT a.* FROM academic_subjects a WHERE a.class_name IN (SELECT class_name FROM students WHERE room=?) ORDER BY a.class_name,a.name")
         : all("SELECT * FROM academic_subjects ORDER BY education_level,class_name,name"),
       guardian
-        ? owned("SELECT g.*,s.name AS student_name,a.name AS subject_name,a.code AS subject_code,a.minimum_score FROM academic_grades g JOIN students s ON s.id=g.student_id JOIN academic_subjects a ON a.id=g.subject_id WHERE lower(s.guardian_email)=? ORDER BY g.id DESC LIMIT 200")
+        ? owned("SELECT g.*,s.name AS student_name,a.name AS subject_name,a.code AS subject_code,a.minimum_score FROM academic_grades g JOIN students s ON s.id=g.student_id JOIN academic_subjects a ON a.id=g.subject_id WHERE lower(s.guardian_email)=? AND g.workflow_status='Dipublikasikan' ORDER BY g.id DESC LIMIT 200")
         : staff ? scoped("SELECT g.*,s.name AS student_name,a.name AS subject_name,a.code AS subject_code,a.minimum_score FROM academic_grades g JOIN students s ON s.id=g.student_id JOIN academic_subjects a ON a.id=g.subject_id WHERE s.room=? ORDER BY g.id DESC LIMIT 200")
         : all("SELECT g.*,s.name AS student_name,a.name AS subject_name,a.code AS subject_code,a.minimum_score FROM academic_grades g JOIN students s ON s.id=g.student_id JOIN academic_subjects a ON a.id=g.subject_id ORDER BY g.id DESC LIMIT 300"),
       guardian
@@ -230,8 +231,9 @@ export async function GET(request: Request) {
       warning: seedWarning,
     });
   } catch (error) {
+    const requestId=reportServerError("bootstrap.load",error,request);
     return Response.json(
-      { error: error instanceof Error ? error.message : "Gagal memuat data." },
+      { error: error instanceof Error ? error.message : "Gagal memuat data.", requestId },
       { status: 500 },
     );
   }

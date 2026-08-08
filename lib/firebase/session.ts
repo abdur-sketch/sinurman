@@ -1,9 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { firebaseAdmin } from "./admin";
+import { isOwnerEmail } from "../security-config";
 
 const cookieName = "sinurman_admin_session";
 const sessionDays = 7;
-const ownerEmail = "baikganteng88@gmail.com";
 const internalRoles = new Set(["Admin", "Kepala Asrama", "Musyrif", "Ustadz"]);
 
 export type FirebaseSession = {
@@ -50,7 +50,7 @@ export async function createFirebaseSession(idToken:string,request?:Request) {
   const decoded=await firebaseAdmin().auth.verifyIdToken(idToken,true);
   const email=String(decoded.email??"").trim().toLowerCase();
   if(!email||decoded.email_verified===false) throw new Error("Email Firebase belum terverifikasi.");
-  const access=email===ownerEmail?{role:"Admin"}:await internalAccess(email);
+  const access=isOwnerEmail(email)?{role:"Admin"}:await internalAccess(email);
   if(!access) throw new Error("Akun belum diberi akses oleh Admin SINURMAN.");
   const firebaseClaims=decoded.firebase as {sign_in_second_factor?:string}|undefined;
   const firebaseUser=access.role==="Admin"?await firebaseAdmin().auth.getUser(decoded.uid):null;

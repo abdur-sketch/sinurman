@@ -1,0 +1,39 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const read=(path)=>readFile(new URL(`../${path}`,import.meta.url),"utf8");
+
+test("owner identity is configured outside application source",async()=>{
+  const [config,session,users]=await Promise.all([read("lib/security-config.ts"),read("lib/firebase/session.ts"),read("app/api/admin-users/route.ts")]);
+  assert.match(config,/SINURMAN_OWNER_EMAIL/);
+  assert.doesNotMatch(`${session}\n${users}`,/baikganteng88@gmail\.com/);
+});
+
+test("admin mutations require MFA while enrollment remains reachable",async()=>{
+  const source=await read("app/api/_lib.ts");
+  assert.match(source,/MFA_REQUIRED/);
+  assert.match(source,/\/api\/account-security/);
+  assert.match(source,/multiFactor\?\.enrolledFactors/);
+});
+
+test("scheduled backups are authenticated and carry integrity metadata",async()=>{
+  const [backup,scheduler]=await Promise.all([read("app/api/backup/route.ts"),read("app/api/maintenance/backup/route.ts")]);
+  assert.match(backup,/sha256/);
+  assert.match(backup,/manifest\.json/);
+  assert.match(scheduler,/CRON_SECRET/);
+  assert.match(scheduler,/automaticBackupDue/);
+});
+
+test("guardian queries expose only published governed records",async()=>{
+  const source=await read("app/api/bootstrap/route.ts");
+  for(const alias of ["t","m","h","c","a","g"]) assert.match(source,new RegExp(`${alias}\\.workflow_status='Dipublikasikan'`));
+});
+
+test("academic periods block locked edits and track pending publication",async()=>{
+  const [records,periods]=await Promise.all([read("app/api/records/route.ts"),read("app/api/academic-periods/route.ts")]);
+  assert.match(records,/assertPeriodOpen/);
+  assert.match(records,/Periode .* sudah dikunci/);
+  assert.match(periods,/pending_records/);
+  assert.match(periods,/Kunci Periode/);
+});

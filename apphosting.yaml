@@ -21,6 +21,15 @@ env:
     availability:
       - BUILD
       - RUNTIME
+  - variable: SINURMAN_OWNER_EMAIL
+    value: "baikganteng88@gmail.com"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: CRON_SECRET
+    secret: CRON_SECRET
+    availability:
+      - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
     value: "AIzaSyCmmuxsbDh_xsBQ6E5EGxt6UYRY8-NOP1Q"
     availability:
