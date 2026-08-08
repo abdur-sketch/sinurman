@@ -58,7 +58,7 @@ export async function createFirebaseSession(idToken:string,request?:Request) {
   if(access.role==="Admin"&&enrolledMfa&&!firebaseClaims?.sign_in_second_factor) {
     throw new Error("Admin wajib menyelesaikan verifikasi dua langkah sebelum masuk.");
   }
-  const token=randomBytes(32).toString("base64url");
+  const token=Array.from(randomBytes(32),byte=>byte.toString(16).padStart(2,"0")).join("");
   const now=new Date();
   const session:FirebaseSession={
     uid:decoded.uid,email,name:String(decoded.name??email.split("@")[0]),
