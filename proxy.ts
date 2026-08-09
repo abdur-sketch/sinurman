@@ -15,7 +15,8 @@ const publicApiRoutes = new Set([
 
 function hasSession(request: NextRequest) {
   return Boolean(
-    request.cookies.get("sinurman_admin_session")?.value ||
+    request.cookies.get("__session")?.value ||
+      request.cookies.get("sinurman_admin_session")?.value ||
       request.cookies.get("sinurman_wali_session")?.value ||
       request.headers.get("oai-authenticated-user-email"),
   );

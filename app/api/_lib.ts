@@ -11,7 +11,8 @@ export type AuthenticatedUser = {
   guardianPhone?: string;
   authProvider?: "firebase" | "chatgpt" | "guardian";
 };
-const guardianCookieName = "sinurman_wali_session";
+// Firebase Hosting strips non-reserved cookies before proxying to Cloud Run.
+const guardianCookieName = process.env.FIREBASE_RUNTIME === "true" ? "__session" : "sinurman_wali_session";
 
 export function database() {
   if (!env.DB) throw new Error("Database SINURMAN belum tersedia.");

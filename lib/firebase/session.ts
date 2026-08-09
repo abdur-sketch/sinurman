@@ -2,7 +2,9 @@ import { createHash, randomBytes } from "node:crypto";
 import { firebaseAdmin } from "./admin";
 import { isOwnerEmail } from "../security-config";
 
-const cookieName = "sinurman_admin_session";
+// Firebase Hosting only forwards the reserved __session cookie to Cloud Run.
+// Keep the descriptive name on other runtimes so it cannot collide with their auth.
+const cookieName = process.env.FIREBASE_RUNTIME === "true" ? "__session" : "sinurman_admin_session";
 const sessionDays = 7;
 const internalRoles = new Set(["Admin", "Kepala Asrama", "Musyrif", "Ustadz"]);
 
