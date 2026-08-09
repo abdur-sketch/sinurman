@@ -207,7 +207,12 @@ async function clearTable(name:string) {
 
 function writeChangedTable(transaction:Transaction,name:string,before:Row[],after:Row[],now:string) {
   const previous=new Map(before.map(row=>[rowDocumentId(row),row]));
-  const next=new Map(after.map(row=>[rowDocumentId(row),row]));
+  // AlaSQL represents SQL NULL literals as undefined in some INSERT results.
+  // Firestore rejects undefined fields, so normalize every mutated row before
+  // comparing and persisting it. JSON sanitization preserves null values while
+  // removing only fields Firestore cannot store.
+  const sanitizedAfter=cleanRows(after);
+  const next=new Map(sanitizedAfter.map(row=>[rowDocumentId(row),row]));
   for(const [id,row] of next) {
     if(JSON.stringify(previous.get(id))!==JSON.stringify(row)) transaction.set(tableRows(name).doc(id),{data:row,updatedAt:now} satisfies StoredRow);
   }

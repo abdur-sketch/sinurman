@@ -55,6 +55,12 @@ test("Firebase Hosting menyediakan domain web.app menuju backend produksi",async
   assert.match(api,/FIREBASE_RUNTIME === "true" \? "__session"/);
 });
 
+test("Firestore mutations sanitize SQL NULL fields before persistence",async()=>{
+  const source=await read("lib/firebase/firestore-d1.ts");
+  assert.match(source,/const sanitizedAfter=cleanRows\(after\)/);
+  assert.match(source,/new Map\(sanitizedAfter\.map/);
+});
+
 test("navigasi seluler hanya merender modul yang tersedia untuk peran aktif",async()=>{
   const dashboard=await read("app/dashboard-client.tsx");
   assert.match(dashboard,/visibleNavGroups\.flatMap\(group=>group\.items\)\.filter/);
