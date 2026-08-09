@@ -15,6 +15,7 @@ test("admin mutations require MFA while enrollment remains reachable",async()=>{
   assert.match(source,/MFA_REQUIRED/);
   assert.match(source,/\/api\/account-security/);
   assert.match(source,/multiFactor\?\.enrolledFactors/);
+  assert.match(source,/pathname==="\/api\/guardian-accounts"&&isOwnerEmail\(user\.email\)/);
 });
 
 test("scheduled backups are authenticated and carry integrity metadata",async()=>{

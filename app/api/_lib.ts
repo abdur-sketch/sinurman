@@ -358,6 +358,9 @@ export async function ensureUser(request: Request) {
     if(process.env.FIREBASE_RUNTIME!=="true"||user.role!=="Admin"||["GET","HEAD","OPTIONS"].includes(request.method))return user;
     const pathname=new URL(request.url).pathname;
     if(pathname==="/api/account-security"||pathname==="/api/firebase-auth")return user;
+    // The primary owner must be able to complete guardian onboarding before MFA
+    // enrollment. Other administrative mutations remain protected by MFA.
+    if(pathname==="/api/guardian-accounts"&&isOwnerEmail(user.email))return user;
     const {firebaseAdmin}=await import("../../lib/firebase/admin");
     const account=await firebaseAdmin().auth.getUserByEmail(user.email);
     if(!account.multiFactor?.enrolledFactors?.length) throw new Error("MFA_REQUIRED: Aktifkan Authenticator dari Profil Akun sebelum melakukan perubahan Admin.");
