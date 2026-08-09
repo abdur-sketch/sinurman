@@ -13,6 +13,24 @@
       "firebase-debug.log"
     ]
   },
+  "hosting": {
+    "site": "sinurman-2026",
+    "public": ".firebase-hosting",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "sinurman",
+          "region": "asia-southeast1"
+        }
+      }
+    ]
+  },
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

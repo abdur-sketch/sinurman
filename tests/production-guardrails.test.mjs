@@ -39,3 +39,12 @@ test("academic periods block locked edits and track pending publication",async()
   assert.match(periods,/pending_records/);
   assert.match(periods,/Kunci Periode/);
 });
+
+test("Firebase Hosting menyediakan domain web.app menuju backend produksi",async()=>{
+  const config=JSON.parse(await read("firebase.json"));
+  assert.equal(config.hosting.site,"sinurman-2026");
+  assert.deepEqual(config.hosting.rewrites,[{
+    source:"**",
+    run:{serviceId:"sinurman",region:"asia-southeast1"},
+  }]);
+});
