@@ -1687,6 +1687,11 @@ export default function DashboardClient() {
         : null;
     return navGroups.map(group => ({...group,items:allowed?group.items.filter(item=>allowed.has(item.key)):group.items})).filter(group=>group.items.length);
   },[role]);
+  const mobileNavItems = useMemo(() => {
+    if(role==="Wali Santri") return [{key:"portalwali" as PageKey,icon:"fi-rr-home-heart",label:"Portal Wali"}];
+    const priorities=new Set<PageKey>(["dashboard","santri","tahfidz","keuangan"]);
+    return visibleNavGroups.flatMap(group=>group.items).filter(item=>priorities.has(item.key)).slice(0,4);
+  },[role,visibleNavGroups]);
 
   const loadData = useCallback(async () => {
     setLoading(true); setLoadError("");
@@ -1974,7 +1979,7 @@ export default function DashboardClient() {
         </main>
       </div>
       <nav className={`mobile-nav ${role==="Wali Santri"?"guardian-mobile-nav":""}`}>
-        {(role==="Wali Santri"?[{key:"portalwali" as PageKey,icon:"fi-rr-home-heart",label:"Portal Wali"}]:[navGroups[0].items[0],navGroups[1].items[0],navGroups[1].items[1],navGroups[2].items[1]]).map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><ToolIcon name={item.icon} /><span>{item.label}</span></button>)}
+        {mobileNavItems.map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><ToolIcon name={item.icon} /><span>{item.label}</span></button>)}
         <button onClick={()=>setSidebarOpen(true)}><i>•••</i><span>Lainnya</span></button>
       </nav>
       {editor&&<RecordModal key={`${editor.resource}-${editor.row?.id??"new"}`} editor={editor} students={data.students} subjects={data.subjects} classes={data.classes} onClose={()=>setEditor(null)} onSave={saveRecord} />}

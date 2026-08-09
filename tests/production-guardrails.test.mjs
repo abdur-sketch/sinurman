@@ -53,3 +53,10 @@ test("Firebase Hosting menyediakan domain web.app menuju backend produksi",async
   assert.match(adminSession,/FIREBASE_RUNTIME === "true" \? "__session"/);
   assert.match(api,/FIREBASE_RUNTIME === "true" \? "__session"/);
 });
+
+test("navigasi seluler hanya merender modul yang tersedia untuk peran aktif",async()=>{
+  const dashboard=await read("app/dashboard-client.tsx");
+  assert.match(dashboard,/visibleNavGroups\.flatMap\(group=>group\.items\)\.filter/);
+  assert.match(dashboard,/mobileNavItems\.map\(item=>/);
+  assert.doesNotMatch(dashboard,/navGroups\[2\]\.items\[1\]/);
+});
