@@ -39,6 +39,7 @@ export async function GET(request: Request) {
       classes,
       promotionHistory,
       tahfidz,
+      tahsin,
       mutabaah,
       health,
       transactions,
@@ -85,6 +86,10 @@ export async function GET(request: Request) {
         ? owned("SELECT t.*, s.name AS student_name FROM tahfidz_records t JOIN students s ON s.id=t.student_id WHERE lower(s.guardian_email)=? AND t.workflow_status='Dipublikasikan' ORDER BY t.id DESC LIMIT 100")
         : staff ? scoped("SELECT t.*,s.name AS student_name FROM tahfidz_records t JOIN students s ON s.id=t.student_id WHERE s.room=? ORDER BY t.id DESC LIMIT 100")
         : all("SELECT t.*, s.name AS student_name FROM tahfidz_records t JOIN students s ON s.id=t.student_id ORDER BY t.id DESC LIMIT 100"),
+      guardian
+        ? owned("SELECT t.*, s.name AS student_name FROM tahsin_records t JOIN students s ON s.id=t.student_id WHERE lower(s.guardian_email)=? AND t.workflow_status='Dipublikasikan' ORDER BY t.id DESC LIMIT 100")
+        : staff ? scoped("SELECT t.*,s.name AS student_name FROM tahsin_records t JOIN students s ON s.id=t.student_id WHERE s.room=? ORDER BY t.id DESC LIMIT 100")
+        : all("SELECT t.*, s.name AS student_name FROM tahsin_records t JOIN students s ON s.id=t.student_id ORDER BY t.id DESC LIMIT 100"),
       guardian
         ? owned("SELECT m.*, s.name AS student_name FROM mutabaah_records m JOIN students s ON s.id=m.student_id WHERE lower(s.guardian_email)=? AND m.workflow_status='Dipublikasikan' ORDER BY m.id DESC LIMIT 100")
         : staff ? scoped("SELECT m.*,s.name AS student_name FROM mutabaah_records m JOIN students s ON s.id=m.student_id WHERE s.room=? ORDER BY m.id DESC LIMIT 100")
@@ -200,6 +205,7 @@ export async function GET(request: Request) {
       classes: classes.results,
       promotionHistory: promotionHistory.results,
       tahfidz: tahfidz.results,
+      tahsin: tahsin.results,
       mutabaah: mutabaah.results,
       health: health.results,
       transactions: transactions.results,

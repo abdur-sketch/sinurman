@@ -28,6 +28,7 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,role TEXT NOT NULL,room_scope TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,nis TEXT NOT NULL UNIQUE,class_name TEXT NOT NULL,room TEXT NOT NULL,guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,guardian_email TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS tahfidz_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,surah TEXT NOT NULL,verses TEXT NOT NULL,surah_from TEXT NOT NULL DEFAULT '',surah_to TEXT NOT NULL DEFAULT '',verse_from INTEGER NOT NULL DEFAULT 0,verse_to INTEGER NOT NULL DEFAULT 0,amount INTEGER NOT NULL,grade TEXT NOT NULL,teacher TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
+      "CREATE TABLE IF NOT EXISTS tahsin_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,level TEXT NOT NULL,makhraj_score INTEGER NOT NULL,tajwid_score INTEGER NOT NULL,fluency_score INTEGER NOT NULL,length_score INTEGER NOT NULL,adab_score INTEGER NOT NULL,note TEXT NOT NULL DEFAULT '',teacher TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS mutabaah_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,activity TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,record_date TEXT NOT NULL,recorded_by TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS health_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,complaint TEXT NOT NULL,diagnosis TEXT NOT NULL,treatment TEXT NOT NULL,status TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,type TEXT NOT NULL,category TEXT NOT NULL,amount INTEGER NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL,recorded_at TEXT NOT NULL)",
@@ -69,6 +70,7 @@ export function ensureDatabaseSchema() {
       "CREATE INDEX IF NOT EXISTS students_guardian_phone_idx ON students(guardian_phone)",
       "CREATE INDEX IF NOT EXISTS students_class_room_idx ON students(class_name,room)",
       "CREATE INDEX IF NOT EXISTS tahfidz_student_period_idx ON tahfidz_records(student_id,period_key,workflow_status)",
+      "CREATE INDEX IF NOT EXISTS tahsin_student_period_idx ON tahsin_records(student_id,period_key,workflow_status)",
       "CREATE INDEX IF NOT EXISTS mutabaah_student_period_idx ON mutabaah_records(student_id,period_key,workflow_status)",
       "CREATE INDEX IF NOT EXISTS health_student_period_idx ON health_records(student_id,period_key,workflow_status)",
       "CREATE INDEX IF NOT EXISTS character_student_period_idx ON character_reports(student_id,period_key,workflow_status)",
@@ -399,13 +401,13 @@ export async function guardianOwnsStudent(user: Pick<AuthenticatedUser,"email"|"
 export function canWrite(role: Role, resource: string) {
   if (role === "Admin") return true;
   if (role === "Kepala Asrama") {
-    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "grades"].includes(resource);
+    return ["tahfidz", "tahsin", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "grades"].includes(resource);
   }
   if (role === "Musyrif") {
-    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "grades"].includes(resource);
+    return ["tahfidz", "tahsin", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "grades"].includes(resource);
   }
   if (role === "Ustadz") {
-    return ["tahfidz", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "schedules", "grades"].includes(resource);
+    return ["tahfidz", "tahsin", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "schedules", "grades"].includes(resource);
   }
   return false;
 }

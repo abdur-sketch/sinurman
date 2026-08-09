@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { database } from "../app/api/_lib";
 
-export const backupTables=["users","students","employees","school_classes","student_promotions","tahfidz_records","mutabaah_records","health_records","transactions","character_reports","inventory_items","announcements","notification_logs","attendance_records","academic_subjects","academic_grades","leave_permits","schedules","rooms","admissions","admission_documents","counseling_records","bills","guardian_messages","guardian_requests","guardian_accounts","wallet_accounts","wallet_entries","wallet_topups","wallet_topup_settlements","canteen_products","canteen_sales","canteen_sale_items","audit_logs"];
+export const backupTables=["users","students","employees","school_classes","student_promotions","tahfidz_records","tahsin_records","mutabaah_records","health_records","transactions","character_reports","inventory_items","announcements","notification_logs","attendance_records","academic_subjects","academic_grades","leave_permits","schedules","rooms","admissions","admission_documents","counseling_records","bills","guardian_messages","guardian_requests","guardian_accounts","wallet_accounts","wallet_entries","wallet_topups","wallet_topup_settlements","canteen_products","canteen_sales","canteen_sale_items","audit_logs"];
 const markerKey="backups/.automatic-backup.json";
 const automaticInterval=20*60*60*1000;
 const retentionDays=90;

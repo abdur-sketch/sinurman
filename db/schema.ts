@@ -39,6 +39,24 @@ export const tahfidzRecords = sqliteTable("tahfidz_records", {
   periodKey: text("period_key").notNull().default(""),
 });
 
+export const tahsinRecords = sqliteTable("tahsin_records", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull().references(() => students.id),
+  level: text("level").notNull(),
+  makhrajScore: integer("makhraj_score").notNull(),
+  tajwidScore: integer("tajwid_score").notNull(),
+  fluencyScore: integer("fluency_score").notNull(),
+  lengthScore: integer("length_score").notNull(),
+  adabScore: integer("adab_score").notNull(),
+  note: text("note").notNull().default(""),
+  teacher: text("teacher").notNull(),
+  recordedAt: text("recorded_at").notNull(),
+  workflowStatus: text("workflow_status").notNull().default("Dipublikasikan"),
+  periodKey: text("period_key").notNull().default(""),
+}, (table) => [
+  index("tahsin_student_period_idx").on(table.studentId, table.periodKey, table.workflowStatus),
+]);
+
 export const mutabaahRecords = sqliteTable("mutabaah_records", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   studentId: integer("student_id").notNull().references(() => students.id),

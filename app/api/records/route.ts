@@ -24,6 +24,11 @@ const resourceConfig = {
     columns: ["student_id", "surah", "verses", "surah_from", "surah_to", "verse_from", "verse_to", "amount", "grade", "teacher", "recorded_at", "workflow_status", "period_key"],
     required: ["student_id", "surah_from", "surah_to", "verse_from", "verse_to", "amount", "grade"],
   },
+  tahsin: {
+    table: "tahsin_records",
+    columns: ["student_id", "level", "makhraj_score", "tajwid_score", "fluency_score", "length_score", "adab_score", "note", "teacher", "recorded_at", "workflow_status", "period_key"],
+    required: ["student_id", "level", "makhraj_score", "tajwid_score", "fluency_score", "length_score", "adab_score"],
+  },
   mutabaah: {
     table: "mutabaah_records",
     columns: ["student_id", "activity", "completed", "record_date", "recorded_by", "workflow_status", "period_key"],
@@ -107,7 +112,7 @@ const resourceConfig = {
 } as const;
 
 type Resource = keyof typeof resourceConfig;
-const governedResources = new Set<Resource>(["tahfidz","mutabaah","health","characters","attendance","grades"]);
+const governedResources = new Set<Resource>(["tahfidz","tahsin","mutabaah","health","characters","attendance","grades"]);
 const workflowStatuses = new Set(["Draft","Diverifikasi","Dipublikasikan"]);
 
 function periodFromDate(value: unknown) {
@@ -161,7 +166,7 @@ export async function POST(request: Request) {
     const db = database();
     const config = resourceConfig[resource];
     if (user.role === "Musyrif" || user.role === "Kepala Asrama") {
-      const studentResources = new Set<Resource>(["tahfidz","mutabaah","health","characters","attendance","permits","counseling","grades"]);
+      const studentResources = new Set<Resource>(["tahfidz","tahsin","mutabaah","health","characters","attendance","permits","counseling","grades"]);
       if (studentResources.has(resource)) {
         let studentId = Number(payload.data?.student_id ?? 0);
         if (!studentId && payload.id) {
@@ -224,6 +229,13 @@ export async function POST(request: Request) {
       const finalScore=Math.round(scores[0]*0.3+scores[1]*0.3+scores[2]*0.4);
       source.final_score=finalScore;
       source.predicate=finalScore>=90?"A":finalScore>=80?"B":finalScore>=70?"C":"D";
+    }
+    if (resource === "tahsin") {
+      const scoreKeys=["makhraj_score","tajwid_score","fluency_score","length_score","adab_score"];
+      const scores=scoreKeys.map(key=>Number(source[key]));
+      if(scores.some(score=>!Number.isFinite(score)||score<0||score>100)) {
+        return Response.json({error:"Seluruh nilai Tahsin harus berada pada rentang 0–100."},{status:400});
+      }
     }
     if (resource === "characters") {
       const score=Number(source.score);

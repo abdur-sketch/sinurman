@@ -766,3 +766,24 @@ test("reset PIN wali memakai OTP WhatsApp aman, kedaluwarsa, dan pembatasan perc
   assert.match(login, /Lupa PIN/);
   assert.match(proxy, /\/api\/wali-pin-reset/);
 });
+
+test("Tahsin dan Profil Santri 360 memakai satu ID santri terpadu", async () => {
+  const [dashboard, schema, runtime, records, bootstrap, migration, backup] = await Promise.all([
+    file("app/dashboard-client.tsx"),
+    file("db/schema.ts"),
+    file("app/api/_lib.ts"),
+    file("app/api/records/route.ts"),
+    file("app/api/bootstrap/route.ts"),
+    file("drizzle/0017_messy_umar.sql"),
+    file("lib/backup-service.ts"),
+  ]);
+  assert.match(dashboard, /Profil Santri 360°/);
+  assert.match(dashboard, /SATU SANTRI, SATU ID/);
+  assert.match(dashboard, /Tahsin Al-Qur’an/);
+  assert.match(schema, /export const tahsinRecords/);
+  assert.match(runtime, /CREATE TABLE IF NOT EXISTS tahsin_records/);
+  assert.match(records, /Seluruh nilai Tahsin harus berada pada rentang 0–100/);
+  assert.match(bootstrap, /JOIN students s ON s\.id=t\.student_id/);
+  assert.match(migration, /FOREIGN KEY \(`student_id`\) REFERENCES `students`\(`id`\)/);
+  assert.match(backup, /"tahsin_records"/);
+});

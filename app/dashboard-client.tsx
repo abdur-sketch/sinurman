@@ -9,7 +9,7 @@ import { QURAN_SURAHS, quranRangeAmount } from "./quran-data";
 import { firebaseClient } from "../lib/firebase/client";
 
 type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
-type Resource = "students" | "employees" | "classes" | "tahfidz" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
+type Resource = "students" | "employees" | "classes" | "tahfidz" | "tahsin" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
 type Row = Record<string, string | number | null>;
 type AppData = {
   user?: { name: string; email: string; role: Role; roomScope?: string; guardianPhone?: string; authProvider?: "firebase"|"chatgpt"|"guardian" };
@@ -19,6 +19,7 @@ type AppData = {
   classes: Row[];
   promotionHistory: Row[];
   tahfidz: Row[];
+  tahsin: Row[];
   mutabaah: Row[];
   health: Row[];
   transactions: Row[];
@@ -59,7 +60,7 @@ type SearchResult = {
 };
 
 const emptyData: AppData = {
-  students: [], employees: [], classes: [], promotionHistory: [], tahfidz: [], mutabaah: [], health: [], transactions: [], characters: [],
+  students: [], employees: [], classes: [], promotionHistory: [], tahfidz: [], tahsin: [], mutabaah: [], health: [], transactions: [], characters: [],
   inventory: [], announcements: [], notifications: [],
   attendance: [], subjects: [], grades: [], permits: [], schedules: [], rooms: [], admissions: [], admissionDocuments: [],
   counseling: [], bills: [], users: [], audit: [], guardianMessages: [], guardianRequests: [],
@@ -71,6 +72,7 @@ type PageKey =
   | "pegawai"
   | "kelas"
   | "tahfidz"
+  | "tahsin"
   | "akademik"
   | "mutabaah"
   | "kesehatan"
@@ -90,33 +92,49 @@ type PageKey =
 
 const navGroups: { label: string; items: { key: PageKey; icon: string; label: string }[] }[] = [
   {
-    label: "UTAMA",
+    label: "RINGKASAN",
     items: [
       { key: "dashboard", icon: "fi-rr-apps", label: "Dashboard" },
-      { key: "santri", icon: "fi-rr-users", label: "Data Santri" },
-      { key: "pegawai", icon: "fi-rr-id-badge", label: "Data Pegawai" },
-      { key: "kelas", icon: "fi-rr-chalkboard-user", label: "Kelas & Kenaikan" },
     ],
   },
   {
-    label: "AKADEMIK & PEMBINAAN",
+    label: "DATA INDUK",
+    items: [
+      { key: "santri", icon: "fi-rr-users", label: "Profil Santri 360°" },
+      { key: "pegawai", icon: "fi-rr-id-badge", label: "Data Pegawai" },
+      { key: "kelas", icon: "fi-rr-chalkboard-user", label: "Kelas & Kenaikan" },
+      { key: "jadwal", icon: "fi-rr-building", label: "Asrama & Jadwal" },
+    ],
+  },
+  {
+    label: "AKADEMIK",
+    items: [
+      { key: "akademik", icon: "fi-rr-graduation-cap", label: "Akademik & Rapor" },
+    ],
+  },
+  {
+    label: "KEPESANTRENAN",
     items: [
       { key: "tahfidz", icon: "fi-rr-book-quran", label: "Tahfidz" },
-      { key: "akademik", icon: "fi-rr-graduation-cap", label: "Akademik & Rapor" },
+      { key: "tahsin", icon: "fi-rr-book-open-cover", label: "Tahsin" },
       { key: "mutabaah", icon: "fi-rr-praying-hands", label: "Mutaba’ah" },
       { key: "karakter", icon: "fi-rr-shield-check", label: "Rapor Karakter" },
       { key: "absensi", icon: "fi-rr-clipboard-check", label: "Absensi & Izin" },
-      { key: "jadwal", icon: "fi-rr-calendar", label: "Jadwal & Kamar" },
+      { key: "konseling", icon: "fi-rr-comments", label: "Pembinaan & Poin" },
     ],
   },
   {
-    label: "LAYANAN SANTRI",
+    label: "KEUANGAN",
+    items: [
+      { key: "keuangan", icon: "fi-rr-wallet", label: "Tagihan & Pembayaran" },
+      { key: "sinurpay", icon: "fi-rr-cash-register", label: "SINURPAY" },
+    ],
+  },
+  {
+    label: "OPERASIONAL",
     items: [
       { key: "kesehatan", icon: "fi-rr-stethoscope", label: "Kesehatan" },
-      { key: "keuangan", icon: "fi-rr-wallet", label: "Keuangan" },
-      { key: "sinurpay", icon: "fi-rr-cash-register", label: "SINURPAY" },
       { key: "inventaris", icon: "fi-rr-boxes", label: "Inventaris" },
-      { key: "konseling", icon: "fi-rr-comments", label: "Konseling" },
     ],
   },
   {
@@ -143,6 +161,7 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
   pegawai: { title: "Data Pegawai", subtitle: "Kelola identitas, jabatan, unit kerja, dan status pegawai pesantren." },
   kelas: { title: "Kelas & Kenaikan", subtitle: "Kelola master kelas, proses kenaikan otomatis, dan arsip alumni." },
   tahfidz: { title: "Tahfidz & Hafalan", subtitle: "Pantau target, setoran, dan capaian hafalan santri." },
+  tahsin: { title: "Tahsin Al-Qur’an", subtitle: "Nilai makhraj, tajwid, kelancaran, panjang pendek, dan adab membaca." },
   akademik: { title: "Akademik & Rapor", subtitle: "Kelola mata pelajaran dan nilai rapor SMP–SMK." },
   mutabaah: { title: "Mutaba’ah Ibadah", subtitle: "Rekap pelaksanaan ibadah dan kegiatan harian." },
   kesehatan: { title: "Kesehatan Santri", subtitle: "Catatan pemeriksaan, keluhan, dan tindak lanjut kesehatan." },
@@ -307,11 +326,26 @@ function TahfidzPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: ()
   );
 }
 
-function StudentsPage({ rows, editable, onAdd, onEdit, onDelete, onCard }: { rows: Row[]; editable:boolean; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onCard:(row:Row)=>void }) {
+function TahsinPage({ rows, onAdd, onEdit, onDelete }: { rows:Row[]; onAdd:()=>void; onEdit:(row:Row)=>void; onDelete:(row:Row)=>void }) {
+  const levels=["Pra Tahsin","Level 1","Level 2","Level 3","Lulus"];
+  const average=(row:Row)=>Math.round(["makhraj_score","tajwid_score","fluency_score","length_score","adab_score"].reduce((sum,key)=>sum+Number(row[key]||0),0)/5);
+  const totalAverage=rows.length?Math.round(rows.reduce((sum,row)=>sum+average(row),0)/rows.length):0;
+  const passed=rows.filter(row=>row.level==="Lulus").length;
+  return <div className="feature-app tahsin-app">
+    <section className="feature-hero tahsin-hero"><div className="feature-hero-copy"><span className="feature-kicker">PEMBINAAN BACAAN AL-QUR’AN</span><h2>Tahsin yang terukur, bertahap, dan terhubung ke profil santri.</h2><p>Nilai lima kompetensi utama tanpa membuat data santri terpisah. Semua hasil otomatis masuk ke Santri 360°.</p><div className="feature-hero-actions"><button className="primary-button" onClick={onAdd}>+ Penilaian Tahsin</button><a className="secondary-button link-button" href="/api/export?type=tahsin&format=csv">Ekspor Data</a></div></div><div className="tahsin-level-path">{levels.map((level,index)=><div key={level} className={rows.some(row=>row.level===level)?"active":""}><i>{index+1}</i><span>{level}</span></div>)}</div></section>
+    <section className="stats-grid three"><article className="metric-card"><MiniIcon tone="blue">A</MiniIcon><div><span>Rata-rata Nilai</span><strong>{totalAverage||"—"}</strong><small>Lima aspek penilaian</small></div></article><article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Santri Lulus</span><strong>{passed}</strong><small>Telah menyelesaikan Tahsin</small></div></article><article className="metric-card"><MiniIcon tone="violet">◫</MiniIcon><div><span>Penilaian Tersimpan</span><strong>{rows.length}</strong><small>Satu sumber data santri</small></div></article></section>
+    <section className="card data-card feature-data-card"><header className="card-header responsive"><div><h3>Perkembangan Tahsin</h3><p>Makharijul huruf, tajwid, kelancaran, panjang pendek, dan adab membaca.</p></div><button className="primary-button" onClick={onAdd}>+ Nilai Santri</button></header><div className="table-wrap"><table><thead><tr><th>Santri</th><th>Level</th><th>Makhraj</th><th>Tajwid</th><th>Kelancaran</th><th>Panjang Pendek</th><th>Adab</th><th>Rata-rata</th><th /></tr></thead><tbody>{rows.map(row=><tr key={String(row.id)}><td><strong>{row.student_name}</strong><small className="cell-note">{row.teacher}</small></td><td><Status tone={row.level==="Lulus"?"green":"blue"}>{row.level}</Status></td><td>{row.makhraj_score}</td><td>{row.tajwid_score}</td><td>{row.fluency_score}</td><td>{row.length_score}</td><td>{row.adab_score}</td><td><strong>{average(row)}</strong></td><td><DataActions row={row} onEdit={onEdit} onDelete={onDelete}/></td></tr>)}{!rows.length&&<tr><td colSpan={9} className="muted">Belum ada penilaian Tahsin. Klik Nilai Santri untuk memulai.</td></tr>}</tbody></table></div></section>
+  </div>;
+}
+
+function StudentsPage({ data, editable, onAdd, onEdit, onDelete, onCard }: { data:AppData; editable:boolean; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onCard:(row:Row)=>void }) {
+  const rows=data.students;
   const [query, setQuery] = useState("");
   const [classFilter,setClassFilter]=useState("Semua Kelas");
   const [statusFilter,setStatusFilter]=useState("Semua Status");
   const [page,setPage]=useState(1);
+  const [selected,setSelected]=useState<Row|null>(null);
+  const [detailTab,setDetailTab]=useState<"ringkasan"|"alquran"|"akademik"|"pembinaan"|"keuangan">("ringkasan");
   const pageSize=10;
   const classNames=Array.from(new Set(rows.map(row=>String(row.class_name||"")).filter(Boolean))).sort();
   const statuses=Array.from(new Set(rows.map(row=>String(row.status||"")).filter(Boolean))).sort();
@@ -323,12 +357,63 @@ function StudentsPage({ rows, editable, onAdd, onEdit, onDelete, onCard }: { row
   const pageCount=Math.max(1,Math.ceil(filtered.length/pageSize));
   const activePage=Math.min(page,pageCount);
   const visibleRows=filtered.slice((activePage-1)*pageSize,activePage*pageSize);
+  if(selected) {
+    const studentId=Number(selected.id);
+    const owned=(items:Row[])=>items.filter(row=>Number(row.student_id)===studentId);
+    const tahfidz=owned(data.tahfidz);
+    const tahsin=owned(data.tahsin);
+    const attendance=owned(data.attendance);
+    const grades=owned(data.grades);
+    const health=owned(data.health);
+    const permits=owned(data.permits);
+    const counseling=owned(data.counseling);
+    const bills=owned(data.bills);
+    const mutabaah=owned(data.mutabaah);
+    const wallet=data.walletAccounts.find(row=>Number(row.student_id)===studentId);
+    const present=attendance.filter(row=>row.status==="Hadir").length;
+    const attendanceRate=attendance.length?Math.round(present/attendance.length*100):0;
+    const memorized=tahfidz.reduce((total,row)=>total+Number(row.amount||0),0);
+    const unpaid=bills.filter(row=>row.status!=="Lunas").reduce((total,row)=>total+Number(row.amount||0),0);
+    const points=counseling.reduce((total,row)=>total+(row.type==="Pelanggaran"?-Math.abs(Number(row.points||0)):Math.abs(Number(row.points||0))),0);
+    const tahsinScore=(row:Row)=>Math.round(["makhraj_score","tajwid_score","fluency_score","length_score","adab_score"].reduce((sum,key)=>sum+Number(row[key]||0),0)/5);
+    const tahsinAverage=tahsin.length?Math.round(tahsin.reduce((total,row)=>total+tahsinScore(row),0)/tahsin.length):0;
+    const tabs=[
+      ["ringkasan","Ringkasan"],["alquran","Tahfidz & Tahsin"],["akademik","Akademik"],["pembinaan","Asrama & Pembinaan"],["keuangan","Keuangan"],
+    ] as const;
+    return <div className="student-360-page">
+      <section className="student-360-hero">
+        <button className="student-360-back" onClick={()=>setSelected(null)}>← Kembali ke daftar</button>
+        <div className="student-360-identity"><span>{String(selected.name).split(" ").map(value=>value[0]).slice(0,2).join("")}</span><div><small>PROFIL SANTRI 360° · SATU SANTRI, SATU ID</small><h2>{selected.name}</h2><p>{selected.nis} · {selected.class_name} · Asrama {selected.room}</p></div></div>
+        <div className="student-360-actions"><button className="secondary-button" onClick={()=>onCard(selected)}>Kartu QR</button>{editable&&<button className="primary-button" onClick={()=>onEdit(selected)}>Ubah Profil</button>}</div>
+      </section>
+      <section className="student-360-metrics">
+        <article><span>Kehadiran</span><strong>{attendanceRate}%</strong><small>{attendance.length} catatan</small></article>
+        <article><span>Hafalan tercatat</span><strong>{memorized}</strong><small>ayat disetorkan</small></article>
+        <article><span>Nilai Tahsin</span><strong>{tahsinAverage||"—"}</strong><small>{tahsin[0]?.level||"Belum dinilai"}</small></article>
+        <article><span>Tagihan aktif</span><strong>Rp{money.format(unpaid)}</strong><small>Saldo Rp{money.format(Number(wallet?.balance||0))}</small></article>
+        <article><span>Poin pembinaan</span><strong>{points>0?`+${points}`:points}</strong><small>{counseling.length} catatan</small></article>
+      </section>
+      <nav className="student-360-tabs" aria-label="Bagian profil santri">{tabs.map(([key,label])=><button key={key} className={detailTab===key?"active":""} onClick={()=>setDetailTab(key)}>{label}</button>)}</nav>
+      {detailTab==="ringkasan"&&<section className="student-360-grid">
+        <article className="card student-360-card"><h3>Identitas & Penempatan</h3><dl><div><dt>NIS</dt><dd>{selected.nis}</dd></div><div><dt>Kelas</dt><dd>{selected.class_name}</dd></div><div><dt>Asrama/Kamar</dt><dd>{selected.room}</dd></div><div><dt>Status</dt><dd>{selected.status}</dd></div><div><dt>Wali</dt><dd>{selected.guardian_name}</dd></div><div><dt>Nomor HP</dt><dd>+{selected.guardian_phone}</dd></div></dl></article>
+        <article className="card student-360-card"><h3>Aktivitas Terbaru</h3><div className="student-timeline">{[
+          ...tahfidz.slice(0,2).map(row=>({title:`Setoran ${tahfidzRange(row)}`,meta:String(row.recorded_at||"Tahfidz"),tone:"green"})),
+          ...mutabaah.slice(0,2).map(row=>({title:`Mutaba’ah ${row.activity}`,meta:String(row.record_date||"Kegiatan harian"),tone:row.completed?"green":"amber"})),
+          ...health.slice(0,1).map(row=>({title:`Kesehatan: ${row.complaint}`,meta:String(row.status||"Dipantau"),tone:"amber"})),
+        ].slice(0,5).map((item,index)=><div key={`${item.title}-${index}`}><i className={item.tone}/><span><strong>{item.title}</strong><small>{item.meta}</small></span></div>)}{!tahfidz.length&&!mutabaah.length&&!health.length&&<p className="muted">Belum ada aktivitas yang tercatat.</p>}</div></article>
+      </section>}
+      {detailTab==="alquran"&&<section className="student-360-grid"><article className="card student-360-card"><h3>Riwayat Tahfidz</h3><div className="student-record-list">{tahfidz.map(row=><div key={String(row.id)}><span><strong>{tahfidzRange(row)}</strong><small>{row.teacher} · {String(row.recorded_at).slice(0,10)}</small></span><Status>{row.grade}</Status></div>)}{!tahfidz.length&&<p className="muted">Belum ada setoran.</p>}</div></article><article className="card student-360-card"><h3>Perkembangan Tahsin</h3><div className="student-record-list">{tahsin.map(row=><div key={String(row.id)}><span><strong>{row.level}</strong><small>Makhraj {row.makhraj_score} · Tajwid {row.tajwid_score} · Kelancaran {row.fluency_score}</small></span><Status tone="blue">{tahsinScore(row)}</Status></div>)}{!tahsin.length&&<p className="muted">Belum ada penilaian Tahsin.</p>}</div></article></section>}
+      {detailTab==="akademik"&&<section className="card student-360-card"><h3>Nilai Akademik</h3><div className="student-record-list">{grades.map(row=><div key={String(row.id)}><span><strong>{row.subject_name}</strong><small>{row.semester} · {row.academic_year}</small></span><Status tone={Number(row.final_score)>=Number(row.minimum_score)?"green":"amber"}>{row.final_score} · {row.predicate}</Status></div>)}{!grades.length&&<p className="muted">Belum ada nilai akademik.</p>}</div></section>}
+      {detailTab==="pembinaan"&&<section className="student-360-grid"><article className="card student-360-card"><h3>Pembinaan & Prestasi</h3><div className="student-record-list">{counseling.map(row=><div key={String(row.id)}><span><strong>{row.type}: {row.category}</strong><small>{row.description}</small></span><Status tone={row.type==="Pelanggaran"?"red":"green"}>{row.type==="Pelanggaran"?"-":"+"}{Math.abs(Number(row.points||0))}</Status></div>)}{!counseling.length&&<p className="muted">Belum ada catatan pembinaan.</p>}</div></article><article className="card student-360-card"><h3>Perizinan & Kesehatan</h3><div className="student-record-list">{permits.map(row=><div key={`permit-${row.id}`}><span><strong>{row.reason}</strong><small>{row.start_date} – {row.end_date}</small></span><Status tone={row.status==="Disetujui"?"green":"amber"}>{row.status}</Status></div>)}{health.map(row=><div key={`health-${row.id}`}><span><strong>{row.complaint}</strong><small>{row.treatment}</small></span><Status tone="blue">{row.status}</Status></div>)}{!permits.length&&!health.length&&<p className="muted">Belum ada catatan izin atau kesehatan.</p>}</div></article></section>}
+      {detailTab==="keuangan"&&<section className="student-360-grid"><article className="card student-360-card"><h3>Tagihan</h3><div className="student-record-list">{bills.map(row=><div key={String(row.id)}><span><strong>{row.category}</strong><small>{row.invoice_no} · jatuh tempo {row.due_date}</small></span><Status tone={row.status==="Lunas"?"green":"amber"}>Rp{money.format(Number(row.amount||0))}</Status></div>)}{!bills.length&&<p className="muted">Belum ada tagihan.</p>}</div></article><article className="card student-360-card wallet-summary"><span>Saldo SINURPAY</span><strong>Rp{money.format(Number(wallet?.balance||0))}</strong><small>Limit harian Rp{money.format(Number(wallet?.daily_limit||0))}</small></article></section>}
+    </div>;
+  }
   return (
     <section className="card data-card">
       <header className="card-header responsive"><div><h3>Daftar Santri</h3><p>{rows.length} santri tersimpan pada tahun ajaran 2026/2027</p></div><div className="header-actions"><a className="secondary-button link-button" href="/api/export?type=students&format=csv">⇩ Excel/CSV</a>{editable&&<button className="primary-button" onClick={onAdd}>+ Tambah Santri</button>}</div></header>
       <div className="filters"><div className="search-field">⌕ <input value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}} placeholder="Cari nama atau NIS..." /></div><select value={classFilter} onChange={event=>{setClassFilter(event.target.value);setPage(1);}}><option>Semua Kelas</option>{classNames.map(value=><option key={value}>{value}</option>)}</select><select value={statusFilter} onChange={event=>{setStatusFilter(event.target.value);setPage(1);}}><option>Semua Status</option>{statuses.map(value=><option key={value}>{value}</option>)}</select></div>
       <div className="table-wrap"><table><thead><tr><th>Nama Santri</th><th>NIS</th><th>Kelas</th><th>Kamar</th><th>Status</th><th /></tr></thead>
-        <tbody>{visibleRows.map(s=><tr key={String(s.id)}><td><div className="person"><span>{String(s.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{s.name}</strong></div></td><td className="muted">{s.nis}</td><td>{s.class_name}</td><td>{s.room}</td><td><Status tone={s.status==="Aktif"?"green":"amber"}>{s.status}</Status></td><td><div className="row-actions"><button onClick={()=>onCard(s)}>QR</button>{editable&&<><button onClick={()=>onEdit(s)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(s)}>Hapus</button></>}</div></td></tr>)}</tbody>
+        <tbody>{visibleRows.map(s=><tr key={String(s.id)}><td><button className="person person-link" onClick={()=>{setSelected(s);setDetailTab("ringkasan");}}><span>{String(s.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{s.name}</strong></button></td><td className="muted">{s.nis}</td><td>{s.class_name}</td><td>{s.room}</td><td><Status tone={s.status==="Aktif"?"green":"amber"}>{s.status}</Status></td><td><div className="row-actions"><button onClick={()=>{setSelected(s);setDetailTab("ringkasan");}}>Lihat 360°</button><button onClick={()=>onCard(s)}>QR</button>{editable&&<><button onClick={()=>onEdit(s)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(s)}>Hapus</button></>}</div></td></tr>)}</tbody>
       </table></div>
       <footer className="table-footer"><span>Menampilkan {visibleRows.length} dari {filtered.length} hasil · halaman {activePage}/{pageCount}</span><div><button disabled={activePage<=1} onClick={()=>setPage(value=>Math.max(1,value-1))}>‹</button><button className="active" disabled>{activePage}</button><button disabled={activePage>=pageCount} onClick={()=>setPage(value=>Math.min(pageCount,value+1))}>›</button></div></footer>
     </section>
@@ -1134,7 +1219,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
   if(!student) return <div className="empty-state guardian-empty"><b>Belum ada santri yang terhubung</b><span>Minta Admin memastikan “Nomor WhatsApp wali” pada Data Santri sama dengan nomor akun Anda: +{data.user?.guardianPhone}</span><a className="secondary-button link-button" href="/wali">Lihat cara menghubungkan akun</a></div>;
 
   const byStudent=(rows:Row[])=>rows.filter(x=>Number(x.student_id)===Number(student.id));
-  const bills=byStudent(data.bills), attendance=byStudent(data.attendance), tahfidz=byStudent(data.tahfidz), grades=byStudent(data.grades);
+  const bills=byStudent(data.bills), attendance=byStudent(data.attendance), tahfidz=byStudent(data.tahfidz), tahsin=byStudent(data.tahsin), grades=byStudent(data.grades);
   const health=byStudent(data.health), characters=byStudent(data.characters), permits=byStudent(data.permits);
   const transactions=byStudent(data.transactions), mutabaah=byStudent(data.mutabaah), messages=byStudent(data.guardianMessages), requests=byStudent(data.guardianRequests);
   const wallet=data.walletAccounts.find(x=>Number(x.student_id)===Number(student.id));
@@ -1146,7 +1231,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
   const announcements=data.announcements.filter(x=>x.audience==="Semua"||x.audience==="Wali Santri").slice(0,4);
   async function done(message:string) { notify(message); await reload(); }
 
-  return <div className="guardian-portal">
+  return <div className="guardian-portal" aria-label="Portal Tahfidz & Mutaba’ah">
     {data.students.length>1&&<section className="student-switcher card"><span>Pilih santri</span>{data.students.map(x=><button key={String(x.id)} className={String(x.id)===String(student.id)?"active":""} onClick={()=>setSelectedId(String(x.id))}>{x.name}<small>{x.class_name}</small></button>)}</section>}
     <section className="guardian-hero"><div className="guardian-profile"><div className="large-avatar">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><span>PORTAL WALI SANTRI · DATA TERLINDUNGI</span><h2>Assalamu’alaikum, keluarga {String(student.name).split(" ")[0]}.</h2><p>{student.name} · {student.nis} · {student.class_name} · {student.room}</p><div className="guardian-live-status"><b>● Santri aktif</b><small>Data diperbarui langsung oleh pengurus</small></div></div></div><div className="guardian-quick-actions"><button className="accent" onClick={()=>setTopupOpen(true)}><i>Rp</i><span>Top Up Saldo<small>Saldo santri</small></span></button><button onClick={()=>onCard(student)}><i>▦</i><span>Kartu QR<small>Identitas digital</small></span></button><button onClick={()=>setAction("permit")}><i>✓</i><span>Ajukan Izin<small>Perizinan online</small></span></button><button onClick={()=>setRequestOpen(true)}><i>⌁</i><span>Kunjungan<small>Jemput & kunjung</small></span></button><button onClick={()=>setAction("contact")}><i>✦</i><span>Pesan<small>Hubungi pengurus</small></span></button></div></section>
     <section className="stats-grid four guardian-stats">
@@ -1160,7 +1245,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
       <article className="card portal-card span-two"><header className="card-header"><div><h3>Jadwal Pelajaran Harian</h3><p>{student.class_name} · pilih hari untuk melihat pelajaran</p></div><select value={day} onChange={e=>setDay(e.target.value)}>{days.map(x=><option key={x}>{x}</option>)}</select></header><div className="portal-schedule">{schedule.length?schedule.map((x,i)=><div key={String(x.id)}><span className={`schedule-time tone-${i%4}`}>{x.start_time}<small>{x.end_time}</small></span><div><Status tone={x.category==="Produktif"?"violet":x.category==="Tahfidz"?"green":"blue"}>{x.category}</Status><strong>{x.title}</strong><small>{x.teacher} · {x.location}</small></div></div>):<div className="portal-empty">Belum ada jadwal pada {day}.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Tagihan & Pembayaran QRIS</h3><p>Rekonsiliasi otomatis dan kuitansi digital</p></div></header><div className="portal-list">{bills.length?bills.map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.invoice_no} · jatuh tempo {x.due_date}{x.paid_at?` · lunas ${x.paid_at}`:""}</small></div><b>Rp{money.format(Number(x.amount))}</b><Status tone={x.status==="Lunas"?"green":"amber"}>{x.status}</Status>{x.status!=="Lunas"?<button className="text-button" onClick={()=>onPayment(x)}>Tampilkan QR</button>:<a className="text-button link-button" href={`/api/receipt?id=${x.id}`}>Kuitansi</a>}</div>):<div className="portal-empty">Tidak ada tagihan.</div>}</div></article>
       <article className="card portal-card span-two guardian-wallet-card"><header className="card-header"><div><h3>Buku Tabungan & Belanja Kantin</h3><p>Saldo cashless, limit harian, dan mutasi SINURPAY</p></div><div className="guardian-wallet-balance"><small>Saldo tersedia</small><strong>Rp{money.format(balance)}</strong><Status tone={wallet?.status==="Diblokir"?"red":"green"}>{wallet?.status||"Aktif"}</Status></div></header><div className="guardian-wallet-grid"><div><span>MUTASI TERBARU</span>{walletEntries.slice(0,6).map(entry=><article key={String(entry.id)}><div><strong>{entry.entry_type}</strong><small>{entry.reference} · {String(entry.created_at).slice(0,10)}<br/>{entry.note}</small></div><b className={Number(entry.amount)>=0?"amount-in":"amount-out"}>{Number(entry.amount)>=0?"+":"−"}Rp{money.format(Math.abs(Number(entry.amount)))}</b></article>)}{!walletEntries.length&&<div className="portal-empty">Belum ada mutasi tabungan.</div>}</div><div><span>BELANJA KANTIN</span>{canteenSales.slice(0,6).map(sale=><article key={String(sale.id)}><div><strong>{sale.receipt_no}</strong><small>{String(sale.created_at).slice(0,16).replace("T"," ")} · {sale.cashier_email}</small></div><b>Rp{money.format(Number(sale.total))}</b><Status tone={sale.status==="Berhasil"?"green":"red"}>{sale.status}</Status></article>)}{!canteenSales.length&&<div className="portal-empty">Belum ada transaksi kantin.</div>}</div></div></article>
-      <article className="card portal-card"><header className="card-header"><div><h3>Tahfidz & Mutaba’ah</h3><p>Perkembangan hafalan dan ibadah</p></div></header><div className="portal-list">{tahfidz.slice(0,4).map(x=><div key={`t-${x.id}`}><div><strong>{tahfidzRange(x)}</strong><small>{x.amount} ayat · {x.teacher} · {x.recorded_at}</small></div><Status tone="green">{x.grade}</Status></div>)}{mutabaah.slice(0,3).map(x=><div key={`m-${x.id}`}><div><strong>{x.activity}</strong><small>{x.record_date}</small></div><Status tone={Number(x.completed)?"green":"amber"}>{Number(x.completed)?"Selesai":"Belum"}</Status></div>)}{!tahfidz.length&&!mutabaah.length&&<div className="portal-empty">Belum ada catatan perkembangan.</div>}</div></article>
+      <article className="card portal-card"><header className="card-header"><div><h3>Tahfidz, Tahsin & Mutaba’ah</h3><p>Perkembangan Al-Qur’an dan ibadah</p></div></header><div className="portal-list">{tahfidz.slice(0,3).map(x=><div key={`t-${x.id}`}><div><strong>{tahfidzRange(x)}</strong><small>{x.amount} ayat · {x.teacher} · {x.recorded_at}</small></div><Status tone="green">{x.grade}</Status></div>)}{tahsin.slice(0,2).map(x=><div key={`ts-${x.id}`}><div><strong>Tahsin · {x.level}</strong><small>Makhraj {x.makhraj_score} · Tajwid {x.tajwid_score} · Kelancaran {x.fluency_score}</small></div><Status tone="blue">{Math.round((Number(x.makhraj_score)+Number(x.tajwid_score)+Number(x.fluency_score)+Number(x.length_score)+Number(x.adab_score))/5)}</Status></div>)}{mutabaah.slice(0,2).map(x=><div key={`m-${x.id}`}><div><strong>{x.activity}</strong><small>{x.record_date}</small></div><Status tone={Number(x.completed)?"green":"amber"}>{Number(x.completed)?"Selesai":"Belum"}</Status></div>)}{!tahfidz.length&&!tahsin.length&&!mutabaah.length&&<div className="portal-empty">Belum ada catatan perkembangan.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Rapor Akademik</h3><p>Nilai SMP–SMK terbaru</p></div></header><div className="portal-list">{grades.length?grades.slice(0,8).map(x=><div key={String(x.id)}><div><strong>{x.subject_name}</strong><small>{x.semester} · {x.academic_year} · {x.note||"Tanpa catatan"}</small></div><Status tone={Number(x.final_score)>=Number(x.minimum_score||75)?"green":"amber"}>{x.final_score} · {x.predicate}</Status></div>):<div className="portal-empty">Belum ada nilai akademik.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Rapor Karakter</h3><p>Penilaian pembina terbaru</p></div></header><div className="portal-list">{characters.length?characters.slice(0,5).map(x=><div key={String(x.id)}><div><strong>{x.category}</strong><small>{x.note} · {x.semester}</small></div><b>{x.score}/100</b></div>):<div className="portal-empty">Belum ada rapor karakter.</div>}</div></article>
       <article className="card portal-card"><header className="card-header"><div><h3>Kesehatan Santri</h3><p>Catatan pemeriksaan dan tindak lanjut</p></div></header><div className="portal-list">{health.length?health.slice(0,5).map(x=><div key={String(x.id)}><div><strong>{x.complaint}</strong><small>{x.diagnosis} · {x.treatment}</small></div><Status tone={x.status==="Selesai"||x.status==="Membaik"?"green":"amber"}>{x.status}</Status></div>):<div className="portal-empty">Tidak ada catatan kesehatan.</div>}</div></article>
@@ -1207,6 +1292,7 @@ function ReportsPage({ role }: { role:Role }) {
   const allReports=[
     {key:"students",title:"Laporan Data Santri",copy:"Profil, kelas, kamar, wali, dan status",tone:"blue",admin:false},
     {key:"tahfidz",title:"Rekap Setoran Tahfidz",copy:"Hafalan dan penilaian per santri",tone:"green",admin:false},
+    {key:"tahsin",title:"Rekap Penilaian Tahsin",copy:"Level dan lima kompetensi bacaan Al-Qur’an",tone:"blue",admin:false},
     {key:"mutabaah",title:"Rekap Mutaba’ah",copy:"Kegiatan ibadah harian santri",tone:"violet",admin:false},
     {key:"attendance",title:"Laporan Absensi",copy:"Kehadiran, izin, sakit, dan alpa",tone:"amber",admin:false},
     {key:"academics",title:"Rapor Akademik SMP–SMK",copy:"Nilai tugas, PTS, PAS, akhir, dan predikat",tone:"green",admin:false},
@@ -1250,6 +1336,11 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
     { key:"surah_from",label:"Surat awal",options:QURAN_SURAHS.map(item=>item.name) },{ key:"verse_from",label:"Ayat awal",type:"number" },
     { key:"surah_to",label:"Surat akhir",options:QURAN_SURAHS.map(item=>item.name) },{ key:"verse_to",label:"Ayat akhir",type:"number" },
     { key:"amount",label:"Jumlah ayat disetor",type:"number" },{ key:"grade",label:"Penilaian",options:["Mumtaz","Jayyid Jiddan","Jayyid","Mengulang"] },{key:"workflow_status",label:"Status publikasi",options:["Draft","Diverifikasi","Dipublikasikan"]},
+  ],
+  tahsin: [
+    {key:"student_id",label:"Santri",type:"student"},{key:"level",label:"Level Tahsin",options:["Pra Tahsin","Level 1","Level 2","Level 3","Lulus"]},
+    {key:"makhraj_score",label:"Makharijul Huruf",type:"number"},{key:"tajwid_score",label:"Tajwid",type:"number"},{key:"fluency_score",label:"Kelancaran",type:"number"},
+    {key:"length_score",label:"Panjang Pendek",type:"number"},{key:"adab_score",label:"Adab Membaca",type:"number"},{key:"note",label:"Catatan Ustadz",type:"textarea"},{key:"workflow_status",label:"Status publikasi",options:["Draft","Diverifikasi","Dipublikasikan"]},
   ],
   subjects: [
     {key:"code",label:"Kode mata pelajaran"},{key:"name",label:"Nama mata pelajaran"},{key:"education_level",label:"Jenjang",options:["SMP","SMK"]},{key:"class_name",label:"Kelas",type:"class"},{key:"teacher",label:"Guru/Ustadz"},{key:"semester",label:"Semester",options:["Ganjil","Genap"]},{key:"academic_year",label:"Tahun ajaran"},{key:"minimum_score",label:"KKM",type:"number"},
@@ -1308,7 +1399,7 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
 };
 
 const resourceNames: Record<Resource,string> = {
-  students:"santri",employees:"pegawai",classes:"kelas",tahfidz:"setoran tahfidz",mutabaah:"kegiatan mutaba’ah",health:"pemeriksaan",transactions:"transaksi",
+  students:"santri",employees:"pegawai",classes:"kelas",tahfidz:"setoran tahfidz",tahsin:"penilaian tahsin",mutabaah:"kegiatan mutaba’ah",health:"pemeriksaan",transactions:"transaksi",
   characters:"nilai karakter",inventory:"barang",announcements:"pengumuman",
   attendance:"absensi",permits:"izin",schedules:"jadwal",rooms:"kamar",admissions:"pendaftar",
   counseling:"catatan konseling",bills:"tagihan",users:"pengguna",
@@ -1338,7 +1429,7 @@ function RecordModal({ editor, students, subjects, classes, onClose, onSave }: {
     event.preventDefault(); setSaving(true); setError("");
     try {
       const data: Record<string,unknown> = {};
-      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","subject_id","points","capacity","grade_order","completed","verse_from","verse_to","minimum_score","assignment_score","midterm_score","exam_score"].includes(key) ? Number(value) : value;
+      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","subject_id","points","capacity","grade_order","completed","verse_from","verse_to","minimum_score","assignment_score","midterm_score","exam_score","makhraj_score","tajwid_score","fluency_score","length_score","adab_score"].includes(key) ? Number(value) : value;
       await onSave(editor.resource,editor.row,data);
     } catch (e) { setError(e instanceof Error?e.message:"Gagal menyimpan."); setSaving(false); }
   }
@@ -1353,7 +1444,7 @@ function RecordModal({ editor, students, subjects, classes, onClose, onSave }: {
       :field.type==="class"||field.type==="class-optional"?<select required={field.type==="class"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">{field.type==="class"?"Pilih kelas":"Otomatis berdasarkan tingkat"}</option>{classes.filter(row=>row.status==="Aktif"&&row.name!==editor.row?.name).map(row=><option key={String(row.id)} value={String(row.name)}>{row.name} · {row.education_level}</option>)}</select>
       :field.options?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih</option>{field.options.map(o=><option key={o}>{o}</option>)}</select>
       :field.type==="textarea"?<textarea required={!["note","address"].includes(field.key)} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />
-      :<input required={!["status","note","room_scope","guardian_email","birth_place","birth_date","phone","email","education","major","homeroom_teacher"].includes(field.key)} readOnly={editor.resource==="tahfidz"&&field.key==="amount"} min={field.key==="score"?0:["verse_from","verse_to","amount","grade_order","capacity"].includes(field.key)?1:undefined} max={["score","minimum_score","assignment_score","midterm_score","exam_score"].includes(field.key)?100:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
+      :<input required={!["status","note","room_scope","guardian_email","birth_place","birth_date","phone","email","education","major","homeroom_teacher"].includes(field.key)} readOnly={editor.resource==="tahfidz"&&field.key==="amount"} min={["score","makhraj_score","tajwid_score","fluency_score","length_score","adab_score"].includes(field.key)?0:["verse_from","verse_to","amount","grade_order","capacity"].includes(field.key)?1:undefined} max={["score","minimum_score","assignment_score","midterm_score","exam_score","makhraj_score","tajwid_score","fluency_score","length_score","adab_score"].includes(field.key)?100:undefined} type={field.type||"text"} value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)} />}
     </label>)}</div>
     {error&&<div className="form-error">{error}</div>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button disabled={saving} className="primary-button">{saving?"Menyimpan...":"Simpan Data"}</button></div>
@@ -1588,11 +1679,11 @@ export default function DashboardClient() {
     const allowed = role === "Wali Santri"
       ? new Set<PageKey>(["portalwali"])
       : role === "Musyrif"
-        ? new Set<PageKey>(["dashboard","santri","tahfidz","akademik","mutabaah","karakter","absensi","kesehatan","pengumuman","konseling"])
+        ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","kesehatan","pengumuman","konseling"])
         : role === "Kepala Asrama"
-          ? new Set<PageKey>(["dashboard","santri","tahfidz","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
+          ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
       : role === "Ustadz"
-        ? new Set<PageKey>(["dashboard","santri","tahfidz","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
+        ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
         : null;
     return navGroups.map(group => ({...group,items:allowed?group.items.filter(item=>allowed.has(item.key)):group.items})).filter(group=>group.items.length);
   },[role]);
@@ -1661,6 +1752,7 @@ export default function DashboardClient() {
       ...data.classes.map(row => result(`class:${row.id}`, row.name, `${row.education_level} · Wali kelas ${row.homeroom_teacher||"belum ditentukan"} · ${row.academic_year}`, "kelas", "fi-rr-chalkboard-user", `${row.major} ${row.next_class_name} kenaikan kelas alumni`)),
       ...data.schedules.map(row => result(`schedule:${row.id}`, row.title, `${row.class_name || ""} · ${row.day_name || ""} ${row.start_time || ""}–${row.end_time || ""} · ${row.teacher || ""}`, "jadwal", "▦", `${row.education_level} ${row.location} pelajaran mapel jadwal`)),
       ...data.tahfidz.map(row => result(`tahfidz:${row.id}`, row.student_name, tahfidzRange(row), "tahfidz", "◫", `${row.surah_from} ${row.surah_to} ${row.verse_from} ${row.verse_to} ${row.grade} ${row.status} hafalan setoran`)),
+      ...data.tahsin.map(row => result(`tahsin:${row.id}`, row.student_name, `${row.level} · Makhraj ${row.makhraj_score} · Tajwid ${row.tajwid_score}`, "tahsin", "fi-rr-book-open-cover", `${row.fluency_score} ${row.length_score} ${row.adab_score} tahsin bacaan quran`)),
       ...data.grades.map(row => result(`grade:${row.id}`, row.student_name, `${row.subject_name} · ${row.final_score} (${row.predicate})`, "akademik", "A", `${row.semester} ${row.academic_year} rapor nilai akademik`)),
       ...data.health.map(row => result(`health:${row.id}`, row.student_name, `${row.complaint || row.diagnosis || "Catatan kesehatan"} · ${row.date || ""}`, "kesehatan", "✚", `${row.treatment} ${row.status}`)),
       ...data.transactions.map(row => result(`transaction:${row.id}`, row.student_name || row.description, `${row.type || "Transaksi"} · Rp${money.format(Number(row.amount || 0))}`, "keuangan", "Rp", `${row.category} ${row.date} uang saku transaksi`)),
@@ -1717,10 +1809,11 @@ export default function DashboardClient() {
     const actions=(resource:Resource)=>({onAdd:()=>setEditor({resource}),onEdit:(row:Row)=>setEditor({resource,row}),onDelete:(row:Row)=>void deleteRecord(resource,row)});
     switch (page) {
       case "dashboard": return <Overview data={data} onNavigate={selectPage} />;
-      case "santri": return <StudentsPage rows={data.students} editable={role==="Admin"} {...actions("students")} onCard={setCardStudent} />;
+      case "santri": return <StudentsPage data={data} editable={role==="Admin"} {...actions("students")} onCard={setCardStudent} />;
       case "pegawai": return <EmployeesPage rows={data.employees} {...actions("employees")} />;
       case "kelas": return <ClassesPromotionPage data={data} {...actions("classes")} reload={loadData} notify={notify} />;
       case "tahfidz": return <TahfidzPage rows={data.tahfidz} {...actions("tahfidz")} />;
+      case "tahsin": return <TahsinPage rows={data.tahsin} {...actions("tahsin")} />;
       case "akademik": return <AcademicPage data={data} role={role} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "mutabaah": return <MutabaahPage data={data} {...actions("mutabaah")} notify={notify} />;
       case "kesehatan": return <HealthPage rows={data.health} {...actions("health")} />;

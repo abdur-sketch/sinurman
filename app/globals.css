@@ -594,6 +594,67 @@ td.muted { color:var(--muted); }
   .schedule-toolbar{align-items:stretch;flex-wrap:wrap}.schedule-toolbar label{flex:1;flex-direction:column;align-items:flex-start}.schedule-toolbar select{width:100%;min-width:130px}.schedule-toolbar>.primary-button{width:100%;margin:0}.level-tabs{width:100%}.level-tabs button{flex:1}.daily-timetable>div{grid-template-columns:22px 43px 1fr}.daily-timetable .row-actions{grid-column:3;justify-content:flex-start}
 }
 
+/* ERP navigation, Tahsin, and the unified Student 360 profile */
+.person-link { width:100%; padding:0; border:0; color:inherit; background:transparent; text-align:left; }
+.person-link:hover strong { color:var(--blue); }
+.tahsin-hero { background:radial-gradient(circle at 80% 12%,rgba(255,255,255,.13),transparent 25%),linear-gradient(125deg,#142c48,#1f5572 56%,#18806b); }
+.tahsin-level-path { width:min(390px,42%); position:relative; z-index:1; display:flex; flex-direction:column; gap:7px; }
+.tahsin-level-path div { display:flex; align-items:center; gap:11px; padding:8px 12px; border:1px solid rgba(255,255,255,.12); border-radius:10px; color:rgba(255,255,255,.62); background:rgba(255,255,255,.055); font-size:10px; }
+.tahsin-level-path div.active { color:#fff; border-color:rgba(159,240,210,.45); background:rgba(159,240,210,.16); }
+.tahsin-level-path i { width:25px; height:25px; display:grid; place-items:center; border-radius:8px; color:#163e4a; background:#9ff0d2; font-size:9px; font-style:normal; font-weight:800; }
+.student-360-page { display:flex; flex-direction:column; gap:17px; }
+.student-360-hero { min-height:210px; position:relative; display:flex; align-items:flex-end; justify-content:space-between; gap:24px; overflow:hidden; padding:32px 34px; border-radius:19px; color:#fff; background:radial-gradient(circle at 88% 0,rgba(118,225,189,.28),transparent 30%),linear-gradient(125deg,#102c29,#174e47 62%,#1b7b63); box-shadow:0 22px 50px rgba(18,69,60,.2); }
+.student-360-hero:after { content:"360°"; position:absolute; right:4%; top:-25px; color:rgba(255,255,255,.06); font-size:125px; font-weight:900; letter-spacing:-9px; }
+.student-360-back { position:absolute; z-index:2; left:33px; top:23px; padding:0; border:0; color:#a8ead4; background:transparent; font-size:10px; font-weight:700; }
+.student-360-identity { position:relative; z-index:1; display:flex; align-items:center; gap:18px; }
+.student-360-identity>span { width:78px; height:78px; flex:0 0 78px; display:grid; place-items:center; border:4px solid rgba(255,255,255,.2); border-radius:20px; color:#174e42; background:#c1f3e1; font-size:21px; font-weight:850; box-shadow:0 12px 25px rgba(0,0,0,.14); }
+.student-360-identity small { color:#9be5cb; font-size:9px; font-weight:800; letter-spacing:1.4px; }
+.student-360-identity h2 { margin:6px 0 5px; color:#fff; font-size:30px; letter-spacing:-.8px; }
+.student-360-identity p { margin:0; color:rgba(255,255,255,.68); font-size:11px; }
+.student-360-actions { position:relative; z-index:1; display:flex; gap:8px; }
+.student-360-actions .secondary-button { color:#fff; border-color:rgba(255,255,255,.22); background:rgba(255,255,255,.08); }
+.student-360-metrics { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
+.student-360-metrics article { min-height:104px; display:flex; justify-content:center; flex-direction:column; padding:17px 18px; border:1px solid var(--line); border-radius:14px; background:var(--card); box-shadow:0 8px 23px rgba(31,45,61,.065); }
+.student-360-metrics span { color:var(--muted); font-size:9px; }
+.student-360-metrics strong { margin:5px 0 4px; color:var(--navy); font-size:21px; }
+.student-360-metrics small { color:var(--muted); font-size:8px; }
+.student-360-tabs { display:flex; gap:5px; overflow-x:auto; padding:7px; border:1px solid var(--line); border-radius:12px; background:var(--card); box-shadow:var(--shadow); }
+.student-360-tabs button { min-height:37px; flex:1; padding:7px 13px; border:0; border-radius:8px; color:var(--muted); background:transparent; font-size:10px; font-weight:700; white-space:nowrap; }
+.student-360-tabs button.active { color:var(--blue); background:rgba(44,123,229,.1); }
+.student-360-grid { display:grid; grid-template-columns:1fr 1fr; gap:17px; }
+.student-360-card { min-height:245px; padding:22px; }
+.student-360-card h3 { margin:0 0 17px; color:var(--navy); font-size:13px; }
+.student-360-card dl { display:grid; grid-template-columns:1fr 1fr; gap:0; margin:0; }
+.student-360-card dl>div { padding:12px 0; border-bottom:1px solid var(--line); }
+.student-360-card dt { color:var(--muted); font-size:8px; }
+.student-360-card dd { margin:4px 0 0; color:var(--navy); font-size:10px; font-weight:700; }
+.student-timeline { display:flex; flex-direction:column; }
+.student-timeline>div { display:flex; gap:11px; padding:10px 0; border-bottom:1px solid var(--line); }
+.student-timeline i { width:9px; height:9px; flex:0 0 9px; margin-top:3px; border:2px solid var(--card); border-radius:50%; background:var(--green); box-shadow:0 0 0 2px rgba(0,168,118,.18); }
+.student-timeline i.amber { background:var(--amber); box-shadow:0 0 0 2px rgba(244,161,0,.18); }
+.student-timeline span,.student-record-list>div>span { min-width:0; display:flex; flex-direction:column; gap:4px; }
+.student-timeline strong,.student-record-list strong { color:var(--navy); font-size:10px; }
+.student-timeline small,.student-record-list small { color:var(--muted); font-size:8px; }
+.student-record-list { display:flex; flex-direction:column; }
+.student-record-list>div { min-height:54px; display:flex; align-items:center; justify-content:space-between; gap:15px; padding:10px 0; border-bottom:1px solid var(--line); }
+.wallet-summary { align-items:flex-start; justify-content:center; color:#fff; background:linear-gradient(135deg,#173653,#2574ac); }
+.wallet-summary span,.wallet-summary small { color:rgba(255,255,255,.7); font-size:10px; }
+.wallet-summary strong { margin:10px 0; color:#fff; font-size:34px; }
+
+@media (max-width:1100px) {
+  .student-360-metrics { grid-template-columns:repeat(3,1fr); }
+}
+@media (max-width:760px) {
+  .tahsin-hero { align-items:stretch; }.tahsin-level-path { width:100%; }
+  .student-360-hero { align-items:flex-start; flex-direction:column; padding:65px 22px 24px; }
+  .student-360-back { left:22px; }
+  .student-360-identity { align-items:flex-start; }.student-360-identity>span { width:59px; height:59px; flex-basis:59px; border-radius:16px; font-size:17px; }
+  .student-360-identity h2 { font-size:23px; }.student-360-actions { width:100%; }.student-360-actions button { flex:1; }
+  .student-360-metrics { grid-template-columns:1fr 1fr; }
+  .student-360-grid { grid-template-columns:1fr; }
+  .student-360-tabs { justify-content:flex-start; }.student-360-tabs button { flex:0 0 auto; }
+}
+
 /* Tipografi SINURMAN: satu skala konsisten untuk seluruh modul dan perangkat. */
 body,
 button,

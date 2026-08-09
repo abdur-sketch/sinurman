@@ -28,6 +28,14 @@ const exports:Record<string,ExportDefinition> = {
     columns:[{key:"santri",label:"Santri",weight:1.5},{key:"surah_from",label:"Surat Awal",weight:1.1},{key:"verse_from",label:"Ayat Awal"},{key:"surah_to",label:"Surat Akhir",weight:1.1},{key:"verse_to",label:"Ayat Akhir"},{key:"amount",label:"Jumlah"},{key:"grade",label:"Nilai"},{key:"teacher",label:"Pembimbing",weight:1.2},{key:"recorded_at",label:"Tanggal",weight:1.1}],
     dateKey:"recorded_at",
   },
+  tahsin: {
+    title:"Rekap Penilaian Tahsin",
+    description:"Level dan lima kompetensi bacaan Al-Qur'an setiap santri.",
+    query:"SELECT s.name AS santri,t.level,t.makhraj_score,t.tajwid_score,t.fluency_score,t.length_score,t.adab_score,t.teacher,t.recorded_at FROM tahsin_records t JOIN students s ON s.id=t.student_id ORDER BY t.id DESC",
+    scopedQuery:"SELECT s.name AS santri,t.level,t.makhraj_score,t.tajwid_score,t.fluency_score,t.length_score,t.adab_score,t.teacher,t.recorded_at FROM tahsin_records t JOIN students s ON s.id=t.student_id WHERE s.room=? ORDER BY t.id DESC",
+    columns:[{key:"santri",label:"Santri",weight:1.5},{key:"level",label:"Level"},{key:"makhraj_score",label:"Makhraj"},{key:"tajwid_score",label:"Tajwid"},{key:"fluency_score",label:"Kelancaran"},{key:"length_score",label:"Panjang Pendek"},{key:"adab_score",label:"Adab"},{key:"teacher",label:"Pembimbing",weight:1.2},{key:"recorded_at",label:"Tanggal",weight:1.1}],
+    dateKey:"recorded_at",
+  },
   mutabaah: {
     title:"Rekap Mutaba'ah",
     description:"Pelaksanaan ibadah dan kegiatan harian santri.",
