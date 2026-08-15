@@ -78,8 +78,9 @@ export async function POST(request: Request) {
       { headers:{ "set-cookie":session.cookie } },
     );
   } catch (error) {
+    console.error("wali-google-auth", error);
     return Response.json(
-      { error: error instanceof Error ? error.message : "Login Google Portal Wali gagal." },
+      { error: "Login Google Portal Wali gagal. Pastikan provider Google sudah diaktifkan dan coba lagi." },
       { status: 401 },
     );
   }

@@ -288,6 +288,7 @@ test("Google Sign-In wali memverifikasi provider dan tetap melalui status perset
   assert.match(route, /verifyIdToken\(idToken, true\)/);
   assert.match(route, /provider !== "google\.com"/);
   assert.match(route, /status !== "Aktif"/);
+  assert.match(route, /Pastikan provider Google sudah diaktifkan/);
   assert.match(route, /google_uid/);
   assert.match(`${lib}\n${schema}`, /google_uid/);
   assert.match(proxy, /"\/api\/wali-google-auth"/);
