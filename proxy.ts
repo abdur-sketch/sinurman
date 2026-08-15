@@ -9,6 +9,7 @@ const publicApiRoutes = new Set([
   "/api/ppdb",
   "/api/ppdb/documents",
   "/api/wali-auth",
+  "/api/wali-google-auth",
   "/api/wali-register",
   "/api/wali-pin-reset",
 ]);
