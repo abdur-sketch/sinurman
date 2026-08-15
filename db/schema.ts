@@ -460,6 +460,8 @@ export const guardianAccounts = sqliteTable("guardian_accounts", {
   status: text("status").notNull().default("Aktif"),
   failedAttempts: integer("failed_attempts").notNull().default(0),
   lockedUntil: text("locked_until").notNull().default(""),
+  googleUid: text("google_uid").notNull().default(""),
+  googleEmail: text("google_email").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

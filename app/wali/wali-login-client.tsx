@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { firebaseClient } from "../../lib/firebase/client";
 
 export default function GuardianLoginClient() {
   const [mode, setMode] = useState<"login" | "register" | "reset">("login");
@@ -45,6 +47,31 @@ export default function GuardianLoginClient() {
       window.location.assign(result.redirectTo || "/portal-wali");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Gagal masuk.");
+      setLoading(false);
+    }
+  }
+
+  async function loginWithGoogle() {
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const credential = await signInWithPopup(firebaseClient().auth, provider);
+      const response = await fetch("/api/wali-google-auth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: await credential.user.getIdToken() }),
+      });
+      const result = await response.json() as { error?:string; redirectTo?:string };
+      if (!response.ok) throw new Error(result.error || "Akun Google belum disetujui Admin.");
+      window.location.assign(result.redirectTo || "/portal-wali");
+    } catch (caught) {
+      const code = (caught as { code?: string }).code;
+      setError(code === "auth/operation-not-allowed"
+        ? "Login Google belum diaktifkan oleh Admin Firebase."
+        : caught instanceof Error ? caught.message : "Login Google gagal.");
       setLoading(false);
     }
   }
@@ -119,6 +146,7 @@ export default function GuardianLoginClient() {
     {error && <div className="form-error">{error}</div>}
     {message && <div className="form-success">{message}</div>}
     <button className="primary-button guardian-login-primary" disabled={loading}>{loading ? "Memproses…" : mode==="login" ? "Masuk ke Portal Wali →" : mode==="register"?"Kirim Pendaftaran Akun →":resetRequested?"Simpan PIN Baru →":"Kirim Kode WhatsApp →"}</button>
+    {mode==="login"&&<><div className="guardian-login-divider"><span>atau</span></div><button type="button" className="secondary-button guardian-google-button" disabled={loading} onClick={()=>void loginWithGoogle()}><span aria-hidden="true">G</span> Masuk dengan Google</button></>}
     <small>{mode==="login"?"Gunakan nomor HP yang terdaftar dan PIN 6 angka Anda.":mode==="register"?"Nomor HP harus sama dengan Data Santri. Akun aktif setelah disetujui Admin.":"Kode reset hanya dikirim melalui WhatsApp otomatis dan berlaku 10 menit."}</small>
   </form>
   </div>;

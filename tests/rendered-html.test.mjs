@@ -274,6 +274,23 @@ test("wali dapat mendaftar memakai nomor HP dengan persetujuan Admin", async () 
   assert.match(admin, /Setujui/);
 });
 
+test("Google Sign-In wali memverifikasi provider dan tetap melalui status persetujuan", async () => {
+  const [client, route, lib, schema] = await Promise.all([
+    file("app/wali/wali-login-client.tsx"),
+    file("app/api/wali-google-auth/route.ts"),
+    file("app/api/_lib.ts"),
+    file("db/schema.ts"),
+  ]);
+  assert.match(client, /GoogleAuthProvider/);
+  assert.match(client, /signInWithPopup/);
+  assert.match(client, /\/api\/wali-google-auth/);
+  assert.match(route, /verifyIdToken\(idToken, true\)/);
+  assert.match(route, /provider !== "google\.com"/);
+  assert.match(route, /status !== "Aktif"/);
+  assert.match(route, /google_uid/);
+  assert.match(`${lib}\n${schema}`, /google_uid/);
+});
+
 test("Admin dapat mengganti logo sekolah yang dipakai di seluruh portal", async () => {
   const [route, brand, dashboard, wali, login, ppdb, print] = await Promise.all([
     file("app/api/branding/logo/route.ts"),

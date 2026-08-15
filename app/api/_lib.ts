@@ -63,7 +63,7 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS student_promotions (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,student_name TEXT NOT NULL,nis TEXT NOT NULL,from_class TEXT NOT NULL,to_class TEXT NOT NULL,action TEXT NOT NULL,academic_year_from TEXT NOT NULL,academic_year_to TEXT NOT NULL,processed_by TEXT NOT NULL,processed_at TEXT NOT NULL)",
       "CREATE UNIQUE INDEX IF NOT EXISTS student_promotions_year_idx ON student_promotions(student_id,academic_year_from)",
       "CREATE INDEX IF NOT EXISTS student_promotions_student_idx ON student_promotions(student_id)",
-      "CREATE TABLE IF NOT EXISTS guardian_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT NOT NULL UNIQUE,pin_hash TEXT NOT NULL,pin_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Aktif',failed_attempts INTEGER NOT NULL DEFAULT 0,locked_until TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS guardian_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT NOT NULL UNIQUE,pin_hash TEXT NOT NULL,pin_salt TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Aktif',failed_attempts INTEGER NOT NULL DEFAULT 0,locked_until TEXT NOT NULL DEFAULT '',google_uid TEXT NOT NULL DEFAULT '',google_email TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS guardian_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT,account_id INTEGER NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,created_at TEXT NOT NULL,last_seen_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS guardian_pin_resets (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT NOT NULL UNIQUE,code_hash TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,expires_at TEXT NOT NULL,created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS guardian_sessions_account_idx ON guardian_sessions(account_id)",
@@ -116,6 +116,10 @@ export function ensureDatabaseSchema() {
         verified_at: "TEXT NOT NULL DEFAULT ''",
         tracking_token: "TEXT NOT NULL DEFAULT ''",
       },
+      guardian_accounts: {
+        google_uid: "TEXT NOT NULL DEFAULT ''",
+        google_email: "TEXT NOT NULL DEFAULT ''",
+      },
     };
     for (const [table, columns] of Object.entries(upgrades)) {
       const info = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
@@ -160,7 +164,7 @@ async function deriveGuardianPin(pin: string, salt: string) {
   return bytesToHex(new Uint8Array(bits));
 }
 
-function randomHex(size: number) {
+export function randomHex(size: number) {
   const bytes = new Uint8Array(size);
   crypto.getRandomValues(bytes);
   return bytesToHex(bytes);
