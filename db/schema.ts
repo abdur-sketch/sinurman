@@ -4,7 +4,7 @@ export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
-  role: text("role", { enum: ["Admin", "Kepala Asrama", "Musyrif", "Ustadz", "Wali Santri"] }).notNull(),
+  role: text("role", { enum: ["Admin", "Kepala Asrama", "Kepala Bidang Tahfidz", "Musyrif", "Ustadz", "Wali Santri"] }).notNull(),
   roomScope: text("room_scope").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });

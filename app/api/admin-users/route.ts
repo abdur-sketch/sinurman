@@ -3,7 +3,7 @@ import { isOwnerEmail } from "../../../lib/security-config";
 
 export const runtime = "nodejs";
 
-const managedRoles = new Set<Role>(["Admin", "Kepala Asrama", "Musyrif", "Ustadz"]);
+const managedRoles = new Set<Role>(["Admin", "Kepala Asrama", "Kepala Bidang Tahfidz", "Musyrif", "Ustadz"]);
 
 async function firebaseServices() {
   if (process.env.FIREBASE_RUNTIME !== "true") {

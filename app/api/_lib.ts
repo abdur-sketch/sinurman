@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { isOwnerEmail } from "../../lib/security-config";
 
-export type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
+export type Role = "Admin" | "Kepala Asrama" | "Kepala Bidang Tahfidz" | "Musyrif" | "Ustadz" | "Wali Santri";
 export type AuthenticatedUser = {
   id: number;
   email: string;
@@ -416,6 +416,9 @@ export function canWrite(role: Role, resource: string) {
   if (role === "Admin") return true;
   if (role === "Kepala Asrama") {
     return ["tahfidz", "tahsin", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "grades"].includes(resource);
+  }
+  if (role === "Kepala Bidang Tahfidz") {
+    return resource === "tahfidz";
   }
   if (role === "Musyrif") {
     return ["tahfidz", "tahsin", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "grades"].includes(resource);

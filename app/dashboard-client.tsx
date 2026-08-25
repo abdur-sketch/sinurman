@@ -8,7 +8,7 @@ import BrandMark from "./brand-mark";
 import { QURAN_SURAHS, quranRangeAmount } from "./quran-data";
 import { firebaseClient } from "../lib/firebase/client";
 
-type Role = "Admin" | "Kepala Asrama" | "Musyrif" | "Ustadz" | "Wali Santri";
+type Role = "Admin" | "Kepala Asrama" | "Kepala Bidang Tahfidz" | "Musyrif" | "Ustadz" | "Wali Santri";
 type Resource = "students" | "employees" | "classes" | "tahfidz" | "tahsin" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
 type Row = Record<string, string | number | null>;
 type AppData = {
@@ -1033,7 +1033,7 @@ function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row
     <h2>{row?"Ubah hak akses":"Buat akun sekolah"}</h2><p>{row?"Perubahan peran akan mengeluarkan sesi lama pengguna.":"Email dan sandi ini dapat langsung dipakai pada halaman login Admin."}</p>
     <div className="form-grid"><label>Nama lengkap<input required value={name} onChange={event=>setName(event.target.value)}/></label>
       <label>Email login<input required type="email" autoComplete="username" readOnly={!!row} value={email} onChange={event=>setEmail(event.target.value)}/></label>
-      <label>Peran<select required value={role} onChange={event=>setRole(event.target.value as Role)}><option>Admin</option><option>Kepala Asrama</option><option>Musyrif</option><option>Ustadz</option></select></label>
+      <label>Peran<select required value={role} onChange={event=>setRole(event.target.value as Role)}><option>Admin</option><option>Kepala Asrama</option><option>Kepala Bidang Tahfidz</option><option>Musyrif</option><option>Ustadz</option></select></label>
       <label>Kamar/asrama penugasan<select required={role==="Musyrif"||role==="Kepala Asrama"} value={roomScope} onChange={event=>setRoomScope(event.target.value)}><option value="">Tidak dibatasi</option>{rooms.map(room=><option key={String(room.id)} value={String(room.name)}>{room.name}</option>)}</select></label>
       {!row&&<label className="wide">Sandi sementara<input required minLength={8} type="password" autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} placeholder="Minimal 8 karakter, berisi huruf dan angka"/><small>Bagikan sandi secara pribadi dan minta pengguna segera menggantinya.</small></label>}
     </div>{error&&<div className="form-error">{error}</div>}
@@ -1394,7 +1394,7 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
     {key:"student_id",label:"Santri",type:"student"},{key:"invoice_no",label:"Nomor tagihan"},{key:"category",label:"Kategori",options:["SPP","Daftar Ulang","Kegiatan","Seragam","Lainnya"]},{key:"amount",label:"Nominal",type:"number"},{key:"due_date",label:"Jatuh tempo",type:"date"},{key:"status",label:"Status",options:["Belum Dibayar","Tertunda","Lunas"]},
   ],
   users: [
-    {key:"name",label:"Nama pengguna"},{key:"email",label:"Email",type:"email"},{key:"role",label:"Peran",options:["Admin","Kepala Asrama","Musyrif","Ustadz","Wali Santri"]},{key:"room_scope",label:"Kamar/asrama penugasan"},
+    {key:"name",label:"Nama pengguna"},{key:"email",label:"Email",type:"email"},{key:"role",label:"Peran",options:["Admin","Kepala Asrama","Kepala Bidang Tahfidz","Musyrif","Ustadz","Wali Santri"]},{key:"room_scope",label:"Kamar/asrama penugasan"},
   ],
 };
 
@@ -1680,6 +1680,8 @@ export default function DashboardClient() {
       ? new Set<PageKey>(["portalwali"])
       : role === "Musyrif"
         ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","kesehatan","pengumuman","konseling"])
+        : role === "Kepala Bidang Tahfidz"
+          ? new Set<PageKey>(["dashboard","santri","tahfidz","laporan"])
         : role === "Kepala Asrama"
           ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
       : role === "Ustadz"

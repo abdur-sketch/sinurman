@@ -6,7 +6,7 @@ import { isOwnerEmail } from "../security-config";
 // Keep the descriptive name on other runtimes so it cannot collide with their auth.
 const cookieName = process.env.FIREBASE_RUNTIME === "true" ? "__session" : "sinurman_admin_session";
 const sessionDays = 7;
-const internalRoles = new Set(["Admin", "Kepala Asrama", "Musyrif", "Ustadz"]);
+const internalRoles = new Set(["Admin", "Kepala Asrama", "Kepala Bidang Tahfidz", "Musyrif", "Ustadz"]);
 
 export type FirebaseSession = {
   uid:string;

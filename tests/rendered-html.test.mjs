@@ -429,7 +429,7 @@ test("runtime Firebase menolak header lama dan membatasi sesi dashboard internal
   ]);
   assert.match(api, /\} else \{\s+const email = request\.headers\.get\("oai-authenticated-user-email"\)/);
   assert.match(serverAuth, /if \(process\.env\.FIREBASE_RUNTIME === "true"\)[\s\S]*return null;/);
-  assert.match(session, /const internalRoles = new Set\(\["Admin", "Kepala Asrama", "Musyrif", "Ustadz"\]\)/);
+  assert.match(session, /const internalRoles = new Set\(\["Admin", "Kepala Asrama", "Kepala Bidang Tahfidz", "Musyrif", "Ustadz"\]\)/);
   assert.match(session, /Akun belum diberi akses oleh Admin SINURMAN/);
 });
 
