@@ -231,11 +231,17 @@ export async function setGuardianPin(phoneInput: unknown, pin: string) {
   const salt = randomHex(16);
   const hash = await deriveGuardianPin(pin, salt);
   const now = new Date().toISOString();
-  await database().prepare(
-    `INSERT INTO guardian_accounts (phone,pin_hash,pin_salt,status,failed_attempts,locked_until,created_at,updated_at)
-     VALUES (?,?,?,'Aktif',0,'',?,?)
-     ON CONFLICT(phone) DO UPDATE SET pin_hash=excluded.pin_hash,pin_salt=excluded.pin_salt,status='Aktif',failed_attempts=0,locked_until='',updated_at=excluded.updated_at`,
-  ).bind(phone, hash, salt, now, now).run();
+  // Keep this as separate UPDATE/INSERT statements. Some production SQLite/D1
+  // deployments reject the `ON CONFLICT ... DO UPDATE` form used here, even
+  // though it works in local SQLite.
+  const updated = await database().prepare(
+    "UPDATE guardian_accounts SET pin_hash=?,pin_salt=?,status='Aktif',failed_attempts=0,locked_until='',updated_at=? WHERE phone=?",
+  ).bind(hash, salt, now, phone).run();
+  if (!Number(updated.meta.changes ?? 0)) {
+    await database().prepare(
+      "INSERT INTO guardian_accounts (phone,pin_hash,pin_salt,status,failed_attempts,locked_until,created_at,updated_at) VALUES (?,?,?,'Aktif',0,'',?,?)",
+    ).bind(phone, hash, salt, now, now).run();
+  }
   const account = await database().prepare("SELECT id FROM guardian_accounts WHERE phone=?").bind(phone).first<{id:number}>();
   if (account) await database().prepare("DELETE FROM guardian_sessions WHERE account_id=?").bind(account.id).run();
   return phone;
