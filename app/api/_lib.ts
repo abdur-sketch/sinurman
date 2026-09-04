@@ -431,6 +431,9 @@ export function canWrite(role: Role, resource: string) {
 
 export async function seedIfNeeded() {
   await ensureDatabaseSchema();
+  // Demo fixtures are useful for local development only. Never recreate them
+  // in Firebase production after an administrator has cleared the database.
+  if (process.env.FIREBASE_RUNTIME === "true") return;
   const db = database();
   const count = await db.prepare("SELECT COUNT(*) AS total FROM students").first<{ total: number }>();
   const now = new Date().toISOString();
