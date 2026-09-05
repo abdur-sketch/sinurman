@@ -1735,6 +1735,17 @@ export default function DashboardClient() {
   },[]);
 
   useEffect(()=>{ const timer=window.setTimeout(()=>void loadData(),0); return ()=>window.clearTimeout(timer); },[loadData]);
+  useEffect(()=>{
+    const flush=async()=>{
+      const queued=JSON.parse(localStorage.getItem("sinurman-offline-queue")||"[]") as Array<Record<string,unknown>>;
+      if(!queued.length)return;
+      const remaining=[] as Array<Record<string,unknown>>;
+      for(const item of queued){try{const response=await fetch("/api/records",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(item)});if(!response.ok)remaining.push(item);}catch{remaining.push(item);}}
+      localStorage.setItem("sinurman-offline-queue",JSON.stringify(remaining));
+      if(queued.length!==remaining.length){notify(`${queued.length-remaining.length} catatan offline berhasil disinkronkan.`);await loadData();}
+    };
+    window.addEventListener("online",flush); void flush(); return()=>window.removeEventListener("online",flush);
+  },[loadData,notify]);
 
   useEffect(()=>{
     const savedTheme=window.localStorage.getItem("sinurman-theme");
@@ -1806,7 +1817,15 @@ export default function DashboardClient() {
   }, [searchIndex, searchQuery]);
 
   async function saveRecord(resource: Resource, row: Row | undefined, values: Record<string, unknown>) {
-    const response=await fetch("/api/records",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:row?"update":"create",resource,id:row?.id,data:values})});
+    const payload={action:row?"update":"create",resource,id:row?.id,data:values};
+    let response:Response;
+    try { response=await fetch("/api/records",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)}); }
+    catch {
+      const queue=JSON.parse(localStorage.getItem("sinurman-offline-queue")||"[]") as unknown[];
+      queue.push({...payload,queuedAt:new Date().toISOString()});
+      localStorage.setItem("sinurman-offline-queue",JSON.stringify(queue));
+      setEditor(null); notify("Koneksi terputus. Data disimpan di perangkat dan akan dikirim saat online."); return;
+    }
     const result=await response.json() as {error?:string};
     if(!response.ok) throw new Error(result.error||"Gagal menyimpan data.");
     setEditor(null); notify("Data berhasil disimpan."); await loadData();
