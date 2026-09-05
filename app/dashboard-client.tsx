@@ -67,6 +67,7 @@ const emptyData: AppData = {
   walletAccounts: [], walletEntries: [], walletTopups: [], canteenProducts: [], canteenSales: [], canteenSaleItems: [], guardianAccounts: [],
 };
 type PageKey =
+  | "setup"
   | "dashboard"
   | "santri"
   | "pegawai"
