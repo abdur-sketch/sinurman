@@ -68,6 +68,7 @@ const emptyData: AppData = {
 };
 type PageKey =
   | "setup"
+  | "kalender"
   | "dashboard"
   | "santri"
   | "pegawai"
@@ -151,6 +152,7 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
     label: "SISTEM",
     items: [
       { key: "setup", icon: "fi-rr-rocket-lunch", label: "Setup Pesantren" },
+      { key: "kalender", icon: "fi-rr-calendar-days", label: "Kalender Pendidikan" },
       { key: "pengguna", icon: "fi-rr-user-gear", label: "Pengguna & Audit" },
       { key: "integrasi", icon: "fi-rr-settings-sliders", label: "Integrasi & Backup" },
     ],
@@ -181,6 +183,7 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
   integrasi: { title: "Integrasi & Backup", subtitle: "Sambungkan pembayaran, WhatsApp, impor, dan cadangan data." },
   portalwali: { title: "Portal Wali Santri", subtitle: "Ringkasan perkembangan dan layanan untuk orang tua." },
   setup: { title: "Setup Pesantren", subtitle: "Siapkan data dasar SINURMAN sebelum operasional dimulai." },
+  kalender: { title: "Kalender Pendidikan", subtitle: "Kelola agenda akademik dan kegiatan pesantren." },
 };
 
 const normalizeSearch = (value: unknown) =>
@@ -1880,6 +1883,7 @@ export default function DashboardClient() {
   })();
 
   function selectPage(key: PageKey) {
+    if(key==="kalender") { window.location.href="/kalender"; return; }
     if(role==="Wali Santri"&&key!=="portalwali") {
       setPage("portalwali");
       setSidebarOpen(false);
