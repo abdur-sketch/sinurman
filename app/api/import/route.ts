@@ -37,8 +37,19 @@ export async function POST(request: Request) {
       ? parseCsv(bytes.toString("utf8"))
       : await readSheet(bytes) as unknown[][];
     const rows=recordsFromRows(tabularRows);
+    const mode=String(form.get("mode")||"import");
     const valid=rows.filter(r=>r.nama&&r.nis&&r.kelas);
+    const invalid=rows.filter(r=>!r.nama||!r.nis||!r.kelas).map((r,index)=>({row:index+2,reason:"Nama, NIS, dan kelas wajib diisi."}));
     if(!valid.length) return Response.json({error:"Kolom wajib: nama, nis, kelas. Kolom opsional: kamar, nama_wali, whatsapp, email_wali."},{status:400});
+    if(mode==="preview") {
+      const nisList=valid.map(r=>String(r.nis).trim()).filter(Boolean);
+      const duplicateNis=nisList.filter((nis,index)=>nisList.indexOf(nis)!==index);
+      const existing=nisList.length
+        ? await database().prepare(`SELECT nis FROM students WHERE nis IN (${nisList.map(()=>"?").join(",")})`).bind(...nisList).all<{nis:string}>()
+        : {results:[] as Array<{nis:string}>};
+      const existingNis=(existing.results||[]).map(row=>String(row.nis));
+      return Response.json({ok:true,preview:true,total:rows.length,valid:valid.length,invalid,duplicateNis:[...new Set(duplicateNis)],existingNis:[...new Set(existingNis)],sample:valid.slice(0,8)});
+    }
     const now=new Date().toISOString();
     const statements=valid.slice(0,500).map(r=>database().prepare("INSERT OR IGNORE INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .bind(String(r.nama),String(r.nis),String(r.kelas),String(r.kamar||"-"),String(r.nama_wali||"-"),normalizeGuardianPhone(r.whatsapp),String(r.email_wali||"").toLocaleLowerCase("id-ID"),"Aktif",now));
