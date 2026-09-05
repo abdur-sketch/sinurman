@@ -1072,6 +1072,13 @@ h4 {
 .ppdb-public-panel { margin-top:20px; border-radius:20px; box-shadow:0 24px 65px rgba(24,49,83,.12); scroll-margin-top:95px; }.ppdb-public-tabs { padding:10px; }.ppdb-public-tabs button { min-height:50px; font-size:11px; }.ppdb-public-tabs button.active { color:#176c58; background:#e4f5ef; }
 .ppdb-public-form { padding:36px; }.ppdb-public-form h2,.ppdb-status-form h2 { font-size:25px; }.ppdb-public-form>header span,.ppdb-status-form>span { color:#168269; font-size:9px; }.ppdb-public-form .form-grid label,.ppdb-status-form>label { font-size:10px; }.ppdb-public-form .form-grid input,.ppdb-public-form .form-grid select,.ppdb-public-form .form-grid textarea,.ppdb-status-form input { min-height:45px; border-radius:10px; font-size:11px; }
 
+.setup-wizard-app { display:flex; flex-direction:column; gap:18px; }
+.setup-hero { min-height:250px; padding:34px 40px; background:radial-gradient(circle at 78% 15%,rgba(123,195,255,.26),transparent 26%),linear-gradient(125deg,#142b4c,#255d9a 58%,#526ed1); }
+.setup-progress-label { align-self:center; color:rgba(255,255,255,.72); font-size:10px; }
+.setup-progress-ring { width:142px; height:142px; flex:0 0 142px; display:flex; align-items:center; justify-content:center; flex-direction:column; border:10px solid rgba(255,255,255,.16); border-top-color:#a8ebd5; border-right-color:#a8ebd5; border-radius:50%; }
+.setup-progress-ring strong { font-size:29px; }.setup-progress-ring span { margin-top:4px; color:rgba(255,255,255,.7); font-size:9px; }
+.setup-step-list { display:grid; gap:11px; }.setup-step { display:flex; align-items:center; gap:17px; padding:19px 22px; border-radius:15px; }.setup-step-number { width:34px; height:34px; flex:0 0 34px; display:grid; place-items:center; border-radius:50%; color:#2864bb; background:#e8f0ff; font-size:13px; font-weight:800; }.setup-step.done .setup-step-number { color:#0b8b64; background:#dcf7eb; }.setup-step-copy { flex:1; min-width:0; }.setup-step-copy>span { color:#7d91a9; font-size:8px; font-weight:800; letter-spacing:1.2px; }.setup-step-copy h3 { margin:5px 0 3px; color:#1a3555; font-size:14px; }.setup-step-copy p { margin:0; color:#7890a8; font-size:10px; line-height:1.5; }.setup-note { padding:17px 21px; border-radius:14px; background:#f4f8ff; }.setup-note strong { color:#244566; font-size:11px; }.setup-note p { margin:5px 0 0; color:#7890a8; font-size:10px; line-height:1.5; }
+
 @media (max-width:1050px) {
   .guardian-quick-actions { grid-template-columns:repeat(3,1fr); }
   .ppdb-public-hero { gap:38px; }
@@ -1082,4 +1089,5 @@ h4 {
   .admissions-app .admission-banner { min-height:245px; align-items:flex-start; flex-direction:column; padding:29px 23px; }.admissions-app .admission-banner:after { right:2%; font-size:80px; }
   .guardian-hero { padding:25px 20px; }.guardian-profile { align-items:flex-start; }.guardian-hero .large-avatar { width:65px; height:65px; flex-basis:65px; font-size:18px; }.guardian-live-status { align-items:flex-start; flex-direction:column; gap:4px; }.guardian-quick-actions { grid-template-columns:1fr 1fr; }.guardian-quick-actions button:last-child { grid-column:1/-1; }
   .ppdb-public-hero { min-height:auto; padding:52px 20px 90px; }.ppdb-public-hero h1 { font-size:45px; letter-spacing:-2px; }.ppdb-hero-actions { flex-wrap:wrap; }.ppdb-hero-actions a,.ppdb-hero-actions button { flex:1; }.ppdb-trust-strip { grid-template-columns:1fr; margin-top:-42px; }.ppdb-trust-strip article { min-height:75px; border-right:0; border-bottom:1px solid #e5eeeb; }.ppdb-public-panel { margin-top:18px; }.ppdb-public-form { padding:25px 17px; }
+  .setup-hero { padding:28px 23px; }.setup-progress-ring { width:110px; height:110px; flex-basis:110px; align-self:flex-end; margin-top:-44px; }.setup-step { align-items:flex-start; flex-wrap:wrap; padding:17px; }.setup-step .secondary-button { margin-left:51px; }
 }

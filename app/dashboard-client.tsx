@@ -149,6 +149,7 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
   {
     label: "SISTEM",
     items: [
+      { key: "setup", icon: "fi-rr-rocket-lunch", label: "Setup Pesantren" },
       { key: "pengguna", icon: "fi-rr-user-gear", label: "Pengguna & Audit" },
       { key: "integrasi", icon: "fi-rr-settings-sliders", label: "Integrasi & Backup" },
     ],
@@ -178,6 +179,7 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
   pengguna: { title: "Pengguna & Audit", subtitle: "Atur peran dan pantau seluruh aktivitas penting." },
   integrasi: { title: "Integrasi & Backup", subtitle: "Sambungkan pembayaran, WhatsApp, impor, dan cadangan data." },
   portalwali: { title: "Portal Wali Santri", subtitle: "Ringkasan perkembangan dan layanan untuk orang tua." },
+  setup: { title: "Setup Pesantren", subtitle: "Siapkan data dasar SINURMAN sebelum operasional dimulai." },
 };
 
 const normalizeSearch = (value: unknown) =>
@@ -300,6 +302,22 @@ function Overview({ data, onNavigate }: { data: AppData; onNavigate:(page:PageKe
       </section>
     </>
   );
+}
+
+function SetupWizard({ data, onNavigate }: { data: AppData; onNavigate:(page:PageKey)=>void }) {
+  const steps = [
+    { title: "Profil pesantren & periode", copy: "Buka periode akademik dan pastikan identitas pesantren sudah benar.", page: "integrasi" as PageKey, done: true, action: "Periksa pengaturan" },
+    { title: "Buat kelas dan kamar", copy: "Tambahkan kelas SMP–SMK, jurusan, wali kelas, serta kamar asrama.", page: "kelas" as PageKey, done: data.classes.length > 0 && data.rooms.length > 0, action: "Kelola kelas" },
+    { title: "Impor atau tambah santri", copy: "Gunakan impor Excel/CSV untuk memasukkan banyak santri sekaligus.", page: "santri" as PageKey, done: data.students.length > 0, action: "Buka data santri" },
+    { title: "Buat pengguna internal", copy: "Tambahkan ustadz, musyrif, kepala asrama, dan kepala tahfidz sesuai hak akses.", page: "pengguna" as PageKey, done: data.users.length > 1, action: "Kelola pengguna" },
+    { title: "Aktifkan kartu & SINURPAY", copy: "Cetak QR santri dan siapkan saldo/tabungan cashless bila digunakan.", page: "sinurpay" as PageKey, done: data.walletAccounts.length > 0, action: "Buka SINURPAY" },
+  ];
+  const completed=steps.filter(step=>step.done).length;
+  return <div className="feature-app setup-wizard-app">
+    <section className="feature-hero setup-hero"><div className="feature-hero-copy"><span className="feature-kicker">PERSIAPAN OPERASIONAL</span><h2>SINURMAN siap diisi<br/>dengan data pesantren Anda.</h2><p>Ikuti langkah singkat ini agar modul akademik, kepesantrenan, wali, dan keuangan berjalan rapi sejak hari pertama.</p><div className="feature-hero-actions"><button className="feature-primary" onClick={()=>onNavigate(steps.find(step=>!step.done)?.page||"santri")}>Lanjutkan setup →</button><span className="setup-progress-label">{completed}/{steps.length} langkah selesai</span></div></div><div className="setup-progress-ring" style={{"--progress":`${Math.round(completed/steps.length*360)}deg`} as React.CSSProperties}><strong>{Math.round(completed/steps.length*100)}%</strong><span>siap operasional</span></div></section>
+    <section className="setup-step-list">{steps.map((step,index)=><article className={`card setup-step ${step.done?"done":""}`} key={step.title}><div className="setup-step-number">{step.done?"✓":index+1}</div><div className="setup-step-copy"><span>LANGKAH {index+1}</span><h3>{step.title}</h3><p>{step.copy}</p></div><button className="secondary-button" onClick={()=>onNavigate(step.page)}>{step.action} →</button></article>)}</section>
+    <section className="card setup-note"><strong>Catatan keamanan</strong><p>Masukkan data asli saja. Password, API key, dan token pembayaran tidak ditampilkan atau disimpan di halaman publik.</p></section>
+  </div>;
 }
 
 function TahfidzPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void }) {
@@ -1816,6 +1834,7 @@ export default function DashboardClient() {
     const actions=(resource:Resource)=>({onAdd:()=>setEditor({resource}),onEdit:(row:Row)=>setEditor({resource,row}),onDelete:(row:Row)=>void deleteRecord(resource,row)});
     switch (page) {
       case "dashboard": return <Overview data={data} onNavigate={selectPage} />;
+      case "setup": return <SetupWizard data={data} onNavigate={selectPage} />;
       case "santri": return <StudentsPage data={data} editable={role==="Admin"} {...actions("students")} onCard={setCardStudent} />;
       case "pegawai": return <EmployeesPage rows={data.employees} {...actions("employees")} />;
       case "kelas": return <ClassesPromotionPage data={data} {...actions("classes")} reload={loadData} notify={notify} />;
