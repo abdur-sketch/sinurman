@@ -35,7 +35,7 @@ button { cursor: pointer; }
 .brand-home { min-width:0; display:flex; align-items:center; gap:11px; padding:0; border:0; background:transparent; text-align:left; }
 .brand-home>span:last-child { display:flex; flex-direction:column; }
 .brand strong { font-size: 17px; letter-spacing:.8px; color:var(--navy); line-height:1.05; }
-.brand small { color:var(--muted); margin-top:4px; font-size:11px; }
+.brand small { color:var(--muted); margin-top:4px; font-size:9px; white-space:nowrap; }
 .brand-home:hover .brand-mark { transform:translateY(-1px); box-shadow:0 8px 18px rgba(44,123,229,.34); }
 .brand-home:focus-visible,.sidebar-help:focus-visible,.sidebar-footer button:focus-visible { outline:3px solid rgba(44,123,229,.22); outline-offset:2px; }
 .close-sidebar { display:none; margin-left:auto; border:0; background:transparent; font-size:25px; color:var(--muted); }
