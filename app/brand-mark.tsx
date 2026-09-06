@@ -21,11 +21,12 @@ export default function BrandMark({ className = "" }: { className?: string }) {
   return (
     <span className={`${className} custom-brand-mark`.trim()} aria-label="Logo SINURMAN">
       {failed ? (
-        "ن"
+        <span className="brand-fallback-mark">N</span>
       ) : (
         <img
           src={`/api/branding/logo?v=${version}`}
           alt=""
+          loading="eager"
           onError={() => setFailed(true)}
         />
       )}

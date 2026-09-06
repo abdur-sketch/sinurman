@@ -27,9 +27,10 @@ button { cursor: pointer; }
 .app-shell.dark { --bg:#101c2c; --card:#17273b; --text:#dce7f4; --muted:#92a4b8; --line:#2b3b4e; --navy:#e2eaf3; --navy-2:#f1f5f9; --shadow:0 8px 20px rgba(0,0,0,.16); }
 .sidebar { width: 252px; position: fixed; inset: 0 auto 0 0; z-index: 30; padding: 0 18px; background: var(--card); border-right: 1px solid var(--line); overflow-y: auto; transition: transform .25s ease; }
 .brand { height: 76px; display: flex; align-items: center; gap: 11px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
-.brand-mark { width: 39px; height: 39px; border-radius: 12px; display: grid; place-items: center; color:#fff; font-family: Georgia,serif; font-size: 23px; background: linear-gradient(145deg,#2c7be5,#1858ad); box-shadow:0 6px 14px rgba(44,123,229,.28); }
-.custom-brand-mark { overflow:hidden; flex:0 0 auto; }
-.custom-brand-mark img { width:100%; height:100%; display:block; object-fit:contain; }
+.brand-mark { width: 43px; height: 43px; border-radius: 12px; display: grid; place-items: center; color:#fff; font-family: Georgia,serif; font-size: 23px; background: linear-gradient(145deg,#2c7be5,#1858ad); box-shadow:0 6px 14px rgba(44,123,229,.28); }
+.custom-brand-mark { overflow:hidden; flex:0 0 auto; background:#173657; border:1px solid rgba(44,123,229,.22); }
+.custom-brand-mark img { width:100%; height:100%; display:block; object-fit:contain; padding:3px; }
+.brand-fallback-mark { display:grid; place-items:center; width:100%; height:100%; color:#fff; font-family:Georgia,serif; font-size:24px; font-weight:800; }
 .brand-home { min-width:0; display:flex; align-items:center; gap:11px; padding:0; border:0; background:transparent; text-align:left; }
 .brand-home>span:last-child { display:flex; flex-direction:column; }
 .brand strong { font-size: 17px; letter-spacing:.8px; color:var(--navy); line-height:1.05; }

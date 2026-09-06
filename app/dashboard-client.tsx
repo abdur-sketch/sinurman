@@ -160,7 +160,7 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
 ];
 
 const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
-  dashboard: { title: "Assalamu’alaikum, Ahmad 👋", subtitle: "Berikut ringkasan perkembangan pesantren hari ini." },
+  dashboard: { title: "Ringkasan Pesantren", subtitle: "Berikut ringkasan perkembangan pesantren hari ini." },
   santri: { title: "Data Santri", subtitle: "Kelola profil, kelas, kamar, dan status seluruh santri." },
   pegawai: { title: "Data Pegawai", subtitle: "Kelola identitas, jabatan, unit kerja, dan status pegawai pesantren." },
   kelas: { title: "Kelas & Kenaikan", subtitle: "Kelola master kelas, proses kenaikan otomatis, dan arsip alumni." },
@@ -2033,7 +2033,7 @@ export default function DashboardClient() {
         </header>
 
         <main>
-          <div className="page-heading"><div><p>Beranda <span>/</span> {page==="dashboard"?"Ringkasan":title.title}</p><h1>{page==="dashboard"&&data.user?.name?`Assalamu’alaikum, ${data.user.name} 👋`:title.title}</h1><span>{title.subtitle}</span></div><div className="heading-actions"><button className="secondary-button" onClick={()=>void loadData()}>↻ Perbarui</button>{role!=="Wali Santri"&&<button className="primary-button" onClick={()=>selectPage("laporan")}>▥ Buat Laporan</button>}</div></div>
+          <div className="page-heading"><div><p>Beranda <span>/</span> {page==="dashboard"?"Ringkasan":title.title}</p><h1>{page==="dashboard"?`Assalamu’alaikum, ${data.user?.name||"Administrator"} 👋`:title.title}</h1><span>{title.subtitle}</span></div><div className="heading-actions"><button className="secondary-button" onClick={()=>void loadData()}>↻ Perbarui</button>{role!=="Wali Santri"&&<button className="primary-button" onClick={()=>selectPage("laporan")}>▥ Buat Laporan</button>}</div></div>
           {loading&&<div className="sync-banner">Menyinkronkan data SINURMAN…</div>}
           {loadError&&<div className="sync-banner error">Data online belum tersedia: {loadError} <button onClick={()=>void loadData()}>Coba lagi</button></div>}
           {content}
