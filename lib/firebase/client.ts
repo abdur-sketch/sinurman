@@ -2,6 +2,7 @@
 
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getMessaging, getToken, isSupported, type Messaging } from "firebase/messaging";
 
 function firebaseConfig() {
   return {
@@ -21,4 +22,16 @@ export function firebaseClient() {
   }
   const app=getApps().length?getApp():initializeApp(config);
   return {app,auth:getAuth(app)};
+}
+
+export async function firebaseMessagingToken() {
+  if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) return "";
+  if (!(await isSupported())) return "";
+  const { app } = firebaseClient();
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") return "";
+  const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+  const messaging: Messaging = getMessaging(app);
+  const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+  return getToken(messaging, { serviceWorkerRegistration: registration, ...(vapidKey ? { vapidKey } : {}) });
 }

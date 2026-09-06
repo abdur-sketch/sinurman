@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmailAuthProvider, multiFactor, reauthenticateWithCredential, signInWithEmailAndPassword, TotpMultiFactorGenerator, type TotpSecret, updatePassword } from "firebase/auth";
 import BrandMark from "./brand-mark";
 import { QURAN_SURAHS, quranRangeAmount } from "./quran-data";
-import { firebaseClient } from "../lib/firebase/client";
+import { firebaseClient, firebaseMessagingToken } from "../lib/firebase/client";
 
 type Role = "Admin" | "Kepala Asrama" | "Kepala Bidang Tahfidz" | "Musyrif" | "Ustadz" | "Wali Santri";
 type Resource = "students" | "employees" | "classes" | "tahfidz" | "tahsin" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
@@ -1686,6 +1686,7 @@ export default function DashboardClient() {
   const [dark, setDark] = useState(false);
   const [topbarPanel,setTopbarPanel]=useState<"notifications"|"profile"|null>(null);
   const [notificationsRead,setNotificationsRead]=useState(false);
+  const [pushStatus,setPushStatus]=useState<"idle"|"working"|"enabled"|"unsupported"|"denied">("idle");
   const [toast, setToast] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1923,6 +1924,22 @@ export default function DashboardClient() {
     window.setTimeout(() => setToast(""), 2600);
   }
 
+  async function enableDeviceNotifications() {
+    setPushStatus("working");
+    try {
+      const token = await firebaseMessagingToken();
+      if (!token) { setPushStatus(Notification.permission === "denied" ? "denied" : "unsupported"); notify("Notifikasi perangkat belum dapat diaktifkan pada browser ini."); return; }
+      const response = await fetch("/api/push-token", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Token perangkat gagal disimpan.");
+      setPushStatus("enabled");
+      notify("Notifikasi perangkat berhasil diaktifkan.");
+    } catch (error) {
+      setPushStatus("unsupported");
+      notify(error instanceof Error ? error.message : "Notifikasi perangkat gagal diaktifkan.");
+    }
+  }
+
   function changeTheme(nextDark:boolean) {
     setDark(nextDark);
     window.localStorage.setItem("sinurman-theme",nextDark?"dark":"light");
@@ -2006,7 +2023,7 @@ export default function DashboardClient() {
             <button type="button" className="theme-toggle" onClick={()=>changeTheme(!dark)} aria-label={dark?"Aktifkan mode terang":"Aktifkan mode gelap"} title={dark?"Mode terang":"Mode gelap"}>{dark?"☀":"☾"}</button>
             <div className="notification-wrap">
               <button type="button" className={`notification ${topbarPanel==="notifications"?"active":""}`} onClick={()=>{setTopbarPanel(current=>current==="notifications"?null:"notifications");setNotificationsRead(true);}} aria-label={`Notifikasi${topNotices.length?` (${topNotices.length})`:""}`} aria-haspopup="menu" aria-expanded={topbarPanel==="notifications"} title="Notifikasi">♢{!notificationsRead&&topNotices.length>0&&<i />}</button>
-              {topbarPanel==="notifications"&&<div className="topbar-popover notification-menu" role="menu"><header><div><strong>Notifikasi</strong><small>{topNotices.length?`${topNotices.length} pembaruan terbaru`:"Semua sudah dibaca"}</small></div><button type="button" onClick={()=>setTopbarPanel(null)} aria-label="Tutup notifikasi">×</button></header><div className="notification-list">{topNotices.length?topNotices.map(notice=><article key={notice.id}><span>•</span><div><strong>{notice.title}</strong><p>{notice.copy}</p><small>{notice.meta}</small></div></article>):<div className="notification-empty"><b>✓</b><strong>Belum ada notifikasi</strong><span>Pembaruan pesantren akan muncul di sini.</span></div>}</div><button type="button" className="popover-action" onClick={()=>{selectPage(role==="Admin"?"integrasi":role==="Wali Santri"?"portalwali":"pengumuman");setTopbarPanel(null);}}>Lihat pusat informasi →</button></div>}
+              {topbarPanel==="notifications"&&<div className="topbar-popover notification-menu" role="menu"><header><div><strong>Notifikasi</strong><small>{topNotices.length?`${topNotices.length} pembaruan terbaru`:"Semua sudah dibaca"}</small></div><button type="button" onClick={()=>setTopbarPanel(null)} aria-label="Tutup notifikasi">×</button></header><div className="notification-list">{topNotices.length?topNotices.map(notice=><article key={notice.id}><span>•</span><div><strong>{notice.title}</strong><p>{notice.copy}</p><small>{notice.meta}</small></div></article>):<div className="notification-empty"><b>✓</b><strong>Belum ada notifikasi</strong><span>Pembaruan pesantren akan muncul di sini.</span></div>}</div><button type="button" className="push-enable-button" onClick={()=>void enableDeviceNotifications()} disabled={pushStatus==="working"||pushStatus==="enabled"}>{pushStatus==="enabled"?"✓ Notifikasi perangkat aktif":pushStatus==="working"?"Mengaktifkan…":"Aktifkan notifikasi perangkat"}</button><button type="button" className="popover-action" onClick={()=>{selectPage(role==="Admin"?"integrasi":role==="Wali Santri"?"portalwali":"pengumuman");setTopbarPanel(null);}}>Lihat pusat informasi →</button></div>}
             </div>
             <span className="divider" />
             <div className="profile-wrap"><button type="button" className={`profile-button ${topbarPanel==="profile"?"active":""}`} onClick={()=>setTopbarPanel(current=>current==="profile"?null:"profile")} aria-haspopup="menu" aria-expanded={topbarPanel==="profile"}><span>{(data.user?.name||"Pengguna").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{data.user?.name||"Pengguna SINURMAN"}</strong><small>{role}</small></div><i>{topbarPanel==="profile"?"⌃":"⌄"}</i></button>
