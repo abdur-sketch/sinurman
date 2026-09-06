@@ -486,6 +486,8 @@ test("presensi QR dan notifikasi WhatsApp otomatis terintegrasi", async () => {
   ]);
   assert.match(card, /app:"SINURMAN"/);
   assert.match(qr, /payload\.app!=="SINURMAN"/);
+  assert.match(qr, /walletToken/);
+  assert.match(qr, /Token kartu tidak cocok/);
   assert.match(qr, /student_id=\? AND record_date=\?/);
   assert.match(qr, /Santri berada di luar penugasan kamar Anda/);
   assert.match(qr, /notifyRecordChange\("attendance"/);
