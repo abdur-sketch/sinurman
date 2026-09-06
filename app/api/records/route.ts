@@ -91,7 +91,7 @@ const resourceConfig = {
   },
   admissions: {
     table: "admissions",
-    columns: ["registration_no", "name", "applicant_email", "nisn", "birth_place", "birth_date", "gender", "desired_level", "guardian_name", "guardian_phone", "previous_school", "address", "status", "score", "verification_note", "verified_by", "verified_at", "created_at"],
+    columns: ["registration_no", "name", "applicant_email", "nisn", "birth_place", "birth_date", "gender", "desired_level", "guardian_name", "guardian_phone", "previous_school", "address", "status", "score", "verification_note", "verified_by", "verified_at", "wave", "test_date", "test_time", "test_location", "created_at"],
     required: ["registration_no", "name", "guardian_name", "guardian_phone", "previous_school"],
   },
   counseling: {

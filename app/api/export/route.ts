@@ -117,8 +117,8 @@ const exports:Record<string,ExportDefinition> = {
   admissions: {
     title:"Laporan Penerimaan Santri Baru",
     description:"Data pendaftar, jenjang pilihan, asal sekolah, nilai, dan verifikasi.",
-    query:"SELECT registration_no,name,desired_level,previous_school,guardian_name,status,score,created_at FROM admissions ORDER BY id DESC",
-    columns:[{key:"registration_no",label:"No. Daftar",weight:1.2},{key:"name",label:"Calon Santri",weight:1.5},{key:"desired_level",label:"Jenjang"},{key:"previous_school",label:"Asal Sekolah",weight:1.5},{key:"guardian_name",label:"Wali",weight:1.3},{key:"status",label:"Status"},{key:"score",label:"Nilai"},{key:"created_at",label:"Tanggal"}],
+    query:"SELECT registration_no,name,desired_level,previous_school,guardian_name,status,score,wave,test_date,test_time,test_location,created_at FROM admissions ORDER BY id DESC",
+    columns:[{key:"registration_no",label:"No. Daftar",weight:1.2},{key:"name",label:"Calon Santri",weight:1.5},{key:"desired_level",label:"Jenjang"},{key:"previous_school",label:"Asal Sekolah",weight:1.5},{key:"guardian_name",label:"Wali",weight:1.3},{key:"status",label:"Status"},{key:"score",label:"Nilai"},{key:"wave",label:"Gelombang"},{key:"test_date",label:"Tanggal Tes"},{key:"test_time",label:"Jam Tes"},{key:"test_location",label:"Lokasi Tes"},{key:"created_at",label:"Tanggal"}],
     dateKey:"created_at",
     adminOnly:true,
   },

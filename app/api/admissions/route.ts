@@ -83,6 +83,10 @@ export async function PATCH(request: Request) {
     const status = text(body.status);
     const note = text(body.verification_note);
     const score = Math.max(0, Math.min(100, Number(body.score ?? 0)));
+    const wave = text(body.wave) || "Gelombang 1";
+    const testDate = text(body.test_date);
+    const testTime = text(body.test_time);
+    const testLocation = text(body.test_location);
     if (!id || !applicationStatuses.includes(status as typeof applicationStatuses[number])) {
       return Response.json({ error: "Data atau status verifikasi tidak valid." }, { status: 400 });
     }
@@ -93,8 +97,8 @@ export async function PATCH(request: Request) {
 
     const now = new Date().toISOString();
     await database().prepare(
-      "UPDATE admissions SET status=?,score=?,verification_note=?,verified_by=?,verified_at=? WHERE id=?",
-    ).bind(status, score, note, user.email, now, id).run();
+      "UPDATE admissions SET status=?,score=?,verification_note=?,wave=?,test_date=?,test_time=?,test_location=?,verified_by=?,verified_at=? WHERE id=?",
+    ).bind(status, score, note, wave, testDate, testTime, testLocation, user.email, now, id).run();
     await database().prepare(
       "INSERT INTO audit_logs (user_email,action,resource,record_id,detail,created_at) VALUES (?,?,?,?,?,?)",
     ).bind(user.email, "Verifikasi", "admissions", id, `${admission.registration_no} menjadi ${status}`, now).run();

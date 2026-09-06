@@ -58,7 +58,7 @@ export async function GET(request: Request) {
     const token = clean(url.searchParams.get("token"), 80);
     if (!registrationNo || !token) return Response.json({ error: "Nomor pendaftaran dan kode pelacakan wajib diisi." }, { status: 400 });
     const admission = await database().prepare(
-      `SELECT id,registration_no,name,desired_level,previous_school,status,score,verification_note,created_at
+      `SELECT id,registration_no,name,desired_level,previous_school,status,score,verification_note,wave,test_date,test_time,test_location,created_at
        FROM admissions WHERE registration_no=? AND tracking_token=?`,
     ).bind(registrationNo, token).first<Record<string, unknown>>();
     if (!admission) return Response.json({ error: "Pendaftaran tidak ditemukan. Periksa kembali nomor dan kode pelacakan." }, { status: 404 });
