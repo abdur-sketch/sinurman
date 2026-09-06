@@ -91,6 +91,11 @@ button { cursor: pointer; }
 .notification-badge { position:absolute; width:7px; height:7px; border-radius:50%; background:var(--red); border:2px solid var(--card); top:6px; right:6px; box-sizing:content-box; }
 .compact-filter { display:flex; flex-direction:column; gap:3px; color:var(--muted); font-size:8px; font-weight:700; }
 .compact-filter input,.compact-filter select { min-height:30px; padding:5px 7px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--text); font-size:8px; }
+.report-summary-card p { margin:12px 0 0; color:var(--muted); font-size:9px; line-height:1.6; }
+.student-summary-metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.student-summary-metrics>div { padding:9px; border-radius:8px; background:var(--bg); }
+.student-summary-metrics span { display:block; color:var(--muted); font-size:7px; }
+.student-summary-metrics strong { display:block; margin-top:4px; color:var(--navy); font-size:16px; }
 .divider { height:27px; width:1px; background:var(--line); margin:0 8px; }
 .topbar-dismiss { position:fixed; z-index:19; inset:0; width:100%; padding:0; border:0; background:transparent; cursor:default; }
 .topbar-popover { position:absolute; z-index:60; top:48px; right:0; overflow:hidden; border:1px solid var(--line); border-radius:12px; background:var(--card); box-shadow:0 18px 46px rgba(31,45,61,.2); color:var(--text); animation:popoverIn .16s ease; }
