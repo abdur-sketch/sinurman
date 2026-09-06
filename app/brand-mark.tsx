@@ -7,11 +7,13 @@ import { useEffect, useState } from "react";
 
 export default function BrandMark({ className = "" }: { className?: string }) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
     const refresh = () => {
       setFailed(false);
+      setLoaded(false);
       setVersion(Date.now());
     };
     window.addEventListener("sinurman-logo-updated", refresh);
@@ -20,14 +22,18 @@ export default function BrandMark({ className = "" }: { className?: string }) {
 
   return (
     <span className={`${className} custom-brand-mark`.trim()} aria-label="Logo SINURMAN">
-      {failed ? (
-        <span className="brand-fallback-mark">N</span>
-      ) : (
+      <span className="brand-fallback-mark" aria-hidden="true">N</span>
+      {!failed && (
         <img
           src={`/api/branding/logo?v=${version}`}
           alt=""
           loading="eager"
-          onError={() => setFailed(true)}
+          className={loaded ? "is-loaded" : ""}
+          onLoad={() => setLoaded(true)}
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+            setFailed(true);
+          }}
         />
       )}
     </span>
