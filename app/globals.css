@@ -85,7 +85,8 @@ button { cursor: pointer; }
 .top-actions>button:hover,.notification-wrap>button:hover,.notification-wrap>button.active { background:var(--bg); color:var(--blue); }
 .notification-wrap { position:relative; }
 .notification { position:relative; border:0; }
-.notification i { position:absolute; width:7px; height:7px; border-radius:50%; background:var(--red); border:2px solid var(--card); top:6px; right:6px; box-sizing:content-box; }
+.notification>i { font-style:normal; font-size:17px; }
+.notification-badge { position:absolute; width:7px; height:7px; border-radius:50%; background:var(--red); border:2px solid var(--card); top:6px; right:6px; box-sizing:content-box; }
 .divider { height:27px; width:1px; background:var(--line); margin:0 8px; }
 .topbar-dismiss { position:fixed; z-index:19; inset:0; width:100%; padding:0; border:0; background:transparent; cursor:default; }
 .topbar-popover { position:absolute; z-index:60; top:48px; right:0; overflow:hidden; border:1px solid var(--line); border-radius:12px; background:var(--card); box-shadow:0 18px 46px rgba(31,45,61,.2); color:var(--text); animation:popoverIn .16s ease; }
