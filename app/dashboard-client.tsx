@@ -515,7 +515,7 @@ function EmployeesPage({ rows, onAdd, onEdit, onDelete }: { rows:Row[]; onAdd:()
   const [attendanceStatus,setAttendanceStatus]=useState("Hadir");
   const [attendanceEmployee,setAttendanceEmployee]=useState(String(rows[0]?.id||""));
   const [attendanceLoading,setAttendanceLoading]=useState(false);
-  useEffect(()=>{void fetch("/api/employee-attendance",{cache:"no-store"}).then(response=>response.json()).then(result=>setAttendanceRows(Array.isArray(result.rows)?result.rows:[])).catch(()=>setAttendanceRows([]));},[]);
+  useEffect(()=>{void fetch("/api/employee-attendance",{cache:"no-store"}).then(response=>response.json() as Promise<{rows?:Row[]}>).then(result=>setAttendanceRows(Array.isArray(result.rows)?result.rows:[])).catch(()=>setAttendanceRows([]));},[]);
   async function saveEmployeeAttendance(){ if(!attendanceEmployee)return; setAttendanceLoading(true); const response=await fetch("/api/employee-attendance",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({employeeId:Number(attendanceEmployee),recordDate:attendanceDate,status:attendanceStatus})}); const result=await response.json() as {error?:string}; setAttendanceLoading(false); if(!response.ok){window.alert(result.error||"Presensi pegawai gagal disimpan.");return;} const refreshed=(await fetch("/api/employee-attendance",{cache:"no-store"}).then(value=>value.json())) as {rows?:Row[]}; setAttendanceRows(refreshed.rows||[]); }
   return <div className="employees-page">
     <section className="stats-grid four employee-stats">
