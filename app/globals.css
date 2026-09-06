@@ -91,6 +91,7 @@ button { cursor: pointer; }
 .notification-badge { position:absolute; width:7px; height:7px; border-radius:50%; background:var(--red); border:2px solid var(--card); top:6px; right:6px; box-sizing:content-box; }
 .compact-filter { display:flex; flex-direction:column; gap:3px; color:var(--muted); font-size:8px; font-weight:700; }
 .compact-filter input,.compact-filter select { min-height:30px; padding:5px 7px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--text); font-size:8px; }
+.offline-queue-note { display:inline-block; margin-top:6px; color:var(--amber); font-size:8px; font-weight:700; }
 .report-summary-card p { margin:12px 0 0; color:var(--muted); font-size:9px; line-height:1.6; }
 .student-summary-metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
 .student-summary-metrics>div { padding:9px; border-radius:8px; background:var(--bg); }
