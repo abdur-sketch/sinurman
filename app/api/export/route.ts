@@ -239,16 +239,18 @@ export async function GET(request:Request) {
     const format=url.searchParams.get("format")??"csv";
     const from=url.searchParams.get("from")?.slice(0,10)??"";
     const to=url.searchParams.get("to")?.slice(0,10)??"";
+    const studentFilter=url.searchParams.get("student")?.trim().toLowerCase()??"";
     const config=exports[type];
     if(!config) return Response.json({error:"Jenis laporan tidak valid."},{status:400});
     if(config.adminOnly&&user.role!=="Admin") return Response.json({error:"Laporan ini hanya tersedia untuk Admin."},{status:403});
     const scoped=user.role==="Musyrif"||user.role==="Kepala Asrama";
     const statement=database().prepare(scoped&&config.scopedQuery?config.scopedQuery:config.query);
     const result=scoped&&config.scopedQuery?await statement.bind(user.roomScope||"__BELUM_DITUGASKAN__").all<Record<string,unknown>>():await statement.all<Record<string,unknown>>();
-    const rows=config.dateKey?result.results.filter(row=>{
+    const dateFiltered=config.dateKey?result.results.filter(row=>{
       const value=String(row[config.dateKey!]??"").slice(0,10);
       return (!from||value>=from)&&(!to||value<=to);
     }):result.results;
+    const rows=studentFilter?dateFiltered.filter(row=>[row.nis,row.name,row.santri].some(value=>String(value??"").trim().toLowerCase()===studentFilter)):dateFiltered;
     const generatedAt=new Intl.DateTimeFormat("id-ID",{dateStyle:"long",timeStyle:"short",timeZone:"Asia/Jakarta"}).format(new Date());
     const periodLabel=from&&to?`${dateLabel(from)} - ${dateLabel(to)}`:from?`Mulai ${dateLabel(from)}`:to?`Sampai ${dateLabel(to)}`:"Seluruh data";
     if(format==="json") return Response.json({

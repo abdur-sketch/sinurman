@@ -406,7 +406,7 @@ function StudentsPage({ data, editable, onAdd, onEdit, onDelete, onCard }: { dat
       <section className="student-360-hero">
         <button className="student-360-back" onClick={()=>setSelected(null)}>← Kembali ke daftar</button>
         <div className="student-360-identity"><span>{String(selected.name).split(" ").map(value=>value[0]).slice(0,2).join("")}</span><div><small>PROFIL SANTRI 360° · SATU SANTRI, SATU ID</small><h2>{selected.name}</h2><p>{selected.nis} · {selected.class_name} · Asrama {selected.room}</p></div></div>
-        <div className="student-360-actions"><button className="secondary-button" onClick={()=>onCard(selected)}>Kartu QR</button>{editable&&<button className="primary-button" onClick={()=>onEdit(selected)}>Ubah Profil</button>}</div>
+        <div className="student-360-actions"><button className="secondary-button" onClick={()=>onCard(selected)}>Kartu QR</button><a className="secondary-button link-button" target="_blank" rel="noreferrer" href={`/cetak?type=academics&student=${encodeURIComponent(String(selected.nis||selected.name))}&auto=1`}>Cetak Rapor</a>{editable&&<button className="primary-button" onClick={()=>onEdit(selected)}>Ubah Profil</button>}</div>
       </section>
       <section className="student-360-metrics">
         <article><span>Kehadiran</span><strong>{attendanceRate}%</strong><small>{attendance.length} catatan</small></article>
