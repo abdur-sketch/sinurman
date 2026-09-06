@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 type EventRow={id:number;title:string;category:string;start_date:string;end_date:string;start_time:string;location:string;description:string;status:string};
 const monthName=new Intl.DateTimeFormat("id-ID",{month:"long",year:"numeric"});
+export const dynamic = "force-dynamic";
 export default function CalendarPage(){
   const [month,setMonth]=useState(()=>new Date(new Date().getFullYear(),new Date().getMonth(),1)); const [events,setEvents]=useState<EventRow[]>([]); const [form,setForm]=useState({title:"",category:"Kegiatan",startDate:"",endDate:"",startTime:"",location:"",description:""}); const [error,setError]=useState("");
   const load=useCallback(async()=>{const from=new Date(month.getFullYear(),month.getMonth(),1).toISOString().slice(0,10);const to=new Date(month.getFullYear(),month.getMonth()+1,0).toISOString().slice(0,10);const r=await fetch(`/api/academic-events?from=${from}&to=${to}`);const j=await r.json() as {events?:EventRow[]};setEvents(j.events||[]);},[month]); useEffect(()=>{const timer=window.setTimeout(()=>void load(),0);return()=>window.clearTimeout(timer);},[load]);
