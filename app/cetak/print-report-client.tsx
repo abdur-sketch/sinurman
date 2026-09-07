@@ -29,10 +29,11 @@ export default function PrintReportClient() {
     const type=params.get("type")||"students";
     const from=params.get("from")||"";
     const to=params.get("to")||"";
+    const student=params.get("student")||"";
     const controller=new AbortController();
     void (async()=>{
       try {
-        const response=await fetch(`/api/export?type=${encodeURIComponent(type)}&format=json&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,{cache:"no-store",signal:controller.signal});
+        const response=await fetch(`/api/export?type=${encodeURIComponent(type)}&format=json&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&student=${encodeURIComponent(student)}`,{cache:"no-store",signal:controller.signal});
         const result=await response.json() as ReportPayload&{error?:string};
         if(!response.ok) throw new Error(result.error||"Laporan tidak dapat dimuat.");
         setData(result);
