@@ -89,6 +89,7 @@ type PageKey =
   | "jadwal"
   | "penerimaan"
   | "konseling"
+  | "raporkepesantrenan"
   | "pengguna"
   | "integrasi"
   | "portalwali";
@@ -124,6 +125,7 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
       { key: "karakter", icon: "fi-rr-shield-check", label: "Rapor Karakter" },
       { key: "absensi", icon: "fi-rr-clipboard-check", label: "Absensi & Izin" },
       { key: "konseling", icon: "fi-rr-comments", label: "Pembinaan & Poin" },
+      { key: "raporkepesantrenan", icon: "fi-rr-file-chart-line", label: "Rapor Kepesantrenan" },
     ],
   },
   {
@@ -180,6 +182,7 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
   jadwal: { title: "Jadwal & Kamar", subtitle: "Kelola pelajaran, ustadz, lokasi, dan hunian santri." },
   penerimaan: { title: "Penerimaan Santri Baru", subtitle: "Pantau pendaftaran, verifikasi, tes, dan kelulusan." },
   konseling: { title: "Konseling & Pelanggaran", subtitle: "Dokumentasikan pembinaan dan tindak lanjut santri." },
+  raporkepesantrenan: { title: "Rapor Kepesantrenan", subtitle: "Ringkasan tahfidz, tahsin, ibadah, karakter, absensi, dan pembinaan." },
   pengguna: { title: "Pengguna & Audit", subtitle: "Atur peran dan pantau seluruh aktivitas penting." },
   integrasi: { title: "Integrasi & Backup", subtitle: "Sambungkan pembayaran, WhatsApp, impor, dan cadangan data." },
   portalwali: { title: "Portal Wali Santri", subtitle: "Ringkasan perkembangan dan layanan untuk orang tua." },
@@ -823,6 +826,17 @@ function CharacterPage({ data, onAdd, onEdit, onDelete }: { data:AppData; onAdd:
 
 function InventoryPage({ rows, onAdd, onEdit, onDelete }: { rows: Row[]; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void }) {
   return <section className="card data-card"><header className="card-header"><div><h3>Daftar Inventaris</h3><p>{rows.reduce((sum,x)=>sum+Number(x.quantity||0),0)} item tercatat</p></div><button className="primary-button" onClick={onAdd}>+ Tambah Barang</button></header><div className="table-wrap"><table><thead><tr><th>Nama Barang</th><th>Lokasi</th><th>Jumlah</th><th>Kondisi</th><th /></tr></thead><tbody>{rows.map((r,i)=><tr key={String(r.id)}><td><strong>{r.name}</strong></td><td>{r.location}</td><td>{r.quantity} {r.unit}</td><td><Status tone={i===2?"amber":"green"}>{r.condition}</Status></td><td><div className="row-actions"><button onClick={()=>onEdit(r)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(r)}>Hapus</button></div></td></tr>)}</tbody></table></div></section>;
+}
+
+function PesantrenReportPage({ data }: { data: AppData }) {
+  const [selectedId, setSelectedId] = useState(String(data.students[0]?.id || ""));
+  const student = data.students.find(row => String(row.id) === selectedId) || data.students[0];
+  const filter = (rows: Row[]) => rows.filter(row => String(row.student_id) === String(student?.id));
+  const tahfidz = filter(data.tahfidz), tahsin = filter(data.tahsin), mutabaah = filter(data.mutabaah), characters = filter(data.characters), attendance = filter(data.attendance), counseling = filter(data.counseling);
+  const present = attendance.filter(row => row.status === "Hadir").length;
+  const attendanceRate = attendance.length ? Math.round(present / attendance.length * 100) : 0;
+  const characterAverage = characters.length ? Math.round(characters.reduce((sum, row) => sum + Number(row.score || 0), 0) / characters.length) : 0;
+  return <><section className="card report-hero"><div><span className="section-kicker">RAPOR KEPESANTRENAN</span><h2>{student?.name || "Belum ada santri"}</h2><p>{student ? `${student.nis} · ${student.class_name} · ${student.room}` : "Tambahkan data santri terlebih dahulu."}</p></div><div className="header-actions"><select value={selectedId} onChange={event => setSelectedId(event.target.value)}>{data.students.map(row => <option key={String(row.id)} value={String(row.id)}>{row.name} · {row.class_name}</option>)}</select><button className="primary-button" onClick={() => window.print()}>Cetak Rapor</button></div></section><section className="stats-grid four"><article className="metric-card"><MiniIcon tone="green">◫</MiniIcon><div><span>Setoran Tahfidz</span><strong>{tahfidz.length}</strong><small>catatan hafalan</small></div></article><article className="metric-card"><MiniIcon tone="blue">A</MiniIcon><div><span>Penilaian Tahsin</span><strong>{tahsin.length}</strong><small>catatan bacaan</small></div></article><article className="metric-card"><MiniIcon tone="amber">✓</MiniIcon><div><span>Kehadiran</span><strong>{attendanceRate}%</strong><small>{present} dari {attendance.length} catatan</small></div></article><article className="metric-card"><MiniIcon tone="violet">☆</MiniIcon><div><span>Karakter</span><strong>{characterAverage || "-"}</strong><small>{characters.length} kategori dinilai</small></div></article></section><section className="dashboard-grid"><article className="card data-card"><header className="card-header"><div><h3>Ringkasan Perkembangan</h3><p>Data kepesantrenan yang sudah tercatat</p></div></header><div className="portal-list"><div><div><strong>Tahfidz</strong><small>{tahfidz.length ? `Setoran terakhir: ${tahfidz[0].recorded_at || "-"}` : "Belum ada setoran"}</small></div><Status tone={tahfidz.length ? "green" : "amber"}>{tahfidz.length ? "Aktif" : "Kosong"}</Status></div><div><div><strong>Mutaba’ah ibadah</strong><small>{mutabaah.length ? `${mutabaah.filter(row => Number(row.completed)).length} kegiatan selesai` : "Belum ada catatan"}</small></div><Status tone={mutabaah.length ? "green" : "amber"}>{mutabaah.length ? "Tercatat" : "Kosong"}</Status></div><div><div><strong>Pembinaan</strong><small>{counseling.length ? `${counseling.length} catatan perlu ditinjau` : "Tidak ada catatan"}</small></div><Status tone={counseling.length ? "amber" : "green"}>{counseling.length ? "Perlu perhatian" : "Baik"}</Status></div></div></article><article className="card data-card"><header className="card-header"><div><h3>Status Rapor</h3><p>Kelompok data yang siap dipublikasikan</p></div></header><div className="report-readiness"><strong>{[tahfidz.length, tahsin.length, mutabaah.length, characters.length, attendance.length].filter(Boolean).length}/5</strong><span>komponen kepesantrenan terisi</span><Progress value={[tahfidz.length, tahsin.length, mutabaah.length, characters.length, attendance.length].filter(Boolean).length * 20} tone="blue" /></div></article></section></>;
 }
 
 function AnnouncementsPage({ rows, editable, onAdd, onEdit, onDelete, onNotify }: { rows: Row[]; editable:boolean; onAdd: () => void; onEdit: (row: Row) => void; onDelete: (row: Row) => void; onNotify: () => void }) {
@@ -1736,13 +1750,13 @@ export default function DashboardClient() {
     const allowed = role === "Wali Santri"
       ? new Set<PageKey>(["portalwali"])
       : role === "Musyrif"
-        ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","kesehatan","pengumuman","konseling"])
+        ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","kesehatan","pengumuman","konseling","raporkepesantrenan"])
         : role === "Kepala Bidang Tahfidz"
-          ? new Set<PageKey>(["dashboard","santri","tahfidz","laporan"])
+          ? new Set<PageKey>(["dashboard","santri","tahfidz","laporan","raporkepesantrenan"])
         : role === "Kepala Asrama"
-          ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
+          ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling","raporkepesantrenan"])
       : role === "Ustadz"
-        ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling"])
+        ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling","raporkepesantrenan"])
         : null;
     return navGroups.map(group => ({...group,items:allowed?group.items.filter(item=>allowed.has(item.key)):group.items})).filter(group=>group.items.length);
   },[role]);
@@ -1911,6 +1925,7 @@ export default function DashboardClient() {
       case "jadwal": return <SchedulePage data={data} role={role} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "penerimaan": return <AdmissionsPage data={data} role={role} reload={loadData} notify={notify} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "konseling": return <CounselingPage rows={data.counseling} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
+      case "raporkepesantrenan": return <PesantrenReportPage data={data} />;
       case "pengguna": return <UsersPage data={data} reply={row=>void replyGuardianMessage(row)} reload={loadData} notify={notify} />;
       case "integrasi": return <IntegrationsPage data={data} onImported={loadData} notify={notify} />;
       case "portalwali": return <GuardianPortal data={data} onCard={setCardStudent} onPayment={row=>void openPayment(row)} reload={loadData} notify={notify} />;
