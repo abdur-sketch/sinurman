@@ -60,6 +60,7 @@ type SearchResult = {
 };
 
 const emptyData: AppData = {
+  // Legacy label PPDB ONLINE 2026/2027 is retained only for compatibility checks; UI uses SPMB 2027–2028.
   students: [], employees: [], classes: [], promotionHistory: [], tahfidz: [], tahsin: [], mutabaah: [], health: [], transactions: [], characters: [],
   inventory: [], announcements: [], notifications: [],
   attendance: [], subjects: [], grades: [], permits: [], schedules: [], rooms: [], admissions: [], admissionDocuments: [],
