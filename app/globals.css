@@ -1068,7 +1068,7 @@ h4 {
 .mutabaah-app .progress-row strong,.mutabaah-app .attention-list strong { font-size:11px; }.mutabaah-app .progress-row small,.mutabaah-app .attention-list small { font-size:9px; }
 
 .admissions-app .admission-banner { min-height:225px; position:relative; border-radius:20px; padding:36px 40px; background:radial-gradient(circle at 88% 5%,rgba(255,255,255,.2),transparent 25%),linear-gradient(120deg,#152e52,#285eaa 56%,#7155de); box-shadow:0 22px 52px rgba(43,68,140,.24); }
-.admissions-app .admission-banner:after { content:"PPDB"; position:absolute; right:6%; bottom:-26px; color:rgba(255,255,255,.055); font-size:116px; font-weight:900; letter-spacing:-8px; }
+.admissions-app .admission-banner:after { content:"SPMB"; position:absolute; right:6%; bottom:-26px; color:rgba(255,255,255,.055); font-size:116px; font-weight:900; letter-spacing:-8px; }
 .admissions-app .admission-banner>div { position:relative; z-index:1; }.admissions-app .admission-banner>div>span { color:#c7d9ff; font-size:11px; font-weight:800; letter-spacing:1.5px; }
 .admissions-app .admission-banner>div>strong { margin:10px 0; font-size:clamp(30px,4vw,46px); letter-spacing:-1.4px; }.admissions-app .admission-banner p { font-size:12px; line-height:1.6; }
 .admissions-app .admission-banner button { position:relative; z-index:1; min-height:45px; padding:0 18px; border-radius:11px; font-weight:750; }
