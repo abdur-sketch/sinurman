@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     ).bind(
       registrationNo,
       text(body.name),
-      user.email.toLowerCase(),
+      "",
       text(body.nisn),
       text(body.birth_place),
       text(body.birth_date),

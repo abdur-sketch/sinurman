@@ -15,16 +15,12 @@ export async function POST(request: Request) {
     await ensureDatabaseSchema();
     const body = await request.json() as Record<string, unknown>;
     if (clean(body.website)) return Response.json({ ok: true });
-    const required = ["name","applicant_email","nisn","birth_place","birth_date","gender","desired_level","guardian_name","guardian_phone","previous_school","address"];
+    const required = ["name","nisn","birth_place","birth_date","gender","desired_level","guardian_name","guardian_phone","previous_school","address"];
     if (required.some((field) => !clean(body[field]))) {
       return Response.json({ error: "Semua data wajib diisi sebelum pendaftaran dikirim." }, { status: 400 });
     }
     if (!levels.has(clean(body.desired_level))) {
       return Response.json({ error: "Jenjang pilihan tidak valid." }, { status: 400 });
-    }
-    const email = clean(body.applicant_email).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return Response.json({ error: "Alamat email tidak valid." }, { status: 400 });
     }
     const registrationNo = registrationNumber();
     const trackingToken = crypto.randomUUID().replaceAll("-", "");
@@ -34,7 +30,7 @@ export async function POST(request: Request) {
        (registration_no,name,applicant_email,nisn,birth_place,birth_date,gender,desired_level,guardian_name,guardian_phone,previous_school,address,status,score,verification_note,verified_by,verified_at,tracking_token,created_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).bind(
-      registrationNo, clean(body.name), email, clean(body.nisn, 30), clean(body.birth_place), clean(body.birth_date, 20),
+      registrationNo, clean(body.name), "", clean(body.nisn, 30), clean(body.birth_place), clean(body.birth_date, 20),
       clean(body.gender, 20), clean(body.desired_level, 10), clean(body.guardian_name), normalizeGuardianPhone(body.guardian_phone),
       clean(body.previous_school), clean(body.address, 500), "Pendaftaran", 0, "", "", "", trackingToken, now,
     ).run();

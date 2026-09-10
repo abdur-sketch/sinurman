@@ -142,6 +142,10 @@ export function ensureDatabaseSchema() {
     await db.prepare("UPDATE tahfidz_records SET verse_from=CASE WHEN instr(replace(verses,'–','-'),'-')>0 THEN CAST(substr(replace(verses,'–','-'),1,instr(replace(verses,'–','-'),'-')-1) AS INTEGER) ELSE CAST(verses AS INTEGER) END WHERE verse_from=0").run();
     await db.prepare("UPDATE tahfidz_records SET verse_to=CASE WHEN instr(replace(verses,'–','-'),'-')>0 THEN CAST(substr(replace(verses,'–','-'),instr(replace(verses,'–','-'),'-')+1) AS INTEGER) ELSE CAST(verses AS INTEGER) END WHERE verse_to=0").run();
     await db.prepare("UPDATE students SET guardian_phone=CASE WHEN substr(replace(replace(replace(replace(replace(guardian_phone,'+',''),' ',''),'-',''),'(',''),')',''),1,1)='0' THEN '62'||substr(replace(replace(replace(replace(replace(guardian_phone,'+',''),' ',''),'-',''),'(',''),')',''),2) WHEN substr(replace(replace(replace(replace(replace(guardian_phone,'+',''),' ',''),'-',''),'(',''),')',''),1,1)='8' THEN '62'||replace(replace(replace(replace(replace(guardian_phone,'+',''),' ',''),'-',''),'(',''),')','') ELSE replace(replace(replace(replace(replace(guardian_phone,'+',''),' ',''),'-',''),'(',''),')','') END WHERE guardian_phone<>''").run();
+    // Guardian ownership is phone/PIN based. Clear legacy email values so old
+    // email addresses are no longer retained or used for student records.
+    await db.prepare("UPDATE students SET guardian_email='' WHERE guardian_email<>''").run();
+    await db.prepare("UPDATE admissions SET applicant_email='' WHERE applicant_email<>''").run();
   })().catch((error) => {
     schemaReady = null;
     throw error;
