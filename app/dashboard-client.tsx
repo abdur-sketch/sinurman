@@ -440,7 +440,7 @@ function StudentsPage({ data, editable, onAdd, onEdit, onDelete, onCard }: { dat
   }
   return (
     <section className="card data-card">
-      <header className="card-header responsive"><div><h3>Daftar Santri</h3><p>{rows.length} santri tersimpan pada tahun ajaran 2026/2027</p></div><div className="header-actions"><a className="secondary-button link-button" href="/api/export?type=students&format=csv">⇩ Excel/CSV</a>{editable&&<button className="primary-button" onClick={onAdd}>+ Tambah Santri</button>}</div></header>
+      <header className="card-header responsive"><div><h3>Daftar Santri</h3><p>{rows.length} santri tersimpan pada tahun ajaran 2026/2027 · Hubungkan wali cukup dengan nomor HP/WhatsApp.</p></div><div className="header-actions"><a className="secondary-button link-button" href="/api/export?type=students&format=csv">⇩ Excel/CSV</a>{editable&&<button className="primary-button" onClick={onAdd}>+ Tambah Santri</button>}</div></header>
       <div className="filters"><div className="search-field">⌕ <input value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}} placeholder="Cari nama atau NIS..." /></div><select value={classFilter} onChange={event=>{setClassFilter(event.target.value);setPage(1);}}><option>Semua Kelas</option>{classNames.map(value=><option key={value}>{value}</option>)}</select><select value={statusFilter} onChange={event=>{setStatusFilter(event.target.value);setPage(1);}}><option>Semua Status</option>{statuses.map(value=><option key={value}>{value}</option>)}</select></div>
       <div className="table-wrap"><table><thead><tr><th>Nama Santri</th><th>NIS</th><th>Kelas</th><th>Kamar</th><th>Status</th><th /></tr></thead>
         <tbody>{visibleRows.map(s=><tr key={String(s.id)}><td><button className="person person-link" onClick={()=>{setSelected(s);setDetailTab("ringkasan");}}><span>{String(s.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><strong>{s.name}</strong></button></td><td className="muted">{s.nis}</td><td>{s.class_name}</td><td>{s.room}</td><td><Status tone={s.status==="Aktif"?"green":"amber"}>{s.status}</Status></td><td><div className="row-actions"><button onClick={()=>{setSelected(s);setDetailTab("ringkasan");}}>Lihat 360°</button><button onClick={()=>onCard(s)}>QR</button>{editable&&<><button onClick={()=>onEdit(s)}>Ubah</button><button className="danger-link" onClick={()=>onDelete(s)}>Hapus</button></>}</div></td></tr>)}</tbody>
@@ -1394,8 +1394,7 @@ function ReportsPage({ role }: { role:Role }) {
 const formFields: Record<Resource, { key: string; label: string; type?: string; options?: string[] }[]> = {
   students: [
     { key:"name",label:"Nama lengkap" },{ key:"nis",label:"NIS" },{ key:"class_name",label:"Kelas",type:"class" },
-    { key:"room",label:"Kamar" },{ key:"guardian_name",label:"Nama wali" },{ key:"guardian_phone",label:"Nomor WhatsApp wali",type:"tel" },
-    { key:"guardian_email",label:"Email wali (opsional)",type:"email" },
+    { key:"room",label:"Kamar" },{ key:"guardian_name",label:"Nama wali" },{ key:"guardian_phone",label:"Nomor HP / WhatsApp wali",type:"tel" },
     { key:"status",label:"Status",options:["Aktif","Izin","Alumni","Nonaktif"] },
   ],
   employees: [

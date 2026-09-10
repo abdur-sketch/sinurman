@@ -38,9 +38,9 @@ export async function POST(request: Request) {
       : await readSheet(bytes) as unknown[][];
     const rows=recordsFromRows(tabularRows);
     const mode=String(form.get("mode")||"import");
-    const valid=rows.filter(r=>r.nama&&r.nis&&r.kelas);
-    const invalid=rows.filter(r=>!r.nama||!r.nis||!r.kelas).map((r,index)=>({row:index+2,reason:"Nama, NIS, dan kelas wajib diisi."}));
-    if(!valid.length) return Response.json({error:"Kolom wajib: nama, nis, kelas. Kolom opsional: kamar, nama_wali, whatsapp, email_wali."},{status:400});
+    const valid=rows.filter(r=>r.nama&&r.nis&&r.kelas&&r.whatsapp);
+    const invalid=rows.filter(r=>!r.nama||!r.nis||!r.kelas||!r.whatsapp).map((r,index)=>({row:index+2,reason:"Nama, NIS, kelas, dan whatsapp wali wajib diisi."}));
+    if(!valid.length) return Response.json({error:"Kolom wajib: nama, nis, kelas, whatsapp. Kolom opsional: kamar dan nama_wali."},{status:400});
     if(mode==="preview") {
       const nisList=valid.map(r=>String(r.nis).trim()).filter(Boolean);
       const duplicateNis=nisList.filter((nis,index)=>nisList.indexOf(nis)!==index);
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     }
     const now=new Date().toISOString();
     const statements=valid.slice(0,500).map(r=>database().prepare("INSERT OR IGNORE INTO students (name, nis, class_name, room, guardian_name, guardian_phone, guardian_email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(String(r.nama),String(r.nis),String(r.kelas),String(r.kamar||"-"),String(r.nama_wali||"-"),normalizeGuardianPhone(r.whatsapp),String(r.email_wali||"").toLocaleLowerCase("id-ID"),"Aktif",now));
+      .bind(String(r.nama),String(r.nis),String(r.kelas),String(r.kamar||"-"),String(r.nama_wali||"-"),normalizeGuardianPhone(r.whatsapp),"","Aktif",now));
     const results=[];
     for(let start=0;start<statements.length;start+=350) results.push(...await database().batch(statements.slice(start,start+350)));
     const imported=results.reduce((sum,r)=>sum+Number(r.meta.changes||0),0);
