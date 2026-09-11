@@ -15,6 +15,12 @@ export const metadata: Metadata = {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
   },
+  appleWebApp: {
+    capable: true,
+    title: "SINURMAN",
+    statusBarStyle: "default",
+  },
+  formatDetection: { telephone: false },
   openGraph: {
     title: "SINURMAN — Sistem Informasi Nurul Iman",
     description:

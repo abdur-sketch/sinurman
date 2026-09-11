@@ -1,4 +1,4 @@
-const CACHE_NAME = "sinurman-shell-v1";
+const CACHE_NAME = "sinurman-shell-v2";
 const SHELL = ["/offline.html", "/favicon.svg", "/og.png"];
 
 self.addEventListener("install", (event) => {
