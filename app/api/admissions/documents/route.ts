@@ -9,11 +9,17 @@ function safeName(value: string) {
   return value.normalize("NFKD").replace(/[^\w.-]+/g, "-").replace(/-+/g, "-").slice(-100);
 }
 
-async function admissionAccess(id: number, email: string, admin: boolean) {
+async function admissionAccess(id: number, user: { email: string; guardianPhone?: string; role: string }) {
+  // Legacy ownership check was applicant_email.toLowerCase() !== email.toLowerCase();
+  // new records use guardian_phone, while this fallback preserves old records.
   const row = await database().prepare(
-    "SELECT id,applicant_email,status FROM admissions WHERE id=?",
-  ).bind(id).first<{ id: number; applicant_email: string; status: string }>();
-  if (!row || (!admin && row.applicant_email.toLowerCase() !== email.toLowerCase())) return null;
+    "SELECT id,applicant_email,guardian_phone,status FROM admissions WHERE id=?",
+  ).bind(id).first<{ id: number; applicant_email: string; guardian_phone: string; status: string }>();
+  if (!row || user.role !== "Admin") {
+    const ownsByPhone = Boolean(user.guardianPhone && row?.guardian_phone === user.guardianPhone);
+    const ownsByLegacyEmail = !user.guardianPhone && Boolean(row?.applicant_email && row.applicant_email.toLowerCase() === user.email.toLowerCase());
+    if (!row || (!ownsByPhone && !ownsByLegacyEmail)) return null;
+  }
   return row;
 }
 
@@ -33,7 +39,7 @@ export async function POST(request: Request) {
     if (!file.size || file.size > maxSize) {
       return Response.json({ error: "Ukuran dokumen maksimal 5 MB." }, { status: 400 });
     }
-    const admission = await admissionAccess(admissionId, user.email, user.role === "Admin");
+    const admission = await admissionAccess(admissionId, user);
     if (!admission) return Response.json({ error: "Pendaftaran tidak ditemukan atau bukan milik Anda." }, { status: 403 });
     if (!env.FILES) return Response.json({ error: "Penyimpanan dokumen belum tersedia." }, { status: 503 });
 
@@ -62,10 +68,13 @@ export async function GET(request: Request) {
     const user = await ensureUser(request);
     const id = Number(new URL(request.url).searchParams.get("id"));
     const document = await database().prepare(
-      `SELECT d.*,a.applicant_email FROM admission_documents d
+      `SELECT d.*,a.applicant_email,a.guardian_phone FROM admission_documents d
        JOIN admissions a ON a.id=d.admission_id WHERE d.id=?`,
     ).bind(id).first<Record<string, string | number>>();
-    if (!document || (user.role !== "Admin" && String(document.applicant_email).toLowerCase() !== user.email.toLowerCase())) {
+    const ownsDocument = user.role === "Admin"
+      || (user.guardianPhone && String(document?.guardian_phone ?? "") === user.guardianPhone)
+      || (!user.guardianPhone && String(document?.applicant_email ?? "").toLowerCase() === user.email.toLowerCase());
+    if (!document || !ownsDocument) {
       return Response.json({ error: "Dokumen tidak ditemukan." }, { status: 404 });
     }
     const object = await env.FILES.get(String(document.object_key));
@@ -120,10 +129,13 @@ export async function DELETE(request: Request) {
     const user = await ensureUser(request);
     const id = Number(new URL(request.url).searchParams.get("id"));
     const document = await database().prepare(
-      `SELECT d.*,a.applicant_email FROM admission_documents d
+      `SELECT d.*,a.applicant_email,a.guardian_phone FROM admission_documents d
        JOIN admissions a ON a.id=d.admission_id WHERE d.id=?`,
     ).bind(id).first<Record<string, string | number>>();
-    if (!document || (user.role !== "Admin" && String(document.applicant_email).toLowerCase() !== user.email.toLowerCase())) {
+    const ownsDocument = user.role === "Admin"
+      || (user.guardianPhone && String(document?.guardian_phone ?? "") === user.guardianPhone)
+      || (!user.guardianPhone && String(document?.applicant_email ?? "").toLowerCase() === user.email.toLowerCase());
+    if (!document || !ownsDocument) {
       return Response.json({ error: "Dokumen tidak ditemukan." }, { status: 404 });
     }
     if (user.role !== "Admin" && String(document.status) === "Valid") {
