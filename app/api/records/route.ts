@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { canWrite, database, ensureUser, normalizeGuardianPhone } from "../_lib";
 import { notifyRecordChange } from "../_notifications";
 import { quranRangeAmount } from "../../quran-data";
@@ -184,6 +185,16 @@ export async function POST(request: Request) {
       if(governedResources.has(resource)) {
         const current=await db.prepare(`SELECT period_key FROM ${config.table} WHERE id=?`).bind(payload.id).first<{period_key:string}>();
         if(current?.period_key) await assertPeriodOpen(current.period_key);
+      }
+      // Remove SPMB documents together with the candidate so deleted/withdrawn
+      // registrations do not leave orphaned private files in object storage.
+      if (resource === "admissions") {
+        const documents = await db.prepare("SELECT object_key FROM admission_documents WHERE admission_id=?")
+          .bind(payload.id).all<{ object_key: string }>();
+        if (env.FILES) {
+          await Promise.all((documents.results ?? []).map((document) => env.FILES!.delete(document.object_key)));
+        }
+        await db.prepare("DELETE FROM admission_documents WHERE admission_id=?").bind(payload.id).run();
       }
       await db.prepare(`DELETE FROM ${config.table} WHERE id = ?`).bind(payload.id).run();
       await db.prepare("INSERT INTO audit_logs (user_email, action, resource, record_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
