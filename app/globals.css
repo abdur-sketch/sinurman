@@ -303,6 +303,8 @@ td.muted { color:var(--muted); }
 .row-actions { display:flex; align-items:center; justify-content:flex-end; gap:7px; }
 .row-actions button { border:0; background:transparent; color:var(--blue); padding:3px; font-size:8px; }
 .row-actions .danger-link { color:var(--red); }
+.admissions-app .row-actions { min-width:108px; }
+.admissions-app .row-actions .danger-link { order:-1; color:var(--red); font-size:12px !important; font-weight:800; }
 .export-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px; }
 .export-actions a { padding:6px 8px; border:1px solid var(--line); border-radius:6px; color:var(--blue); text-decoration:none; font-size:8px; }
 .export-actions .print-action { border-color:var(--blue); background:var(--blue); color:#fff; }
