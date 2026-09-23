@@ -12,6 +12,14 @@ import { firebaseClient } from "../../lib/firebase/client";
 
 const ownerEmail = "baikganteng88@gmail.com";
 
+function loginIdentifier(value: string) {
+  const raw=value.trim().toLowerCase();
+  if(raw.includes("@")) return raw;
+  const digits=raw.replace(/\D/g,"");
+  const normalized=digits.startsWith("0")?`62${digits.slice(1)}`:digits.startsWith("8")?`62${digits}`:digits;
+  return `${normalized}@internal.sinurman.local`;
+}
+
 export default function AdminLoginClient() {
   const [email, setEmail] = useState(ownerEmail);
   const [password, setPassword] = useState("");
@@ -40,7 +48,7 @@ export default function AdminLoginClient() {
     try {
       const credential = await signInWithEmailAndPassword(
         firebaseClient().auth,
-        email.trim().toLowerCase(),
+        loginIdentifier(email),
         password,
       );
       await createServerSession(await credential.user.getIdToken());
@@ -56,7 +64,7 @@ export default function AdminLoginClient() {
       const raw = caught instanceof Error ? caught.message : "Login gagal.";
       setError(
         raw.includes("invalid-credential")
-          ? "Email atau kata sandi tidak sesuai. Gunakan tautan lupa kata sandi bila baru pertama masuk."
+          ? "Nomor HP/email atau kata sandi tidak sesuai."
           : raw,
       );
       setLoading(false);
@@ -87,6 +95,10 @@ export default function AdminLoginClient() {
   async function resetPassword() {
     setError("");
     setMessage("");
+    if(!email.includes("@")) {
+      setMessage("Untuk akun nomor HP, minta Admin mengatur ulang sandi dari menu Pengguna & Audit.");
+      return;
+    }
     try {
       await sendPasswordResetEmail(firebaseClient().auth, email.trim().toLowerCase());
       setMessage("Tautan pengaturan ulang kata sandi telah dikirim ke email Anda.");
@@ -104,10 +116,10 @@ export default function AdminLoginClient() {
   return (
     <form className="guardian-login-form admin-login-form" onSubmit={submit}>
       <label>
-        Email akun sekolah
+        Nomor HP login (contoh: 628123456789)
         <input
           required
-          type="email"
+          type="text"
           autoComplete="username"
           value={email}
           onChange={event => setEmail(event.target.value)}

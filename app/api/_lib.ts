@@ -26,7 +26,7 @@ export function ensureDatabaseSchema() {
   const db = database();
   schemaReady = (async () => {
     const definitions = [
-      "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,role TEXT NOT NULL,room_scope TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',name TEXT NOT NULL,role TEXT NOT NULL,room_scope TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,nis TEXT NOT NULL UNIQUE,class_name TEXT NOT NULL,room TEXT NOT NULL,guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,guardian_email TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS tahfidz_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,surah TEXT NOT NULL,verses TEXT NOT NULL,surah_from TEXT NOT NULL DEFAULT '',surah_to TEXT NOT NULL DEFAULT '',verse_from INTEGER NOT NULL DEFAULT 0,verse_to INTEGER NOT NULL DEFAULT 0,amount INTEGER NOT NULL,grade TEXT NOT NULL,teacher TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS tahsin_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,level TEXT NOT NULL,makhraj_score INTEGER NOT NULL,tajwid_score INTEGER NOT NULL,fluency_score INTEGER NOT NULL,length_score INTEGER NOT NULL,adab_score INTEGER NOT NULL,note TEXT NOT NULL DEFAULT '',teacher TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
@@ -86,7 +86,7 @@ export function ensureDatabaseSchema() {
     await db.batch(definitions.map((sql) => db.prepare(sql)));
 
     const upgrades: Record<string, Record<string, string>> = {
-      users: { room_scope: "TEXT NOT NULL DEFAULT ''" },
+      users: { room_scope: "TEXT NOT NULL DEFAULT ''", phone: "TEXT NOT NULL DEFAULT ''" },
       students: { guardian_email: "TEXT NOT NULL DEFAULT ''" },
       tahfidz_records: {
         surah_from: "TEXT NOT NULL DEFAULT ''",

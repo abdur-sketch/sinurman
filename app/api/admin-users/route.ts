@@ -1,4 +1,4 @@
-import { database, ensureUser, type Role } from "../_lib";
+import { database, ensureUser, normalizeGuardianPhone, type Role } from "../_lib";
 import { isOwnerEmail } from "../../../lib/security-config";
 
 export const runtime = "nodejs";
@@ -16,8 +16,8 @@ async function firebaseServices() {
   return { firebaseAdmin, revokeFirebaseSessions };
 }
 
-function normalizeEmail(value: unknown) {
-  return String(value ?? "").trim().toLowerCase();
+function internalEmailFromPhone(phone: string) {
+  return `${phone}@internal.sinurman.local`;
 }
 
 function validatePassword(value: unknown, required: boolean) {
@@ -38,10 +38,11 @@ async function requireAdmin(request: Request) {
 
 async function targetById(id: number) {
   return database().prepare(
-    "SELECT id,email,name,role,room_scope AS roomScope,created_at AS createdAt FROM users WHERE id=?",
+    "SELECT id,email,phone,name,role,room_scope AS roomScope,created_at AS createdAt FROM users WHERE id=?",
   ).bind(id).first<{
     id:number;
     email:string;
+    phone:string;
     name:string;
     role:Role;
     roomScope:string;
@@ -60,8 +61,8 @@ export async function GET(request: Request) {
     await requireAdmin(request);
     const { firebaseAdmin } = await firebaseServices();
     const rows = await database().prepare(
-      "SELECT id,email,name,role,room_scope AS roomScope,created_at AS createdAt FROM users ORDER BY id",
-    ).all<{id:number;email:string;name:string;role:Role;roomScope:string;createdAt:string}>();
+      "SELECT id,email,phone,name,role,room_scope AS roomScope,created_at AS createdAt FROM users ORDER BY id",
+    ).all<{id:number;email:string;phone:string;name:string;role:Role;roomScope:string;createdAt:string}>();
     const users = await Promise.all(rows.results.map(async row => {
       try {
         const account = await firebaseAdmin().auth.getUserByEmail(row.email);
@@ -89,28 +90,29 @@ export async function POST(request: Request) {
     const actor = await requireAdmin(request);
     ({ firebaseAdmin } = await firebaseServices());
     const body = await request.json() as {
-      email?:string;
+      phone?:string;
       name?:string;
       role?:Role;
       roomScope?:string;
       password?:string;
     };
-    const email = normalizeEmail(body.email);
+    const phone = normalizeGuardianPhone(body.phone);
+    const email = internalEmailFromPhone(phone);
     const name = String(body.name ?? "").trim();
     const role = body.role as Role;
     const roomScope = String(body.roomScope ?? "").trim();
     const password = validatePassword(body.password, true);
-    if (!email || !email.includes("@")) throw new Error("Email pengguna tidak valid.");
+    if (!/^62\d{8,13}$/.test(phone)) throw new Error("Nomor HP harus memakai format Indonesia, contoh 628123456789.");
     if (!name) throw new Error("Nama pengguna wajib diisi.");
     if (!managedRoles.has(role)) throw new Error("Peran pengguna internal tidak valid.");
     if ((role === "Musyrif" || role === "Kepala Asrama") && !roomScope) {
       throw new Error("Kamar/asrama penugasan wajib dipilih untuk peran ini.");
     }
-    const duplicate = await database().prepare("SELECT id FROM users WHERE lower(email)=?").bind(email).first();
-    if (duplicate) throw new Error("Email tersebut sudah terdaftar di SINURMAN.");
+    const duplicate = await database().prepare("SELECT id FROM users WHERE phone=? OR lower(email)=?").bind(phone,email).first();
+    if (duplicate) throw new Error("Nomor HP tersebut sudah terdaftar di SINURMAN.");
     try {
       await firebaseAdmin().auth.getUserByEmail(email);
-      throw new Error("Email tersebut sudah memiliki akun Firebase.");
+      throw new Error("Nomor HP tersebut sudah memiliki akun internal.");
     } catch (error) {
       const code = String((error as {code?:string})?.code ?? "");
       if (code !== "auth/user-not-found" && !(error instanceof Error && error.message.toLowerCase().includes("no user record"))) throw error;
@@ -124,9 +126,9 @@ export async function POST(request: Request) {
     });
     createdUid = account.uid;
     const result = await database().prepare(
-      "INSERT INTO users (email,name,role,room_scope,created_at) VALUES (?,?,?,?,?)",
-    ).bind(email, name, role, roomScope, new Date().toISOString()).run();
-    await audit(actor.email, "Tambah", Number(result.meta.last_row_id ?? 0), `Membuat akun ${email} sebagai ${role}`);
+      "INSERT INTO users (email,phone,name,role,room_scope,created_at) VALUES (?,?,?,?,?,?)",
+    ).bind(email, phone, name, role, roomScope, new Date().toISOString()).run();
+    await audit(actor.email, "Tambah", Number(result.meta.last_row_id ?? 0), `Membuat akun ${phone} sebagai ${role}`);
     return Response.json({ ok:true, id:result.meta.last_row_id, message:"Akun login berhasil dibuat." }, { status:201 });
   } catch (error) {
     if (createdUid && firebaseAdmin) await firebaseAdmin().auth.deleteUser(createdUid).catch(() => undefined);
