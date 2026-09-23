@@ -90,7 +90,6 @@ export async function POST(request: Request) {
     const actor = await requireAdmin(request);
     ({ firebaseAdmin } = await firebaseServices());
     const body = await request.json() as {
-      phone?:string;
       name?:string;
       phone?:string;
       role?:Role;
@@ -100,7 +99,6 @@ export async function POST(request: Request) {
     const phone = normalizeGuardianPhone(body.phone);
     const email = internalEmailFromPhone(phone);
     const name = String(body.name ?? "").trim();
-    const requestedPhone = normalizeGuardianPhone(body.phone);
     const role = body.role as Role;
     const roomScope = String(body.roomScope ?? "").trim();
     const password = validatePassword(body.password, true);
