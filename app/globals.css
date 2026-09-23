@@ -156,6 +156,10 @@ main { max-width:1540px; margin:0 auto; padding:25px 29px 18px; }
 
 .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:17px; margin-bottom:17px; }
 .stats-grid.three { grid-template-columns:repeat(3,1fr); }
+.salary-formula-card { margin-top:17px; }
+.salary-formula { display:flex; flex-direction:column; gap:6px; padding:16px 18px; border-radius:14px; background:linear-gradient(135deg,#eef7ff,#f2fbf7); color:#1f3d5e; }
+.salary-formula strong { font-size:16px; }
+.salary-formula span { color:#71839a; font-size:13px; }
 .stat-card,.metric-card { position:relative; min-height:126px; padding:19px; border-radius:10px; background:var(--card); box-shadow:var(--shadow); overflow:hidden; border:1px solid rgba(229,235,242,.6); }
 .stat-copy { display:flex; align-items:flex-start; flex-direction:column; }
 .stat-copy>span,.metric-card div>span { color:var(--muted); font-size:11px; font-weight:500; }

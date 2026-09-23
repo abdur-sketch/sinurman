@@ -60,7 +60,7 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,user_email TEXT NOT NULL,action TEXT NOT NULL,resource TEXT NOT NULL,record_id INTEGER,detail TEXT NOT NULL,created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS academic_periods (id INTEGER PRIMARY KEY AUTOINCREMENT,period_key TEXT NOT NULL UNIQUE,academic_year TEXT NOT NULL,semester TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Terbuka',locked_by TEXT NOT NULL DEFAULT '',locked_at TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS academic_events (id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL,start_date TEXT NOT NULL,end_date TEXT NOT NULL,start_time TEXT NOT NULL DEFAULT '',location TEXT NOT NULL DEFAULT '',description TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Terjadwal',created_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT,employee_no TEXT NOT NULL UNIQUE,name TEXT NOT NULL,gender TEXT NOT NULL,birth_place TEXT NOT NULL DEFAULT '',birth_date TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',position TEXT NOT NULL,work_unit TEXT NOT NULL,employment_type TEXT NOT NULL,education TEXT NOT NULL DEFAULT '',join_date TEXT NOT NULL,address TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT,employee_no TEXT NOT NULL UNIQUE,name TEXT NOT NULL,gender TEXT NOT NULL,birth_place TEXT NOT NULL DEFAULT '',birth_date TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',position TEXT NOT NULL,work_unit TEXT NOT NULL,employment_type TEXT NOT NULL,education TEXT NOT NULL DEFAULT '',join_date TEXT NOT NULL,address TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',base_salary INTEGER NOT NULL DEFAULT 0,transport_allowance INTEGER NOT NULL DEFAULT 0,meal_allowance INTEGER NOT NULL DEFAULT 0,position_allowance INTEGER NOT NULL DEFAULT 0,other_allowance INTEGER NOT NULL DEFAULT 0,attendance_deduction INTEGER NOT NULL DEFAULT 0,other_deduction INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS employee_attendance_records (id INTEGER PRIMARY KEY AUTOINCREMENT,employee_id INTEGER NOT NULL,record_date TEXT NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',recorded_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
       "CREATE UNIQUE INDEX IF NOT EXISTS employee_attendance_day_idx ON employee_attendance_records(employee_id,record_date)",
       "CREATE TABLE IF NOT EXISTS school_classes (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,education_level TEXT NOT NULL,grade_order INTEGER NOT NULL,major TEXT NOT NULL DEFAULT '',homeroom_teacher TEXT NOT NULL DEFAULT '',capacity INTEGER NOT NULL DEFAULT 32,next_class_name TEXT NOT NULL DEFAULT '',academic_year TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
@@ -127,6 +127,15 @@ export function ensureDatabaseSchema() {
       guardian_accounts: {
         google_uid: "TEXT NOT NULL DEFAULT ''",
         google_email: "TEXT NOT NULL DEFAULT ''",
+      },
+      employees: {
+        base_salary: "INTEGER NOT NULL DEFAULT 0",
+        transport_allowance: "INTEGER NOT NULL DEFAULT 0",
+        meal_allowance: "INTEGER NOT NULL DEFAULT 0",
+        position_allowance: "INTEGER NOT NULL DEFAULT 0",
+        other_allowance: "INTEGER NOT NULL DEFAULT 0",
+        attendance_deduction: "INTEGER NOT NULL DEFAULT 0",
+        other_deduction: "INTEGER NOT NULL DEFAULT 0",
       },
     };
     for (const [table, columns] of Object.entries(upgrades)) {

@@ -209,6 +209,17 @@ function tahfidzRange(row:Row) {
 
 const money = new Intl.NumberFormat("id-ID");
 
+function employeeNetSalary(row: Row) {
+  const allowances = ["transport_allowance", "meal_allowance", "position_allowance", "other_allowance"]
+    .reduce((total, key) => total + Number(row[key] || 0), 0);
+  const deductions = Number(row.attendance_deduction || 0) + Number(row.other_deduction || 0);
+  return Math.max(0, Number(row.base_salary || 0) + allowances - deductions);
+}
+
+function formatRupiah(value: unknown) {
+  return `Rp${money.format(Number(value || 0))}`;
+}
+
 const legacyToolIcons: Record<string, string> = {
   "⌂":"fi-rr-apps", "♙":"fi-rr-student", "◫":"fi-rr-book-quran", "✓":"fi-rr-check",
   "Rp":"fi-rr-wallet", "✚":"fi-rr-stethoscope", "!":"fi-rr-triangle-warning",
@@ -517,6 +528,7 @@ function EmployeesPage({ rows, onAdd, onEdit, onDelete }: { rows:Row[]; onAdd:()
   const active=rows.filter(row=>row.status==="Aktif").length;
   const educators=rows.filter(row=>["Pendidikan","Tahfidz"].includes(String(row.work_unit))).length;
   const permanent=rows.filter(row=>row.employment_type==="Tetap").length;
+  const monthlyPayroll=rows.filter(row=>row.status==="Aktif").reduce((total,row)=>total+employeeNetSalary(row),0);
   const [attendanceRows,setAttendanceRows]=useState<Row[]>([]);
   const [attendanceDate,setAttendanceDate]=useState(new Date().toISOString().slice(0,10));
   const [attendanceStatus,setAttendanceStatus]=useState("Hadir");
@@ -530,13 +542,15 @@ function EmployeesPage({ rows, onAdd, onEdit, onDelete }: { rows:Row[]; onAdd:()
       <article className="metric-card"><MiniIcon tone="green">✓</MiniIcon><div><span>Pegawai Aktif</span><strong>{active}</strong><small>{rows.length?Math.round(active/rows.length*100):0}% dari total pegawai</small></div></article>
       <article className="metric-card"><MiniIcon tone="violet">A</MiniIcon><div><span>Tenaga Pendidikan</span><strong>{educators}</strong><small>Guru, ustadz, dan tahfidz</small></div></article>
       <article className="metric-card"><MiniIcon tone="amber">☆</MiniIcon><div><span>Pegawai Tetap</span><strong>{permanent}</strong><small>Status kepegawaian tetap</small></div></article>
+      <article className="metric-card"><MiniIcon tone="green">Rp</MiniIcon><div><span>Estimasi Gaji Bersih</span><strong>{formatRupiah(monthlyPayroll)}</strong><small>Total pegawai aktif per bulan</small></div></article>
     </section>
     <section className="card data-card employee-data-card">
       <header className="card-header responsive"><div><h3>Daftar Pegawai</h3><p>Data pegawai bersifat terbatas dan hanya dapat dikelola Admin</p></div><button className="primary-button" onClick={onAdd}>+ Tambah Pegawai</button></header>
       <div className="filters employee-filters"><div className="search-field">⌕ <input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Cari nama, NIP, jabatan, atau nomor HP…"/></div><select value={unit} onChange={event=>setUnit(event.target.value)}><option>Semua Unit</option>{units.map(value=><option key={value}>{value}</option>)}</select><select value={status} onChange={event=>setStatus(event.target.value)}><option>Semua Status</option><option>Aktif</option><option>Cuti</option><option>Nonaktif</option></select></div>
-      <div className="table-wrap"><table><thead><tr><th>Pegawai</th><th>NIP/Nomor Pegawai</th><th>Jabatan & Unit</th><th>Kepegawaian</th><th>Kontak</th><th>Status</th><th /></tr></thead><tbody>{filtered.map(row=><tr key={String(row.id)}><td><div className="person"><span>{String(row.name).split(" ").map(value=>value[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{row.name}</strong><small className="cell-note">{row.gender} · {row.education||"Pendidikan belum diisi"}</small></div></div></td><td className="muted">{row.employee_no}</td><td><strong>{row.position}</strong><small className="cell-note">{row.work_unit}</small></td><td>{row.employment_type}<small className="cell-note">Masuk {row.join_date?new Date(String(row.join_date)).toLocaleDateString("id-ID"):"—"}</small></td><td>{row.phone||"—"}<small className="cell-note">{row.email||"Email belum diisi"}</small></td><td><Status tone={row.status==="Aktif"?"green":row.status==="Cuti"?"amber":"red"}>{row.status}</Status></td><td><DataActions row={row} onEdit={onEdit} onDelete={onDelete}/></td></tr>)}{!filtered.length&&<tr><td colSpan={7} className="muted">Tidak ada pegawai yang sesuai dengan filter.</td></tr>}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>Pegawai</th><th>NIP/Nomor Pegawai</th><th>Jabatan & Unit</th><th>Kepegawaian</th><th>Gaji Bersih</th><th>Kontak</th><th>Status</th><th /></tr></thead><tbody>{filtered.map(row=><tr key={String(row.id)}><td><div className="person"><span>{String(row.name).split(" ").map(value=>value[0]).slice(0,2).join("").toUpperCase()}</span><div><strong>{row.name}</strong><small className="cell-note">{row.gender} · {row.education||"Pendidikan belum diisi"}</small></div></div></td><td className="muted">{row.employee_no}</td><td><strong>{row.position}</strong><small className="cell-note">{row.work_unit}</small></td><td>{row.employment_type}<small className="cell-note">Masuk {row.join_date?new Date(String(row.join_date)).toLocaleDateString("id-ID"):"—"}</small></td><td><strong>{formatRupiah(employeeNetSalary(row))}</strong><small className="cell-note">Pokok {formatRupiah(row.base_salary)}</small></td><td>{row.phone||"—"}<small className="cell-note">{row.email||"Email belum diisi"}</small></td><td><Status tone={row.status==="Aktif"?"green":row.status==="Cuti"?"amber":"red"}>{row.status}</Status></td><td><DataActions row={row} onEdit={onEdit} onDelete={onDelete}/></td></tr>)}{!filtered.length&&<tr><td colSpan={8} className="muted">Tidak ada pegawai yang sesuai dengan filter.</td></tr>}</tbody></table></div>
       <footer className="table-footer"><span>Menampilkan {filtered.length} dari {rows.length} pegawai</span><small>Terakhir diperbarui otomatis</small></footer>
     </section>
+    <section className="card data-card salary-formula-card"><header className="card-header"><div><h3>Rumusan gaji</h3><p>Perhitungan otomatis untuk setiap pegawai aktif.</p></div></header><div className="salary-formula"><strong>Gaji bersih = gaji pokok + total tunjangan − total potongan</strong><span>Tunjangan: transport, makan, jabatan, dan lainnya. Potongan: ketidakhadiran dan potongan lainnya.</span></div></section>
     <section className="card data-card employee-attendance-card"><header className="card-header responsive"><div><h3>Presensi Guru & Musyrif</h3><p>Catat kehadiran pegawai per hari. Satu pegawai hanya memiliki satu status per tanggal.</p></div><div className="header-actions"><select value={attendanceEmployee} onChange={event=>setAttendanceEmployee(event.target.value)}>{rows.filter(row=>row.status==="Aktif").map(row=><option key={String(row.id)} value={String(row.id)}>{row.name}</option>)}</select><input type="date" value={attendanceDate} onChange={event=>setAttendanceDate(event.target.value)}/><select value={attendanceStatus} onChange={event=>setAttendanceStatus(event.target.value)}><option>Hadir</option><option>Terlambat</option><option>Izin</option><option>Sakit</option><option>Alpa</option></select><button className="primary-button" disabled={attendanceLoading||!attendanceEmployee} onClick={()=>void saveEmployeeAttendance()}>{attendanceLoading?"Menyimpan…":"Simpan Presensi"}</button></div></header><div className="table-wrap"><table><thead><tr><th>Pegawai</th><th>Tanggal</th><th>Jabatan</th><th>Status</th><th>Pencatat</th></tr></thead><tbody>{attendanceRows.map(row=><tr key={String(row.id)}><td><strong>{row.employee_name}</strong><small className="cell-note">{row.employee_no}</small></td><td>{row.record_date}</td><td>{row.position}</td><td><Status tone={row.status==="Hadir"?"green":row.status==="Alpa"?"red":"amber"}>{row.status}</Status></td><td className="muted">{row.recorded_by}</td></tr>)}{!attendanceRows.length&&<tr><td colSpan={5} className="muted">Belum ada presensi pegawai.</td></tr>}</tbody></table></div></section>
   </div>;
 }
@@ -1402,6 +1416,7 @@ const formFields: Record<Resource, { key: string; label: string; type?: string; 
     {key:"birth_place",label:"Tempat lahir"},{key:"birth_date",label:"Tanggal lahir",type:"date"},{key:"phone",label:"Nomor HP / WhatsApp",type:"tel"},
     {key:"email",label:"Email",type:"email"},{key:"position",label:"Jabatan"},{key:"work_unit",label:"Unit kerja",options:["Pimpinan","Pendidikan","Tahfidz","Asrama","Administrasi","Keuangan","Kesehatan","Kantin","Keamanan","Umum"]},
     {key:"employment_type",label:"Jenis kepegawaian",options:["Tetap","Kontrak","Honorer","Magang"]},{key:"education",label:"Pendidikan terakhir"},{key:"join_date",label:"Tanggal mulai bekerja",type:"date"},
+    {key:"base_salary",label:"Gaji pokok (Rp)",type:"number"},{key:"transport_allowance",label:"Tunjangan transport (Rp)",type:"number"},{key:"meal_allowance",label:"Tunjangan makan (Rp)",type:"number"},{key:"position_allowance",label:"Tunjangan jabatan (Rp)",type:"number"},{key:"other_allowance",label:"Tunjangan lainnya (Rp)",type:"number"},{key:"attendance_deduction",label:"Potongan ketidakhadiran (Rp)",type:"number"},{key:"other_deduction",label:"Potongan lainnya (Rp)",type:"number"},
     {key:"address",label:"Alamat",type:"textarea"},{key:"status",label:"Status",options:["Aktif","Cuti","Nonaktif"]},
   ],
   classes: [
@@ -1507,7 +1522,7 @@ function RecordModal({ editor, students, subjects, classes, onClose, onSave }: {
     event.preventDefault(); setSaving(true); setError("");
     try {
       const data: Record<string,unknown> = {};
-      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","subject_id","points","capacity","grade_order","completed","verse_from","verse_to","minimum_score","assignment_score","midterm_score","exam_score","makhraj_score","tajwid_score","fluency_score","length_score","adab_score"].includes(key) ? Number(value) : value;
+      for (const [key,value] of Object.entries(form)) data[key] = ["amount","quantity","score","student_id","subject_id","points","capacity","grade_order","completed","verse_from","verse_to","minimum_score","assignment_score","midterm_score","exam_score","makhraj_score","tajwid_score","fluency_score","length_score","adab_score","base_salary","transport_allowance","meal_allowance","position_allowance","other_allowance","attendance_deduction","other_deduction"].includes(key) ? Number(value) : value;
       await onSave(editor.resource,editor.row,data);
     } catch (e) { setError(e instanceof Error?e.message:"Gagal menyimpan."); setSaving(false); }
   }

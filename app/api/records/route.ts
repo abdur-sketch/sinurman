@@ -12,7 +12,7 @@ const resourceConfig = {
   },
   employees: {
     table: "employees",
-    columns: ["employee_no","name","gender","birth_place","birth_date","phone","email","position","work_unit","employment_type","education","join_date","address","status","created_at","updated_at"],
+    columns: ["employee_no","name","gender","birth_place","birth_date","phone","email","position","work_unit","employment_type","education","join_date","address","status","base_salary","transport_allowance","meal_allowance","position_allowance","other_allowance","attendance_deduction","other_deduction","created_at","updated_at"],
     required: ["employee_no","name","gender","position","work_unit","employment_type","join_date"],
   },
   classes: {
@@ -219,6 +219,17 @@ export async function POST(request: Request) {
       source.guardian_phone = normalizeGuardianPhone(source.guardian_phone);
       if (!/^62\d{8,13}$/.test(String(source.guardian_phone))) {
         return Response.json({ error:"Nomor WhatsApp wali tidak valid." }, { status:400 });
+      }
+    }
+    if (resource === "employees") {
+      const salaryFields = ["base_salary","transport_allowance","meal_allowance","position_allowance","other_allowance","attendance_deduction","other_deduction"];
+      for (const field of salaryFields) {
+        if (source[field] === undefined || source[field] === "") source[field] = 0;
+        const amount = Number(source[field]);
+        if (!Number.isInteger(amount) || amount < 0) {
+          return Response.json({ error: "Komponen gaji dan potongan harus berupa angka bulat nol atau lebih." }, { status: 400 });
+        }
+        source[field] = amount;
       }
     }
     if (resource === "tahfidz") {
