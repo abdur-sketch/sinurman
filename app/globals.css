@@ -160,6 +160,12 @@ main { max-width:1540px; margin:0 auto; padding:25px 29px 18px; }
 .salary-formula { display:flex; flex-direction:column; gap:6px; padding:16px 18px; border-radius:14px; background:linear-gradient(135deg,#eef7ff,#f2fbf7); color:#1f3d5e; }
 .salary-formula strong { font-size:16px; }
 .salary-formula span { color:#71839a; font-size:13px; }
+.role-access-preview { grid-column:1/-1; padding:14px 16px; border:1px solid #dfe8f2; border-radius:14px; background:#f7faff; }
+.role-access-preview > div:first-child { display:flex; flex-direction:column; gap:4px; margin-bottom:10px; }
+.role-access-preview strong { color:#1f3d5e; font-size:14px; }
+.role-access-preview small { color:#7b8da3; }
+.role-access-tags { display:flex; flex-wrap:wrap; gap:7px; }
+.role-access-tags span { display:inline-flex; align-items:center; padding:7px 10px; border-radius:999px; color:#276fd4; background:#e8f1ff; font-size:12px; font-weight:700; }
 .stat-card,.metric-card { position:relative; min-height:126px; padding:19px; border-radius:10px; background:var(--card); box-shadow:var(--shadow); overflow:hidden; border:1px solid rgba(229,235,242,.6); }
 .stat-copy { display:flex; align-items:flex-start; flex-direction:column; }
 .stat-copy>span,.metric-card div>span { color:var(--muted); font-size:11px; font-weight:500; }

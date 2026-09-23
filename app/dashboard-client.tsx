@@ -1098,6 +1098,15 @@ function GuardianAccessAdmin({ data, reload, notify }: { data:AppData; reload:()
   {selected&&<div className="modal-backdrop" onMouseDown={()=>setSelected(null)}><form className="record-modal guardian-pin-modal" onSubmit={savePin} onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={()=>setSelected(null)}>×</button><span className="modal-eyebrow">AKSES PORTAL WALI</span><h2>Atur PIN {selected.name}</h2><p>+{selected.phone} · {selected.students}. Mengganti PIN akan mengeluarkan sesi lama dari semua perangkat.</p><label>PIN 6 angka<input required autoFocus inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={pin} onChange={event=>setPin(event.target.value.replace(/\D/g,"").slice(0,6))} placeholder="Contoh: 482731"/></label><div className="modal-actions"><button type="button" className="secondary-button" onClick={()=>setSelected(null)}>Batal</button><button className="primary-button" disabled={saving}>{saving?"Menyimpan…":"Simpan PIN"}</button></div></form></div>}</>;
 }
 
+const roleAccessTools: Record<Role, string[]> = {
+  Admin: ["Dashboard", "Profil Santri 360", "Data Pegawai", "Kelas & Kenaikan", "Asrama & Jadwal", "Akademik & Rapor", "Tahfidz", "Tahsin", "Mutaba’ah", "Rapor Karakter", "Absensi & Izin", "Pembinaan & Poin", "Keuangan", "SINURPAY", "Pengumuman", "Laporan", "Penerimaan SPMB", "Portal Wali", "Setup Pesantren", "Kalender Pendidikan", "Pengguna & Audit", "Integrasi & Backup"],
+  "Kepala Asrama": ["Dashboard", "Profil Santri 360", "Tahfidz", "Tahsin", "Mutaba’ah", "Rapor Karakter", "Absensi & Izin", "Pembinaan & Poin", "Asrama & Jadwal", "Akademik & Rapor", "Pengumuman", "Laporan", "Rapor Kepesantrenan"],
+  "Kepala Bidang Tahfidz": ["Dashboard", "Profil Santri 360", "Tahfidz", "Laporan", "Rapor Kepesantrenan", "Pusat Informasi"],
+  Musyrif: ["Dashboard", "Profil Santri 360", "Tahfidz", "Tahsin", "Mutaba’ah", "Rapor Karakter", "Absensi & Izin", "Kesehatan", "Pembinaan & Poin", "Akademik & Rapor", "Pengumuman", "Konseling", "Rapor Kepesantrenan", "Pusat Informasi"],
+  Ustadz: ["Dashboard", "Profil Santri 360", "Tahfidz", "Tahsin", "Mutaba’ah", "Rapor Karakter", "Absensi & Izin", "Kesehatan", "Pembinaan & Poin", "Akademik & Rapor", "Asrama & Jadwal", "Pengumuman", "Laporan", "Konseling", "Rapor Kepesantrenan", "Pusat Informasi"],
+  "Wali Santri": ["Portal Wali Santri"],
+};
+
 function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row[]; onClose:()=>void; onSaved:(message:string)=>Promise<void> }) {
   const [name,setName]=useState(String(row?.name||""));
   const [email,setEmail]=useState(String(row?.email||""));
@@ -1127,7 +1136,7 @@ function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row
       <label>Peran<select required value={role} onChange={event=>setRole(event.target.value as Role)}><option>Admin</option><option>Kepala Asrama</option><option>Kepala Bidang Tahfidz</option><option>Musyrif</option><option>Ustadz</option></select></label>
       <label>Kamar/asrama penugasan<select required={role==="Musyrif"||role==="Kepala Asrama"} value={roomScope} onChange={event=>setRoomScope(event.target.value)}><option value="">Tidak dibatasi</option>{rooms.map(room=><option key={String(room.id)} value={String(room.name)}>{room.name}</option>)}</select></label>
       {!row&&<label className="wide">Sandi sementara<input required minLength={8} type="password" autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} placeholder="Minimal 8 karakter, berisi huruf dan angka"/><small>Bagikan sandi secara pribadi dan minta pengguna segera menggantinya.</small></label>}
-    </div>{error&&<div className="form-error">{error}</div>}
+    </div><section className="role-access-preview"><div><strong>Akses tools untuk peran {role}</strong><small>Daftar ini diterapkan otomatis setelah akun dibuat.</small></div><div className="role-access-tags">{roleAccessTools[role].map(tool=><span key={tool}>✓ {tool}</span>)}</div></section>{error&&<div className="form-error">{error}</div>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button className="primary-button" disabled={saving}>{saving?"Menyimpan…":row?"Simpan Perubahan":"Buat Akun Login"}</button></div>
   </form></div>;
 }
