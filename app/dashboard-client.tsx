@@ -1121,7 +1121,7 @@ function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row
       method:row?"PATCH":"POST",
       headers:{"content-type":"application/json"},
       body:JSON.stringify(row
-        ? {id:Number(row.id),action:"update",name,role,roomScope}
+        ? {id:Number(row.id),action:"update",name,phone,role,roomScope}
         : {name,phone,role,roomScope,password}),
     });
     const result=await response.json() as {error?:string;message?:string};
@@ -1132,7 +1132,7 @@ function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row
     <button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">AKSES INTERNAL SINURMAN</span>
     <h2>{row?"Ubah hak akses":"Buat akun sekolah"}</h2><p>{row?"Perubahan peran akan mengeluarkan sesi lama pengguna.":"Nomor HP dan sandi ini dapat langsung dipakai pada halaman login internal."}</p>
     <div className="form-grid"><label>Nama lengkap<input required value={name} onChange={event=>setName(event.target.value)}/></label>
-      <label>Nomor HP login<input required type="tel" inputMode="tel" autoComplete="username" readOnly={!!row} value={phone} onChange={event=>setPhone(event.target.value)} placeholder="628123456789"/></label>
+      <label>Nomor HP login<input required={!row || Boolean(row.phone)} type="tel" inputMode="tel" autoComplete="username" value={phone} onChange={event=>setPhone(event.target.value)} placeholder="628123456789"/><small>Nomor HP dapat diisi untuk memindahkan akun lama dari login email.</small></label>
       <label>Peran<select required value={role} onChange={event=>setRole(event.target.value as Role)}><option>Admin</option><option>Kepala Asrama</option><option>Kepala Bidang Tahfidz</option><option>Musyrif</option><option>Ustadz</option></select></label>
       <label>Kamar/asrama penugasan<select required={role==="Musyrif"||role==="Kepala Asrama"} value={roomScope} onChange={event=>setRoomScope(event.target.value)}><option value="">Tidak dibatasi</option>{rooms.map(room=><option key={String(room.id)} value={String(room.name)}>{room.name}</option>)}</select></label>
       {!row&&<label className="wide">Sandi sementara<input required minLength={8} type="password" autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} placeholder="Minimal 8 karakter, berisi huruf dan angka"/><small>Bagikan sandi secara pribadi dan minta pengguna segera menggantinya.</small></label>}

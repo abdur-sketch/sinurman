@@ -92,6 +92,7 @@ export async function POST(request: Request) {
     const body = await request.json() as {
       phone?:string;
       name?:string;
+      phone?:string;
       role?:Role;
       roomScope?:string;
       password?:string;
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
     const phone = normalizeGuardianPhone(body.phone);
     const email = internalEmailFromPhone(phone);
     const name = String(body.name ?? "").trim();
+    const requestedPhone = normalizeGuardianPhone(body.phone);
     const role = body.role as Role;
     const roomScope = String(body.roomScope ?? "").trim();
     const password = validatePassword(body.password, true);
@@ -183,17 +185,40 @@ export async function PATCH(request: Request) {
     if (isOwnerEmail(target.email) && role !== "Admin") {
       throw new Error("Peran pemilik utama harus tetap Admin.");
     }
+    if (requestedPhone && !/^62\d{8,13}$/.test(requestedPhone)) {
+      throw new Error("Nomor HP harus memakai format Indonesia, contoh 628123456789.");
+    }
+    if (requestedPhone && isOwnerEmail(target.email)) {
+      throw new Error("Akun pemilik utama tetap menggunakan email utama.");
+    }
     if ((role === "Musyrif" || role === "Kepala Asrama") && !roomScope) {
       throw new Error("Kamar/asrama penugasan wajib dipilih untuk peran ini.");
     }
-    await firebaseAdmin().auth.updateUser(account.uid, { displayName:name });
-    await database().prepare("UPDATE users SET name=?,role=?,room_scope=? WHERE id=?")
-      .bind(name, role, roomScope, id).run();
-    if (target.role !== role || target.roomScope !== roomScope) {
+    let nextEmail = target.email;
+    let migratedLogin = false;
+    if (requestedPhone && requestedPhone !== target.phone) {
+      nextEmail = internalEmailFromPhone(requestedPhone);
+      const duplicate = await database().prepare("SELECT id FROM users WHERE phone=? AND id<>?").bind(requestedPhone,id).first();
+      if (duplicate) throw new Error("Nomor HP tersebut sudah dipakai akun lain.");
+      try {
+        await firebaseAdmin().auth.getUserByEmail(nextEmail);
+        throw new Error("Nomor HP tersebut sudah dipakai akun Firebase.");
+      } catch (error) {
+        const code = String((error as {code?:string})?.code ?? "");
+        if (code !== "auth/user-not-found" && !(error instanceof Error && error.message.toLowerCase().includes("no user record"))) throw error;
+      }
+      await firebaseAdmin().auth.updateUser(account.uid, { displayName:name, email:nextEmail, emailVerified:true });
+      migratedLogin = true;
+    } else {
+      await firebaseAdmin().auth.updateUser(account.uid, { displayName:name });
+    }
+    await database().prepare("UPDATE users SET email=?,phone=?,name=?,role=?,room_scope=? WHERE id=?")
+      .bind(nextEmail, requestedPhone || target.phone || "", name, role, roomScope, id).run();
+    if (migratedLogin || target.role !== role || target.roomScope !== roomScope) {
       await firebaseAdmin().auth.revokeRefreshTokens(account.uid);
       await revokeFirebaseSessions(account.uid);
     }
-    await audit(actor.email, "Ubah", id, `Memperbarui ${target.email} sebagai ${role}`);
+    await audit(actor.email, "Ubah", id, `Memperbarui ${requestedPhone || target.email} sebagai ${role}`);
     return Response.json({ ok:true, message:"Hak akses pengguna berhasil diperbarui." });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Akun gagal diperbarui.";
