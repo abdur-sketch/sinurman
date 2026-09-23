@@ -148,6 +148,7 @@ export async function PATCH(request: Request) {
       id?:number;
       action?:"update"|"toggle"|"reset-password";
       name?:string;
+      phone?:string;
       role?:Role;
       roomScope?:string;
       password?:string;
@@ -176,6 +177,7 @@ export async function PATCH(request: Request) {
       return Response.json({ ok:true, message:"Kata sandi sementara berhasil disimpan. Pengguna harus login kembali." });
     }
     const name = String(body.name ?? "").trim();
+    const requestedPhone = normalizeGuardianPhone(body.phone);
     const role = body.role as Role;
     const roomScope = String(body.roomScope ?? "").trim();
     if (!name) throw new Error("Nama pengguna wajib diisi.");
