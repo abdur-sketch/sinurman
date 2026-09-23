@@ -926,7 +926,12 @@ function AttendancePage({ data, edit, remove, reload, notify }: { data:AppData; 
 
 function SchedulePage({ data, role, edit, remove }: { data:AppData; role:Role; edit:(r:Resource,row?:Row)=>void; remove:(r:Resource,row:Row)=>void }) {
   const [level,setLevel]=useState("SMP");
-  const classes=Array.from(new Set(data.schedules.filter(x=>x.education_level===level).map(x=>String(x.class_name)))).sort();
+  // Build the selector from the class master as well as existing schedules.
+  // A newly-created class must be available here before its first lesson is added.
+  const classes=Array.from(new Set([
+    ...data.classes.filter(x=>x.education_level===level&&x.status!=="Arsip").map(x=>String(x.name)),
+    ...data.schedules.filter(x=>x.education_level===level).map(x=>String(x.class_name)),
+  ].filter(Boolean))).sort();
   const [selectedClass,setSelectedClass]=useState("VII A");
   const [day,setDay]=useState("Senin");
   const activeClass=classes.includes(selectedClass)?selectedClass:(classes[0]??selectedClass);
