@@ -1540,6 +1540,7 @@ function RecordModal({ editor, students, subjects, classes, onClose, onSave }: {
     <span className="modal-eyebrow">DATA SINURMAN</span>
     <h2>{editor.row?"Ubah":"Tambah"} {resourceNames[editor.resource]}</h2>
     <p>Data akan tersimpan permanen dan langsung memperbarui dashboard.</p>
+    {editor.resource==="students"&&<div className="spreadsheet-helper"><strong>Tambah banyak santri lebih cepat</strong><span>Unduh template, isi di Excel/Google Sheets, lalu unggah melalui Sistem → Integrasi & Backup.</span><a className="text-button" href="/api/import?template=students">⇩ Unduh template spreadsheet</a></div>}
     <div className="form-grid">{formFields[editor.resource].map(field=><label key={field.key} className={field.type==="textarea"?"wide":""}>{field.label}
       {field.type==="student"?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih santri</option>{students.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.nis}</option>)}</select>
       :field.type==="subject"?<select required value={form[field.key]} onChange={e=>updateFormField(field.key,e.target.value)}><option value="">Pilih mata pelajaran</option>{subjects.map(s=><option key={String(s.id)} value={String(s.id)}>{s.name} · {s.class_name}</option>)}</select>

@@ -166,6 +166,10 @@ main { max-width:1540px; margin:0 auto; padding:25px 29px 18px; }
 .role-access-preview small { color:#7b8da3; }
 .role-access-tags { display:flex; flex-wrap:wrap; gap:7px; }
 .role-access-tags span { display:inline-flex; align-items:center; padding:7px 10px; border-radius:999px; color:#276fd4; background:#e8f1ff; font-size:12px; font-weight:700; }
+.spreadsheet-helper { grid-column:1/-1; display:flex; flex-direction:column; gap:5px; padding:13px 16px; border:1px solid #dbe9fb; border-radius:12px; background:#f5f9ff; }
+.spreadsheet-helper strong { color:#1f3d5e; font-size:14px; }
+.spreadsheet-helper span { color:#71839a; font-size:12px; }
+.spreadsheet-helper a { align-self:flex-start; padding:0; }
 .stat-card,.metric-card { position:relative; min-height:126px; padding:19px; border-radius:10px; background:var(--card); box-shadow:var(--shadow); overflow:hidden; border:1px solid rgba(229,235,242,.6); }
 .stat-copy { display:flex; align-items:flex-start; flex-direction:column; }
 .stat-copy>span,.metric-card div>span { color:var(--muted); font-size:11px; font-weight:500; }

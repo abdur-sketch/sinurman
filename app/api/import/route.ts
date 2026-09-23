@@ -24,6 +24,19 @@ function recordsFromRows(rows:unknown[][]) {
   return rows.slice(1).map(values=>Object.fromEntries(headers.map((header,index)=>[header,values[index]??""])) as Record<string,unknown>);
 }
 
+export async function GET(request: Request) {
+  const template = new URL(request.url).searchParams.get("template");
+  if (template !== "students") return Response.json({ error: "Template impor tidak ditemukan." }, { status: 404 });
+  const csv = "nama,nis,kelas,kamar,nama_wali,whatsapp\n";
+  return new Response(csv, {
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": 'attachment; filename="template-data-santri.csv"',
+      "cache-control": "no-store",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const user=await ensureUser(request);
