@@ -1115,6 +1115,7 @@ function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row
   const [password,setPassword]=useState("");
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
+  const roomAssignmentRequired = role === "Musyrif" || role === "Kepala Asrama";
   async function submit(event:React.FormEvent) {
     event.preventDefault();setSaving(true);setError("");
     const response=await fetch("/api/admin-users",{
@@ -1133,8 +1134,8 @@ function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row
     <h2>{row?"Ubah hak akses":"Buat akun sekolah"}</h2><p>{row?"Perubahan peran akan mengeluarkan sesi lama pengguna.":"Nomor HP dan sandi ini dapat langsung dipakai pada halaman login internal."}</p>
     <div className="form-grid"><label>Nama lengkap<input required value={name} onChange={event=>setName(event.target.value)}/></label>
       <label>Nomor HP login<input required={!row || Boolean(row.phone)} type="tel" inputMode="tel" autoComplete="username" value={phone} onChange={event=>setPhone(event.target.value)} placeholder="628123456789"/><small>Nomor HP dapat diisi untuk memindahkan akun lama dari login email.</small></label>
-      <label>Peran<select required value={role} onChange={event=>setRole(event.target.value as Role)}><option>Admin</option><option>Kepala Asrama</option><option>Kepala Bidang Tahfidz</option><option>Musyrif</option><option>Ustadz</option></select></label>
-      <label>Kamar/asrama penugasan<select required={role==="Musyrif"||role==="Kepala Asrama"} value={roomScope} onChange={event=>setRoomScope(event.target.value)}><option value="">Tidak dibatasi</option>{rooms.map(room=><option key={String(room.id)} value={String(room.name)}>{room.name}</option>)}</select></label>
+      <label>Peran<select required value={role} onChange={event=>{const nextRole=event.target.value as Role;setRole(nextRole);if(nextRole==="Musyrif"||nextRole==="Kepala Asrama")setRoomScope("");}}><option>Admin</option><option>Kepala Asrama</option><option>Kepala Bidang Tahfidz</option><option>Musyrif</option><option>Ustadz</option></select></label>
+      <label>Kamar/asrama penugasan<select required={roomAssignmentRequired} value={roomScope} onChange={event=>setRoomScope(event.target.value)}>{roomAssignmentRequired?<option value="" disabled>Pilih kamar/asrama</option>:<option value="">Tidak dibatasi</option>}{rooms.map(room=><option key={String(room.id)} value={String(room.name)}>{room.name}</option>)}</select><small>{roomAssignmentRequired?"Wajib dipilih untuk membatasi akses pengguna.":"Opsional; pengguna dapat mengakses sesuai perannya."}</small></label>
       {!row&&<label className="wide">Sandi sementara<input required minLength={8} type="password" autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} placeholder="Minimal 8 karakter, berisi huruf dan angka"/><small>Bagikan sandi secara pribadi dan minta pengguna segera menggantinya.</small></label>}
     </div><section className="role-access-preview"><div><strong>Akses tools untuk peran {role}</strong><small>Daftar ini diterapkan otomatis setelah akun dibuat.</small></div><div className="role-access-tags">{roleAccessTools[role].map(tool=><span key={tool}>✓ {tool}</span>)}</div></section>{error&&<div className="form-error">{error}</div>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button className="primary-button" disabled={saving}>{saving?"Menyimpan…":row?"Simpan Perubahan":"Buat Akun Login"}</button></div>
