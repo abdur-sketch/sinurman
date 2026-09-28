@@ -656,6 +656,10 @@ test("Firebase menyimpan setiap baris sebagai dokumen dan mempertahankan migrasi
   assert.match(adapter, /sourceRows\.slice\(start,start\+400\)/);
   assert.match(adapter, /version:3,rowCount/);
   assert.match(adapter, /ADD COLUMN/);
+  assert.match(adapter, /function alteredTable/);
+  assert.match(adapter, /const altered = alteredTable\(sql\)/);
+  assert.match(adapter, /Materialise the default/);
+  assert.match(adapter, /changed=mutationTable\(this\.sql\)\|\|createTableName\(this\.sql\)\|\|alteredTable\(this\.sql\)/);
   assert.match(adapter, /tableRows\(name\)\.limit\(400\)/);
   assert.match(session, /collection\("_d1_tables"\)\.doc\("users"\)/);
   assert.match(session, /collection\("rows"\)/);

@@ -43,12 +43,22 @@ function mutationTable(sql: string) {
   return sql.match(/^\s*(?:INSERT(?:\s+OR\s+IGNORE)?\s+INTO|UPDATE|DELETE\s+FROM)\s+([A-Za-z_]\w*)/i)?.[1] ?? "";
 }
 
+// DDL statements do not match the mutation pattern above, but an ALTER TABLE
+// migration still needs the table to be loaded and persisted by the Firestore
+// compatibility layer. Without this, the migration can appear to succeed in
+// memory while the existing production rows remain on the old schema.
+function alteredTable(sql: string) {
+  return sql.match(/^\s*ALTER\s+TABLE\s+([A-Za-z_]\w*)/i)?.[1] ?? "";
+}
+
 function referencedTables(sql: string) {
   const names = new Set<string>();
   const pattern = /\b(?:FROM|JOIN|UPDATE|INTO)\s+([A-Za-z_]\w*)/gi;
   for (const match of sql.matchAll(pattern)) names.add(match[1]);
   const mutation = mutationTable(sql);
   if (mutation) names.add(mutation);
+  const altered = alteredTable(sql);
+  if (altered) names.add(altered);
   return [...names];
 }
 
@@ -96,6 +106,25 @@ function execute(engine: Engine, state: RuntimeState, rawSql: string, rawParams:
     const normalized=sql.replace(/\s+ADD\s+(?!COLUMN\b)/i," ADD COLUMN ");
     if (!state.ddl.includes(normalized)) state.ddl.push(normalized);
     const value=engine.exec(normalized);
+    // SQLite would expose NULL/default values for existing rows after ADD
+    // COLUMN. Materialise the default in our document rows as well so the
+    // Firestore-backed D1 adapter has the same observable schema semantics.
+    const match = normalized.match(/^ALTER\s+TABLE\s+([A-Za-z_]\w*)\s+ADD\s+COLUMN\s+([A-Za-z_]\w*)\s+(.+)$/i);
+    if (match) {
+      const [, tableName, columnName, definition] = match;
+      const defaultMatch = definition.match(/\bDEFAULT\s+('(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|[^\s,]+)/i);
+      const rawDefault = defaultMatch?.[1];
+      const defaultValue = rawDefault?.startsWith("'") || rawDefault?.startsWith('"')
+        ? rawDefault.slice(1, -1).replace(/''/g, "'").replace(/\"\"/g, '\"')
+        : rawDefault === undefined ? null : Number.isNaN(Number(rawDefault)) ? rawDefault : Number(rawDefault);
+      for (const row of state.tables[tableName] ?? []) {
+        if (!(columnName in row)) row[columnName] = defaultValue;
+      }
+      const table = engine.tables[tableName];
+      for (const row of table?.data ?? []) {
+        if (!(columnName in row)) row[columnName] = defaultValue;
+      }
+    }
     return { value, meta: { changes: 0 } satisfies RunMeta };
   }
   if (/instr\(/i.test(sql) || /^UPDATE\s+students\s+SET\s+guardian_phone=CASE/i.test(sql)) {
@@ -247,7 +276,7 @@ class FirestoreStatement {
       const before=Object.fromEntries(Object.entries(state.tables).map(([name,rows])=>[name,cleanRows(rows)]));
       const engine=createEngine(state);const result=execute(engine,state,this.sql,this.params);const now=new Date().toISOString();
       if(state.ddl.length!==(schema?.ddl??[]).length)transaction.set(schemaDocument(),{...schema,version:3,ddl:state.ddl,updatedAt:now} satisfies SchemaState);
-      const changed=mutationTable(this.sql)||createTableName(this.sql);
+      const changed=mutationTable(this.sql)||createTableName(this.sql)||alteredTable(this.sql);
       if(changed)writeChangedTable(transaction,changed,before[changed]??[],engine.tables[changed]?.data??[],now);
       return {success:true,meta:result.meta,results:[]};
     });
@@ -271,7 +300,7 @@ export class FirestoreD1Database {
       const state:RuntimeState={ddl:[...(schema?.ddl??[])],tables:Object.fromEntries(names.map((name,index)=>[name,cleanRows(snapshots[index].docs.map(document=>(document.data() as StoredRow).data??{}))]))};
       const before=Object.fromEntries(Object.entries(state.tables).map(([name,rows])=>[name,cleanRows(rows)]));
       const engine=createEngine(state);const changed=new Set<string>();
-      const results=statements.map(statement=>{const result=execute(engine,state,statement.query(),statement.values());const name=mutationTable(statement.query())||createTableName(statement.query());if(name)changed.add(name);return {success:true,meta:result.meta,results:[]};});
+      const results=statements.map(statement=>{const result=execute(engine,state,statement.query(),statement.values());const name=mutationTable(statement.query())||createTableName(statement.query())||alteredTable(statement.query());if(name)changed.add(name);return {success:true,meta:result.meta,results:[]};});
       const now=new Date().toISOString();
       if(state.ddl.length!==(schema?.ddl??[]).length)transaction.set(schemaDocument(),{...schema,version:3,ddl:state.ddl,updatedAt:now} satisfies SchemaState);
       for(const name of changed)writeChangedTable(transaction,name,before[name]??[],engine.tables[name]?.data??[],now);
