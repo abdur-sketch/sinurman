@@ -185,8 +185,13 @@ export function ensureDatabaseSchema() {
         .bind(JSON.stringify(defaultPermissions(role)), legacyUser.id)
         .run();
     }
+    // Materialise the review marker on existing Firestore-backed rows even
+    // when the DDL metadata already contains the column but old documents do
+    // not. Never infer a replacement role; legacy users stay unchanged until
+    // an Admin explicitly migrates them.
+    await db.prepare("UPDATE users SET role_review_required=0 WHERE role='Admin'").run();
     for (const legacyRole of LEGACY_INTERNAL_ROLES) {
-      await db.prepare("UPDATE users SET role_review_required=1 WHERE role=? AND role_review_required=0")
+      await db.prepare("UPDATE users SET role_review_required=1 WHERE role=?")
         .bind(legacyRole).run();
     }
     await db.prepare("UPDATE tahfidz_records SET surah_from=surah WHERE surah_from=''").run();
