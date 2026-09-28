@@ -168,6 +168,14 @@ export function ensureDatabaseSchema() {
         await db.batch(missing.map(([name, definition]) => db.prepare(`ALTER TABLE ${table} ADD ${name} ${definition}`)));
       }
     }
+    // Existing Firestore-backed rows can predate the column even after the
+    // DDL metadata has been upgraded. Backfill only the new field, preserving
+    // every other user value and any explicit permission override.
+    for (const role of Object.keys(rolePermissionDefaults) as Role[]) {
+      await db.prepare("UPDATE users SET permission_json=? WHERE role=? AND (permission_json IS NULL OR permission_json='')")
+        .bind(JSON.stringify(defaultPermissions(role)), role)
+        .run();
+    }
     await db.prepare("UPDATE tahfidz_records SET surah_from=surah WHERE surah_from=''").run();
     await db.prepare("UPDATE tahfidz_records SET surah_to=surah WHERE surah_to=''").run();
     await db.prepare("UPDATE tahfidz_records SET verse_from=CASE WHEN instr(replace(verses,'–','-'),'-')>0 THEN CAST(substr(replace(verses,'–','-'),1,instr(replace(verses,'–','-'),'-')-1) AS INTEGER) ELSE CAST(verses AS INTEGER) END WHERE verse_from=0").run();
