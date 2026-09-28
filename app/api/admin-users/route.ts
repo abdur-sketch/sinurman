@@ -1,4 +1,4 @@
-import { database, ensureUser, normalizeGuardianPhone, type Role } from "../_lib";
+import { database, defaultPermissions, ensureUser, normalizeGuardianPhone, TOOL_PERMISSIONS, type Role, type ToolPermission } from "../_lib";
 import { isOwnerEmail } from "../../../lib/security-config";
 
 export const runtime = "nodejs";
@@ -38,7 +38,7 @@ async function requireAdmin(request: Request) {
 
 async function targetById(id: number) {
   return database().prepare(
-    "SELECT id,email,phone,name,role,room_scope AS roomScope,created_at AS createdAt FROM users WHERE id=?",
+    "SELECT id,email,phone,name,role,room_scope AS roomScope,permission_json AS permissionJson,employee_id AS employeeId,created_at AS createdAt FROM users WHERE id=?",
   ).bind(id).first<{
     id:number;
     email:string;
@@ -46,6 +46,8 @@ async function targetById(id: number) {
     name:string;
     role:Role;
     roomScope:string;
+    permissionJson?:string;
+    employeeId?:number;
     createdAt:string;
   }>();
 }
@@ -61,13 +63,16 @@ export async function GET(request: Request) {
     await requireAdmin(request);
     const { firebaseAdmin } = await firebaseServices();
     const rows = await database().prepare(
-      "SELECT id,email,phone,name,role,room_scope AS roomScope,created_at AS createdAt FROM users ORDER BY id",
-    ).all<{id:number;email:string;phone:string;name:string;role:Role;roomScope:string;createdAt:string}>();
+      "SELECT id,email,phone,name,role,room_scope AS roomScope,permission_json AS permissionJson,employee_id AS employeeId,created_at AS createdAt FROM users ORDER BY id",
+    ).all<{id:number;email:string;phone:string;name:string;role:Role;roomScope:string;permissionJson?:string;employeeId?:number;createdAt:string}>();
     const users = await Promise.all(rows.results.map(async row => {
       try {
         const account = await firebaseAdmin().auth.getUserByEmail(row.email);
+        let permissionIds=defaultPermissions(row.role);
+        try { const parsed=JSON.parse(String(row.permissionJson||"")); if(Array.isArray(parsed)) permissionIds=parsed.filter((item):item is ToolPermission=>TOOL_PERMISSIONS.includes(item)); } catch {/* default role */}
         return {
           ...row,
+          permissionIds,
           uid: account.uid,
           status: account.disabled ? "Diblokir" : "Aktif",
           emailVerified: account.emailVerified,
@@ -95,12 +100,14 @@ export async function POST(request: Request) {
       role?:Role;
       roomScope?:string;
       password?:string;
+      permissions?:string[];
     };
     const phone = normalizeGuardianPhone(body.phone);
     const email = internalEmailFromPhone(phone);
     const name = String(body.name ?? "").trim();
     const role = body.role as Role;
     const roomScope = String(body.roomScope ?? "").trim();
+    const permissions=Array.isArray(body.permissions)?body.permissions.filter(item=>TOOL_PERMISSIONS.includes(item as ToolPermission)) as ToolPermission[]:defaultPermissions(role);
     const password = validatePassword(body.password, true);
     if (!/^62\d{8,13}$/.test(phone)) throw new Error("Nomor HP harus memakai format Indonesia, contoh 628123456789.");
     if (!name) throw new Error("Nama pengguna wajib diisi.");
@@ -126,8 +133,8 @@ export async function POST(request: Request) {
     });
     createdUid = account.uid;
     const result = await database().prepare(
-      "INSERT INTO users (email,phone,name,role,room_scope,created_at) VALUES (?,?,?,?,?,?)",
-    ).bind(email, phone, name, role, roomScope, new Date().toISOString()).run();
+      "INSERT INTO users (email,phone,name,role,room_scope,permission_json,created_at) VALUES (?,?,?,?,?,?,?)",
+    ).bind(email, phone, name, role, roomScope, JSON.stringify(permissions), new Date().toISOString()).run();
     await audit(actor.email, "Tambah", Number(result.meta.last_row_id ?? 0), `Membuat akun ${phone} sebagai ${role}`);
     return Response.json({ ok:true, id:result.meta.last_row_id, message:"Akun login berhasil dibuat." }, { status:201 });
   } catch (error) {
@@ -152,6 +159,7 @@ export async function PATCH(request: Request) {
       role?:Role;
       roomScope?:string;
       password?:string;
+      permissions?:string[];
     };
     const id = Number(body.id ?? 0);
     const target = await targetById(id);
@@ -180,6 +188,7 @@ export async function PATCH(request: Request) {
     const requestedPhone = normalizeGuardianPhone(body.phone);
     const role = body.role as Role;
     const roomScope = String(body.roomScope ?? "").trim();
+    const permissions=Array.isArray(body.permissions)?body.permissions.filter(item=>TOOL_PERMISSIONS.includes(item as ToolPermission)) as ToolPermission[]:defaultPermissions(role);
     if (!name) throw new Error("Nama pengguna wajib diisi.");
     if (!managedRoles.has(role)) throw new Error("Peran pengguna internal tidak valid.");
     if (isOwnerEmail(target.email) && role !== "Admin") {
@@ -212,13 +221,14 @@ export async function PATCH(request: Request) {
     } else {
       await firebaseAdmin().auth.updateUser(account.uid, { displayName:name });
     }
-    await database().prepare("UPDATE users SET email=?,phone=?,name=?,role=?,room_scope=? WHERE id=?")
-      .bind(nextEmail, requestedPhone || target.phone || "", name, role, roomScope, id).run();
+    const oldPermissions=target.permissionJson||JSON.stringify(defaultPermissions(target.role));
+    await database().prepare("UPDATE users SET email=?,phone=?,name=?,role=?,room_scope=?,permission_json=? WHERE id=?")
+      .bind(nextEmail, requestedPhone || target.phone || "", name, role, roomScope, JSON.stringify(permissions), id).run();
     if (migratedLogin || target.role !== role || target.roomScope !== roomScope) {
       await firebaseAdmin().auth.revokeRefreshTokens(account.uid);
       await revokeFirebaseSessions(account.uid);
     }
-    await audit(actor.email, "Ubah", id, `Memperbarui ${requestedPhone || target.email} sebagai ${role}`);
+    await audit(actor.email, "USER_PERMISSION_UPDATED", id, `Memperbarui ${requestedPhone || target.email} sebagai ${role}; permission lama=${oldPermissions}; permission baru=${JSON.stringify(permissions)}`);
     return Response.json({ ok:true, message:"Hak akses pengguna berhasil diperbarui." });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Akun gagal diperbarui.";

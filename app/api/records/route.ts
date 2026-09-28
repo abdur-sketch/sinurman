@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { canWrite, database, ensureUser, normalizeGuardianPhone } from "../_lib";
+import { canWrite, database, ensureUser, normalizeGuardianPhone, requirePermission, type ToolPermission } from "../_lib";
 import { notifyRecordChange } from "../_notifications";
 import { quranRangeAmount } from "../../quran-data";
 import { reportServerError } from "../../../lib/observability";
@@ -115,6 +115,7 @@ const resourceConfig = {
 type Resource = keyof typeof resourceConfig;
 const governedResources = new Set<Resource>(["tahfidz","tahsin","mutabaah","health","characters","attendance","grades"]);
 const workflowStatuses = new Set(["Draft","Diverifikasi","Dipublikasikan"]);
+const resourcePermissions:Partial<Record<Resource,ToolPermission>>={students:"students",employees:"employees",classes:"classes",rooms:"rooms",schedules:"schedule",subjects:"academic",grades:"grades",tahfidz:"tahfidz",tahsin:"tahsin",mutabaah:"mutabaah",attendance:"attendance",permits:"permits",counseling:"counseling",health:"health",characters:"characters",transactions:"finance",bills:"finance",inventory:"employees",announcements:"reports",admissions:"admissions"};
 
 function periodFromDate(value: unknown) {
   const parsed = new Date(String(value ?? ""));
@@ -164,6 +165,8 @@ export async function POST(request: Request) {
     if (!canWrite(user.role, resource)) {
       return Response.json({ error: "Peran Anda tidak memiliki izin untuk tindakan ini." }, { status: 403 });
     }
+    const permission=resourcePermissions[resource];
+    if(permission) requirePermission(user,permission);
     const db = database();
     const config = resourceConfig[resource];
     if (user.role === "Musyrif" || user.role === "Kepala Asrama") {
@@ -325,6 +328,6 @@ export async function POST(request: Request) {
   } catch (error) {
     const requestId=reportServerError("records.mutation",error,request);
     const message = error instanceof Error ? error.message : "Tindakan gagal.";
-    return Response.json({ error: message.includes("UNIQUE") ? "Data unik tersebut sudah digunakan." : message, requestId }, { status: message.includes("MFA_REQUIRED")?403:500 });
+    return Response.json({ error: message.includes("UNIQUE") ? "Data unik tersebut sudah digunakan." : message, requestId }, { status: message.includes("MFA_REQUIRED")||message.includes("FORBIDDEN_PERMISSION")?403:500 });
   }
 }

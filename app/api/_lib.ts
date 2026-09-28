@@ -10,7 +10,25 @@ export type AuthenticatedUser = {
   roomScope: string;
   guardianPhone?: string;
   authProvider?: "firebase" | "chatgpt" | "guardian";
+  permissionIds?: string[];
 };
+export const TOOL_PERMISSIONS = ["dashboard","students","employees","classes","rooms","schedule","calendar","academic","grades","tahfidz","tahsin","mutabaah","attendance","permits","counseling","health","characters","finance","sinurpay","admissions","reports","users","payroll","audit","backup","settings"] as const;
+export type ToolPermission = typeof TOOL_PERMISSIONS[number];
+const rolePermissionDefaults: Record<Role, ToolPermission[]> = {
+  Admin: [...TOOL_PERMISSIONS],
+  "Kepala Asrama": ["dashboard","students","tahfidz","tahsin","mutabaah","attendance","permits","counseling","health","characters","rooms","schedule","academic","reports"],
+  "Kepala Bidang Tahfidz": ["dashboard","students","tahfidz","tahsin","mutabaah","reports"],
+  Musyrif: ["dashboard","students","tahfidz","tahsin","mutabaah","attendance","permits","counseling","health","characters","academic","schedule","reports"],
+  Ustadz: ["dashboard","students","tahfidz","tahsin","mutabaah","attendance","academic","grades","schedule","reports"],
+  "Wali Santri": ["dashboard"],
+};
+export function defaultPermissions(role: Role) { return rolePermissionDefaults[role] ?? []; }
+function parsePermissions(role: Role, value: unknown) {
+  if (!value) return defaultPermissions(role);
+  try { const parsed = JSON.parse(String(value)); return Array.isArray(parsed) ? parsed.filter((item): item is ToolPermission => TOOL_PERMISSIONS.includes(item)) : defaultPermissions(role); } catch { return defaultPermissions(role); }
+}
+export function hasPermission(user: Pick<AuthenticatedUser,"role"|"permissionIds">, permission: ToolPermission) { return user.role === "Admin" || Boolean(user.permissionIds?.includes(permission)); }
+export function requirePermission(user: Pick<AuthenticatedUser,"role"|"permissionIds">, permission: ToolPermission) { if (!hasPermission(user, permission)) throw new Error("FORBIDDEN_PERMISSION: Anda tidak memiliki akses ke modul ini."); }
 // Firebase Hosting strips non-reserved cookies before proxying to Cloud Run.
 const guardianCookieName = process.env.FIREBASE_RUNTIME === "true" ? "__session" : "sinurman_wali_session";
 
@@ -26,7 +44,8 @@ export function ensureDatabaseSchema() {
   const db = database();
   schemaReady = (async () => {
     const definitions = [
-      "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',name TEXT NOT NULL,role TEXT NOT NULL,room_scope TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',name TEXT NOT NULL,role TEXT NOT NULL,room_scope TEXT NOT NULL DEFAULT '',permission_json TEXT NOT NULL DEFAULT '',employee_id INTEGER,created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS institution_profile (id INTEGER PRIMARY KEY CHECK (id=1),institution_name TEXT NOT NULL DEFAULT '',foundation_name TEXT NOT NULL DEFAULT '',address TEXT NOT NULL DEFAULT '',village TEXT NOT NULL DEFAULT '',district TEXT NOT NULL DEFAULT '',city TEXT NOT NULL DEFAULT '',province TEXT NOT NULL DEFAULT '',postal_code TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',whatsapp TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',website TEXT NOT NULL DEFAULT '',logo_url TEXT NOT NULL DEFAULT '',leader_name TEXT NOT NULL DEFAULT '',system_manager TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,nis TEXT NOT NULL UNIQUE,class_name TEXT NOT NULL,room TEXT NOT NULL,guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,guardian_email TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS tahfidz_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,surah TEXT NOT NULL,verses TEXT NOT NULL,surah_from TEXT NOT NULL DEFAULT '',surah_to TEXT NOT NULL DEFAULT '',verse_from INTEGER NOT NULL DEFAULT 0,verse_to INTEGER NOT NULL DEFAULT 0,amount INTEGER NOT NULL,grade TEXT NOT NULL,teacher TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS tahsin_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,level TEXT NOT NULL,makhraj_score INTEGER NOT NULL,tajwid_score INTEGER NOT NULL,fluency_score INTEGER NOT NULL,length_score INTEGER NOT NULL,adab_score INTEGER NOT NULL,note TEXT NOT NULL DEFAULT '',teacher TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
@@ -86,7 +105,7 @@ export function ensureDatabaseSchema() {
     await db.batch(definitions.map((sql) => db.prepare(sql)));
 
     const upgrades: Record<string, Record<string, string>> = {
-      users: { room_scope: "TEXT NOT NULL DEFAULT ''", phone: "TEXT NOT NULL DEFAULT ''" },
+      users: { room_scope: "TEXT NOT NULL DEFAULT ''", phone: "TEXT NOT NULL DEFAULT ''", permission_json: "TEXT NOT NULL DEFAULT ''", employee_id: "INTEGER" },
       students: { guardian_email: "TEXT NOT NULL DEFAULT ''" },
       tahfidz_records: {
         surah_from: "TEXT NOT NULL DEFAULT ''",
@@ -401,30 +420,30 @@ export async function ensureUser(request: Request) {
     return user;
   };
   const existing = await db
-    .prepare("SELECT id, email, name, role, room_scope AS roomScope FROM users WHERE email = ?")
+    .prepare("SELECT id, email, name, role, room_scope AS roomScope, permission_json AS permissionJson FROM users WHERE email = ?")
     .bind(identity.email)
-    .first<{ id: number; email: string; name: string; role: Role; roomScope: string }>();
+    .first<{ id: number; email: string; name: string; role: Role; roomScope: string; permissionJson?: string }>();
 
   if (existing) {
     if (isOwnerEmail(identity.email) && existing.role !== "Admin") {
       await db.prepare("UPDATE users SET role='Admin' WHERE id=?").bind(existing.id).run();
-      return enforceAdminMfa({ ...existing, role: "Admin" as const, authProvider: identity.authProvider } as AuthenticatedUser);
+      return enforceAdminMfa({ ...existing, role: "Admin" as const, permissionIds: parsePermissions("Admin", existing.permissionJson), authProvider: identity.authProvider } as AuthenticatedUser);
     }
-    return enforceAdminMfa({ ...existing, authProvider: identity.authProvider } as AuthenticatedUser);
+    return enforceAdminMfa({ ...existing, permissionIds: parsePermissions(existing.role, existing.permissionJson), authProvider: identity.authProvider } as AuthenticatedUser);
   }
 
   const count = await db.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>();
   const role: Role = isOwnerEmail(identity.email) || Number(count?.total ?? 0) === 0 ? "Admin" : "Wali Santri";
   const now = new Date().toISOString();
   await db
-    .prepare("INSERT INTO users (email, name, role, room_scope, created_at) VALUES (?, ?, ?, '', ?)")
-    .bind(identity.email, identity.name, role, now)
+    .prepare("INSERT INTO users (email, name, role, room_scope, permission_json, created_at) VALUES (?, ?, ?, '', ?, ?)")
+    .bind(identity.email, identity.name, role, JSON.stringify(defaultPermissions(role)), now)
     .run();
   const created = (await db
-    .prepare("SELECT id, email, name, role, room_scope AS roomScope FROM users WHERE email = ?")
+    .prepare("SELECT id, email, name, role, room_scope AS roomScope, permission_json AS permissionJson FROM users WHERE email = ?")
     .bind(identity.email)
     .first()) as AuthenticatedUser;
-  return enforceAdminMfa({ ...created, authProvider: identity.authProvider });
+  return enforceAdminMfa({ ...created, permissionIds: parsePermissions(role, (created as {permissionJson?:string}).permissionJson), authProvider: identity.authProvider });
 }
 
 export async function guardianOwnsStudent(user: Pick<AuthenticatedUser,"email"|"role"|"guardianPhone">, studentId: number) {

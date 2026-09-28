@@ -75,3 +75,17 @@ test("pembersihan demo tidak menghapus inventaris berdasarkan nama",async()=>{
   assert.match(lib,/seed_source TEXT NOT NULL DEFAULT ''/);
   assert.match(lib,/development-demo/);
 });
+
+test("granular user permissions are role-bounded and enforced server-side",async()=>{
+  const [lib,users,records,bootstrap,dashboard]=await Promise.all([
+    read("app/api/_lib.ts"),read("app/api/admin-users/route.ts"),read("app/api/records/route.ts"),read("app/api/bootstrap/route.ts"),read("app/dashboard-client.tsx"),
+  ]);
+  assert.match(lib,/hasPermission|requirePermission|defaultPermissions/);
+  assert.match(lib,/permission_json/);
+  assert.match(users,/USER_PERMISSION_UPDATED/);
+  assert.match(users,/Gunakan Default Role|defaultPermissions/);
+  assert.match(records,/requirePermission\(user,permission\)/);
+  assert.match(bootstrap,/const visible|hasPermission/);
+  assert.match(dashboard,/permissionGroups/);
+  assert.match(dashboard,/Gunakan Default Role/);
+});

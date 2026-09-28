@@ -12,7 +12,7 @@ type Role = "Admin" | "Kepala Asrama" | "Kepala Bidang Tahfidz" | "Musyrif" | "U
 type Resource = "students" | "employees" | "classes" | "tahfidz" | "tahsin" | "mutabaah" | "health" | "transactions" | "characters" | "inventory" | "announcements" | "attendance" | "permits" | "schedules" | "rooms" | "admissions" | "counseling" | "bills" | "users" | "subjects" | "grades";
 type Row = Record<string, string | number | null>;
 type AppData = {
-  user?: { name: string; email: string; role: Role; roomScope?: string; guardianPhone?: string; authProvider?: "firebase"|"chatgpt"|"guardian" };
+  user?: { name: string; email: string; role: Role; roomScope?: string; guardianPhone?: string; permissionIds?: string[]; authProvider?: "firebase"|"chatgpt"|"guardian" };
   warning?: string;
   students: Row[];
   employees: Row[];
@@ -326,6 +326,15 @@ function Overview({ data, onNavigate }: { data: AppData; onNavigate:(page:PageKe
   );
 }
 
+function InstitutionProfileCard() {
+  const fields=["institution_name","foundation_name","address","village","district","city","province","postal_code","phone","whatsapp","email","website","leader_name","system_manager"];
+  const labels:Record<string,string>={institution_name:"Nama Pesantren",foundation_name:"Nama Yayasan",address:"Alamat",village:"Desa/Kelurahan",district:"Kecamatan",city:"Kabupaten/Kota",province:"Provinsi",postal_code:"Kode Pos",phone:"Nomor Telepon",whatsapp:"WhatsApp",email:"Email",website:"Website",leader_name:"Nama Pimpinan",system_manager:"Nama Pengelola Sistem"};
+  const [form,setForm]=useState<Record<string,string>>({}); const [complete,setComplete]=useState(false); const [saving,setSaving]=useState(false); const [message,setMessage]=useState("");
+  useEffect(()=>{void fetch("/api/institution-profile",{cache:"no-store"}).then(response=>response.json() as Promise<{profile?:Record<string,string>;complete?:boolean}>).then(result=>{setForm(result.profile||{});setComplete(Boolean(result.complete));}).catch(()=>undefined);},[]);
+  async function save(event:React.FormEvent){event.preventDefault();setSaving(true);const response=await fetch("/api/institution-profile",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(form)});const result=await response.json() as {message?:string;error?:string};setSaving(false);setMessage(result.message||result.error||"Profil belum tersimpan.");if(response.ok)setComplete(fields.filter(key=>["institution_name","address","leader_name","system_manager"].includes(key)).every(key=>String(form[key]||"").trim()));}
+  return <section className="card setup-note"><div className="card-header"><div><strong>Profil Pesantren</strong><small>Sumber tunggal identitas kop surat, rapor, SPMB, PDF, dan kebijakan privasi.</small></div><Status tone={complete?"green":"amber"}>{complete?"LENGKAP":"BELUM LENGKAP"}</Status></div><form className="form-grid" onSubmit={save}>{fields.map(key=><label key={key}>{labels[key]}<input value={form[key]||""} onChange={event=>setForm(current=>({...current,[key]:event.target.value}))} placeholder={`Isi ${labels[key].toLowerCase()}`}/></label>)}<div className="modal-actions"><button className="primary-button" disabled={saving}>{saving?"Menyimpan…":"Simpan Profil Pesantren"}</button></div>{message&&<small>{message}</small>}</form></section>;
+}
+
 function SetupWizard({ data, onNavigate }: { data: AppData; onNavigate:(page:PageKey)=>void }) {
   const steps = [
     { title: "Profil pesantren & periode", copy: "Buka periode akademik dan pastikan identitas pesantren sudah benar.", page: "integrasi" as PageKey, done: true, action: "Periksa pengaturan" },
@@ -337,7 +346,8 @@ function SetupWizard({ data, onNavigate }: { data: AppData; onNavigate:(page:Pag
   const completed=steps.filter(step=>step.done).length;
   return <div className="feature-app setup-wizard-app">
     <section className="feature-hero setup-hero"><div className="feature-hero-copy"><span className="feature-kicker">PERSIAPAN OPERASIONAL</span><h2>SINURMAN siap diisi<br/>dengan data pesantren Anda.</h2><p>Ikuti langkah singkat ini agar modul akademik, kepesantrenan, wali, dan keuangan berjalan rapi sejak hari pertama.</p><div className="feature-hero-actions"><button className="feature-primary" onClick={()=>onNavigate(steps.find(step=>!step.done)?.page||"santri")}>Lanjutkan setup →</button><span className="setup-progress-label">{completed}/{steps.length} langkah selesai</span></div></div><div className="setup-progress-ring" style={{"--progress":`${Math.round(completed/steps.length*360)}deg`} as React.CSSProperties}><strong>{Math.round(completed/steps.length*100)}%</strong><span>siap operasional</span></div></section>
-    <section className="setup-step-list">{steps.map((step,index)=><article className={`card setup-step ${step.done?"done":""}`} key={step.title}><div className="setup-step-number">{step.done?"✓":index+1}</div><div className="setup-step-copy"><span>LANGKAH {index+1}</span><h3>{step.title}</h3><p>{step.copy}</p></div><button className="secondary-button" onClick={()=>onNavigate(step.page)}>{step.action} →</button></article>)}</section>
+    <InstitutionProfileCard/><section className="setup-step-list">{steps.map((step,index)=><article className={`card setup-step ${step.done?"done":""}`} key={step.title}><div className="setup-step-number">{step.done?"✓":index+1}</div><div className="setup-step-copy"><span>LANGKAH {index+1}</span><h3>{step.title}</h3><p>{step.copy}</p></div><button className="secondary-button" onClick={()=>onNavigate(step.page)}>{step.action} →</button></article>)}</section>
+    <section className="card setup-note"><strong>Kelengkapan data operasional</strong><div className="portal-list"><div><span>PEGAWAI</span><b>{data.employees.length || "BELUM DIISI"}</b></div><div><span>USER INTERNAL</span><b>{data.users.length || "BELUM DIISI"}</b></div><div><span>KELAS</span><b>{data.classes.length || "BELUM DIISI"}</b></div><div><span>KAMAR</span><b>{data.rooms.length || "BELUM DIISI"}</b></div><div><span>MATA PELAJARAN</span><b>{data.subjects.length || "BELUM DIISI"}</b></div><div><span>SANTRI</span><b>{data.students.length || "BELUM DIISI"}</b></div><div><span>WALI TERHUBUNG</span><b>{new Set(data.students.map(row=>String(row.guardian_phone||"")).filter(Boolean)).size || "BELUM DIISI"}</b></div><div><span>JADWAL</span><b>{data.schedules.length || "BELUM LENGKAP"}</b></div></div></section>
     <section className="card setup-note"><strong>Catatan keamanan</strong><p>Masukkan data asli saja. Password, API key, dan token pembayaran tidak ditampilkan atau disimpan di halaman publik.</p></section>
   </div>;
 }
@@ -1120,6 +1130,16 @@ function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row
   const [password,setPassword]=useState("");
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
+  const permissionGroups:Record<string,{id:string;label:string}[]>= {
+    "AKADEMIK":[{id:"academic",label:"Akademik"},{id:"grades",label:"Nilai & Rapor"},{id:"schedule",label:"Jadwal"},{id:"calendar",label:"Kalender"}],
+    "KESANTRIAN":[{id:"students",label:"Data Santri"},{id:"tahfidz",label:"Tahfidz"},{id:"tahsin",label:"Tahsin"},{id:"mutabaah",label:"Mutaba'ah"},{id:"attendance",label:"Absensi"},{id:"permits",label:"Izin"},{id:"counseling",label:"Pembinaan & Poin"},{id:"health",label:"Kesehatan"},{id:"characters",label:"Karakter"}],
+    "ASRAMA":[{id:"rooms",label:"Kamar"}],
+    "KEUANGAN":[{id:"finance",label:"Tagihan"},{id:"sinurpay",label:"SINURPAY"},{id:"payroll",label:"Payroll"}],
+    "ADMINISTRASI":[{id:"admissions",label:"SPMB"},{id:"reports",label:"Laporan"}],
+    "SYSTEM":[{id:"users",label:"Pengguna"},{id:"employees",label:"Pegawai"},{id:"backup",label:"Backup/Restore"},{id:"audit",label:"Audit Log"},{id:"settings",label:"Pengaturan"}],
+  };
+  const [permissions,setPermissions]=useState<string[]>(()=>Array.isArray(row?.permissionIds)?row.permissionIds.map(String):["dashboard","students","tahfidz","tahsin","mutabaah","attendance","academic","grades","schedule","reports"]);
+  const useDefault=()=>setPermissions(roleAccessTools[role].flatMap(tool=>tool.includes("Tahfidz")?["tahfidz"]:tool.includes("Tahsin")?["tahsin"]:tool.includes("Mutaba")?["mutabaah"]:tool.includes("Absensi")?["attendance"]:tool.includes("Santri")?["students"]:tool.includes("Akademik")?["academic","grades"]:tool.includes("Jadwal")?["schedule"]:tool.includes("Laporan")?["reports"]:tool.includes("Dashboard")?["dashboard"]:[]));
   const roomAssignmentRequired = role === "Musyrif" || role === "Kepala Asrama";
   async function submit(event:React.FormEvent) {
     event.preventDefault();setSaving(true);setError("");
@@ -1127,8 +1147,8 @@ function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row
       method:row?"PATCH":"POST",
       headers:{"content-type":"application/json"},
       body:JSON.stringify(row
-        ? {id:Number(row.id),action:"update",name,phone,role,roomScope}
-        : {name,phone,role,roomScope,password}),
+        ? {id:Number(row.id),action:"update",name,phone,role,roomScope,permissions}
+        : {name,phone,role,roomScope,password,permissions}),
     });
     const result=await response.json() as {error?:string;message?:string};
     if(!response.ok){setError(result.error||"Akun gagal disimpan.");setSaving(false);return;}
@@ -1139,10 +1159,10 @@ function UserAccessModal({ row, rooms, onClose, onSaved }: { row?:Row; rooms:Row
     <h2>{row?"Ubah hak akses":"Buat akun sekolah"}</h2><p>{row?"Perubahan peran akan mengeluarkan sesi lama pengguna.":"Nomor HP dan sandi ini dapat langsung dipakai pada halaman login internal."}</p>
     <div className="form-grid"><label>Nama lengkap<input required value={name} onChange={event=>setName(event.target.value)}/></label>
       <label>Nomor HP login<input required={!row || Boolean(row.phone)} type="tel" inputMode="tel" autoComplete="username" value={phone} onChange={event=>setPhone(event.target.value)} placeholder="628123456789"/><small>Nomor HP dapat diisi untuk memindahkan akun lama dari login email.</small></label>
-      <label>Peran<select required value={role} onChange={event=>{const nextRole=event.target.value as Role;setRole(nextRole);if(nextRole==="Musyrif"||nextRole==="Kepala Asrama")setRoomScope("");}}><option>Admin</option><option>Kepala Asrama</option><option>Kepala Bidang Tahfidz</option><option>Musyrif</option><option>Ustadz</option></select></label>
+      <label>Peran<select required value={role} onChange={event=>{const nextRole=event.target.value as Role;setRole(nextRole);if(nextRole==="Musyrif"||nextRole==="Kepala Asrama")setRoomScope("");if(!row)setPermissions(nextRole==="Admin"?["dashboard","students","employees","classes","rooms","schedule","calendar","academic","grades","tahfidz","tahsin","mutabaah","attendance","permits","counseling","health","characters","finance","sinurpay","admissions","reports","users","payroll","audit","backup","settings"]:nextRole==="Ustadz"?["dashboard","students","tahfidz","tahsin","mutabaah","attendance","academic","grades","schedule","reports"]:nextRole==="Musyrif"?["dashboard","students","tahfidz","tahsin","mutabaah","attendance","permits","counseling","health","characters","academic","schedule","reports"]:["dashboard","students","tahfidz","tahsin","mutabaah","attendance","rooms","schedule","academic","reports"]);}}><option>Admin</option><option>Kepala Asrama</option><option>Kepala Bidang Tahfidz</option><option>Musyrif</option><option>Ustadz</option></select></label>
       <label>Kamar/asrama penugasan<select required={roomAssignmentRequired} value={roomScope} onChange={event=>setRoomScope(event.target.value)}>{roomAssignmentRequired?<option value="" disabled>Pilih kamar/asrama</option>:<option value="">Tidak dibatasi</option>}{rooms.map(room=><option key={String(room.id)} value={String(room.name)}>{room.name}</option>)}</select><small>{roomAssignmentRequired?"Wajib dipilih untuk membatasi akses pengguna.":"Opsional; pengguna dapat mengakses sesuai perannya."}</small></label>
       {!row&&<label className="wide">Sandi sementara<input required minLength={8} type="password" autoComplete="new-password" value={password} onChange={event=>setPassword(event.target.value)} placeholder="Minimal 8 karakter, berisi huruf dan angka"/><small>Bagikan sandi secara pribadi dan minta pengguna segera menggantinya.</small></label>}
-    </div><section className="role-access-preview"><div><strong>Akses tools untuk peran {role}</strong><small>Daftar ini diterapkan otomatis setelah akun dibuat.</small></div><div className="role-access-tags">{roleAccessTools[role].map(tool=><span key={tool}>✓ {tool}</span>)}</div></section>{error&&<div className="form-error">{error}</div>}
+    </div><section className="role-access-preview"><div><strong>AKSES TOOLS</strong><small>Role menjadi batas maksimum; checkbox dapat mempersempit akses.</small><button type="button" className="text-button" onClick={useDefault}>Gunakan Default Role</button></div>{Object.entries(permissionGroups).map(([group,items])=><fieldset key={group} className="permission-group"><legend>{group}</legend>{items.map(item=><label key={item.id} className="permission-check"><input type="checkbox" checked={permissions.includes(item.id)} onChange={event=>setPermissions(current=>event.target.checked?[...new Set([...current,item.id])]:current.filter(value=>value!==item.id))}/><span>{item.label}</span></label>)}</fieldset>)}</section>{error&&<div className="form-error">{error}</div>}
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button className="primary-button" disabled={saving}>{saving?"Menyimpan…":row?"Simpan Perubahan":"Buat Akun Login"}</button></div>
   </form></div>;
 }
@@ -1799,8 +1819,10 @@ export default function DashboardClient() {
       : role === "Ustadz"
         ? new Set<PageKey>(["dashboard","santri","tahfidz","tahsin","akademik","mutabaah","karakter","absensi","jadwal","kesehatan","pengumuman","laporan","konseling","raporkepesantrenan","pusatinformasi"])
         : null;
-    return navGroups.map(group => ({...group,items:allowed?group.items.filter(item=>allowed.has(item.key)):group.items})).filter(group=>group.items.length);
-  },[role]);
+    const permissionIds=new Set(data.user?.permissionIds||[]);
+    const pagePermission:Partial<Record<PageKey,string>>={santri:"students",pegawai:"employees",kelas:"classes",jadwal:"schedule",akademik:"academic",tahfidz:"tahfidz",tahsin:"tahsin",mutabaah:"mutabaah",karakter:"characters",absensi:"attendance",kesehatan:"health",keuangan:"finance",sinurpay:"sinurpay",penerimaan:"admissions",laporan:"reports",pengguna:"users",integrasi:"settings",setup:"settings",kalender:"calendar",inventaris:"employees",konseling:"counseling",raporkepesantrenan:"reports"};
+    return navGroups.map(group => ({...group,items:(allowed?group.items.filter(item=>allowed.has(item.key)):group.items).filter(item=>item.key==="dashboard"||role==="Admin"||!pagePermission[item.key]||permissionIds.has(pagePermission[item.key]!))})).filter(group=>group.items.length);
+  },[role,data.user?.permissionIds]);
   const mobileNavItems = useMemo(() => {
     if(role==="Wali Santri") return [{key:"portalwali" as PageKey,icon:"fi-rr-home-heart",label:"Portal Wali"}];
     const priorities=new Set<PageKey>(["dashboard","santri","tahfidz","keuangan"]);
@@ -1982,6 +2004,9 @@ export default function DashboardClient() {
       notify("Akun Wali Santri hanya dapat membuka laporan anak di Portal Wali.");
       return;
     }
+    const pagePermission:Partial<Record<PageKey,string>>={santri:"students",pegawai:"employees",kelas:"classes",jadwal:"schedule",akademik:"academic",tahfidz:"tahfidz",tahsin:"tahsin",mutabaah:"mutabaah",karakter:"characters",absensi:"attendance",kesehatan:"health",keuangan:"finance",sinurpay:"sinurpay",penerimaan:"admissions",laporan:"reports",pengguna:"users",integrasi:"settings",setup:"settings",inventaris:"employees",konseling:"counseling",raporkepesantrenan:"reports"};
+    const permission=pagePermission[key];
+    if(role!=="Admin"&&permission&&!data.user?.permissionIds?.includes(permission)) { notify("ACCESS DENIED: hak akses modul ini belum diberikan Admin."); return; }
     setPage(key);
     setSidebarOpen(false);
   }
