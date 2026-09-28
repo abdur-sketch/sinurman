@@ -243,7 +243,7 @@ export async function GET(request:Request) {
     const config=exports[type];
     if(!config) return Response.json({error:"Jenis laporan tidak valid."},{status:400});
     if(config.adminOnly&&user.role!=="Admin") return Response.json({error:"Laporan ini hanya tersedia untuk Admin."},{status:403});
-    const scoped=user.role==="Musyrif"||user.role==="Kepala Asrama";
+    const scoped=user.role==="Kesantrian";
     const statement=database().prepare(scoped&&config.scopedQuery?config.scopedQuery:config.query);
     const result=scoped&&config.scopedQuery?await statement.bind(user.roomScope||"__BELUM_DITUGASKAN__").all<Record<string,unknown>>():await statement.all<Record<string,unknown>>();
     const dateFiltered=config.dateKey?result.results.filter(row=>{

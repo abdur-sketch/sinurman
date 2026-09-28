@@ -169,7 +169,7 @@ export async function POST(request: Request) {
     if(permission) requirePermission(user,permission);
     const db = database();
     const config = resourceConfig[resource];
-    if (user.role === "Musyrif" || user.role === "Kepala Asrama") {
+    if (user.role === "Kesantrian") {
       const studentResources = new Set<Resource>(["tahfidz","tahsin","mutabaah","health","characters","attendance","permits","counseling","grades"]);
       if (studentResources.has(resource)) {
         let studentId = Number(payload.data?.student_id ?? 0);

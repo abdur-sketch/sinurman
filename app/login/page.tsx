@@ -32,8 +32,8 @@ export default function AdminLoginPage() {
           <span className="guardian-login-eyebrow">AKSES PENGELOLA SINURMAN</span>
           <h1>Kelola pesantren dari satu dashboard.</h1>
           <p>
-            Masuk memakai akun Firebase sekolah. Hak akses Admin, Kepala Asrama,
-            Musyrif, dan Ustadz tetap dibatasi sesuai perannya.
+            Masuk memakai akun Firebase sekolah. Hak akses mengikuti role organisasi
+            dan Akses Tools yang ditetapkan Admin.
           </p>
           <AdminLoginClient />
         </div>

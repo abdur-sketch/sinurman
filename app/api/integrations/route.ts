@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import QRCode from "qrcode";
-import { database, ensureUser, guardianOwnsStudent } from "../_lib";
+import { database, ensureUser, guardianOwnsStudent, requirePermission } from "../_lib";
 
 export async function GET(request: Request) {
   const user = await ensureUser(request);
@@ -29,7 +29,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const user = await ensureUser(request);
-  if (user.role === "Ustadz") return Response.json({ error:"Peran Anda tidak dapat mengakses pembayaran." },{status:403});
+  // Wali may create a payment link only for their own student's bill. Internal
+  // users must have the finance permission before reaching the provider.
+  if (user.role !== "Wali Santri") {
+    try { requirePermission(user, "finance"); } catch { return Response.json({ error:"Peran Anda tidak dapat mengakses pembayaran." },{status:403}); }
+  }
   const payload = await request.json() as { action?:string; billId?:number };
   if (payload.action !== "payment-link" || !payload.billId) {
     return Response.json({ error:"Tindakan integrasi tidak valid." },{status:400});

@@ -12,7 +12,7 @@ export async function GET(request: Request) {
       seedWarning = error instanceof Error ? error.message : "Data contoh belum dapat disiapkan.";
     }
     const guardian = user.role === "Wali Santri";
-    const staff = user.role === "Musyrif" || user.role === "Kepala Asrama";
+    const staff = user.role === "Kesantrian";
     const guardianKey = user.guardianPhone || user.email.toLocaleLowerCase("id-ID");
     const roomScope = user.roomScope || "__BELUM_DITUGASKAN__";
     const safe = async (operation: Promise<D1Result<unknown>>) => {

@@ -1,9 +1,9 @@
-import { database, defaultPermissions, ensureUser, normalizeGuardianPhone, TOOL_PERMISSIONS, type Role, type ToolPermission } from "../_lib";
+import { database, defaultPermissions, ensureUser, normalizeGuardianPhone, TOOL_PERMISSIONS, INTERNAL_ROLES, type Role, type ToolPermission } from "../_lib";
 import { isOwnerEmail } from "../../../lib/security-config";
 
 export const runtime = "nodejs";
 
-const managedRoles = new Set<Role>(["Admin", "Kepala Asrama", "Kepala Bidang Tahfidz", "Musyrif", "Ustadz"]);
+const managedRoles = new Set<Role>(INTERNAL_ROLES);
 
 async function firebaseServices() {
   if (process.env.FIREBASE_RUNTIME !== "true") {
@@ -38,7 +38,7 @@ async function requireAdmin(request: Request) {
 
 async function targetById(id: number) {
   return database().prepare(
-    "SELECT id,email,phone,name,role,room_scope AS roomScope,permission_json AS permissionJson,employee_id AS employeeId,created_at AS createdAt FROM users WHERE id=?",
+    "SELECT id,email,phone,name,role,room_scope AS roomScope,permission_json AS permissionJson,role_review_required AS roleReviewRequired,employee_id AS employeeId,created_at AS createdAt FROM users WHERE id=?",
   ).bind(id).first<{
     id:number;
     email:string;
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
     await requireAdmin(request);
     const { firebaseAdmin } = await firebaseServices();
     const rows = await database().prepare(
-      "SELECT id,email,phone,name,role,room_scope AS roomScope,permission_json AS permissionJson,employee_id AS employeeId,created_at AS createdAt FROM users ORDER BY id",
+      "SELECT id,email,phone,name,role,room_scope AS roomScope,permission_json AS permissionJson,role_review_required AS roleReviewRequired,employee_id AS employeeId,created_at AS createdAt FROM users ORDER BY id",
     ).all<{id:number;email:string;phone:string;name:string;role:Role;roomScope:string;permissionJson?:string;employeeId?:number;createdAt:string}>();
     const users = await Promise.all(rows.results.map(async row => {
       try {
@@ -112,9 +112,6 @@ export async function POST(request: Request) {
     if (!/^62\d{8,13}$/.test(phone)) throw new Error("Nomor HP harus memakai format Indonesia, contoh 628123456789.");
     if (!name) throw new Error("Nama pengguna wajib diisi.");
     if (!managedRoles.has(role)) throw new Error("Peran pengguna internal tidak valid.");
-    if ((role === "Musyrif" || role === "Kepala Asrama") && !roomScope) {
-      throw new Error("Kamar/asrama penugasan wajib dipilih untuk peran ini.");
-    }
     const duplicate = await database().prepare("SELECT id FROM users WHERE phone=? OR lower(email)=?").bind(phone,email).first();
     if (duplicate) throw new Error("Nomor HP tersebut sudah terdaftar di SINURMAN.");
     try {
@@ -200,9 +197,6 @@ export async function PATCH(request: Request) {
     if (requestedPhone && isOwnerEmail(target.email)) {
       throw new Error("Akun pemilik utama tetap menggunakan email utama.");
     }
-    if ((role === "Musyrif" || role === "Kepala Asrama") && !roomScope) {
-      throw new Error("Kamar/asrama penugasan wajib dipilih untuk peran ini.");
-    }
     let nextEmail = target.email;
     let migratedLogin = false;
     if (requestedPhone && requestedPhone !== target.phone) {
@@ -222,13 +216,16 @@ export async function PATCH(request: Request) {
       await firebaseAdmin().auth.updateUser(account.uid, { displayName:name });
     }
     const oldPermissions=target.permissionJson||JSON.stringify(defaultPermissions(target.role));
-    await database().prepare("UPDATE users SET email=?,phone=?,name=?,role=?,room_scope=?,permission_json=? WHERE id=?")
+    await database().prepare("UPDATE users SET email=?,phone=?,name=?,role=?,room_scope=?,permission_json=?,role_review_required=0 WHERE id=?")
       .bind(nextEmail, requestedPhone || target.phone || "", name, role, roomScope, JSON.stringify(permissions), id).run();
     if (migratedLogin || target.role !== role || target.roomScope !== roomScope) {
       await firebaseAdmin().auth.revokeRefreshTokens(account.uid);
       await revokeFirebaseSessions(account.uid);
     }
-    await audit(actor.email, "USER_PERMISSION_UPDATED", id, `Memperbarui ${requestedPhone || target.email} sebagai ${role}; permission lama=${oldPermissions}; permission baru=${JSON.stringify(permissions)}`);
+    const roleChanged = target.role !== role;
+    await audit(actor.email, roleChanged ? "USER_ROLE_UPDATED" : "USER_PERMISSION_UPDATED", id, roleChanged
+      ? `Mengubah ${requestedPhone || target.email} dari ${target.role} menjadi ${role}; permission baru=${JSON.stringify(permissions)}`
+      : `Memperbarui ${requestedPhone || target.email} sebagai ${role}; permission lama=${oldPermissions}; permission baru=${JSON.stringify(permissions)}`);
     return Response.json({ ok:true, message:"Hak akses pengguna berhasil diperbarui." });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Akun gagal diperbarui.";

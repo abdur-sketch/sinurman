@@ -91,3 +91,23 @@ test("granular user permissions are role-bounded and enforced server-side",async
   assert.match(dashboard,/permissionGroups/);
   assert.match(dashboard,/Gunakan Default Role/);
 });
+
+test("struktur role internal baru konsisten dan migrasi lama aman",async()=>{
+  const [lib,users,schema,session,records,attendance,bootstrap]=await Promise.all([
+    read("app/api/_lib.ts"),read("app/api/admin-users/route.ts"),read("db/schema.ts"),read("lib/firebase/session.ts"),read("app/api/records/route.ts"),read("app/api/attendance-qr/route.ts"),read("app/api/bootstrap/route.ts"),
+  ]);
+  for (const role of ["Admin","Kepala UPT","Yayasan","Bendahara","Sekolahan","Kesantrian","Tendik"]) {
+    assert.match(lib,new RegExp(role.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+    assert.match(`${lib}\n${users}`,new RegExp(role.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  }
+  assert.match(users,/const managedRoles = new Set<Role>\(INTERNAL_ROLES\)/);
+  assert.match(lib,/role_review_required/);
+  assert.match(lib,/UPDATE users SET role_review_required=1/);
+  assert.match(lib,/permission_json/);
+  assert.match(schema,/Kepala UPT.*Yayasan.*Bendahara.*Sekolahan.*Kesantrian.*Tendik/);
+  assert.match(session,/Kepala UPT.*Yayasan.*Bendahara.*Sekolahan.*Kesantrian.*Tendik/);
+  assert.match(records,/role === "Kesantrian"/);
+  assert.match(attendance,/user\.role === "Kesantrian"/);
+  assert.match(bootstrap,/user\.role === "Kesantrian"/);
+  assert.match(users,/USER_ROLE_UPDATED/);
+});

@@ -1,7 +1,9 @@
 import { env } from "cloudflare:workers";
 import { isOwnerEmail } from "../../lib/security-config";
 
-export type Role = "Admin" | "Kepala Asrama" | "Kepala Bidang Tahfidz" | "Musyrif" | "Ustadz" | "Wali Santri";
+export const INTERNAL_ROLES = ["Admin", "Kepala UPT", "Yayasan", "Bendahara", "Sekolahan", "Kesantrian", "Tendik"] as const;
+export const LEGACY_INTERNAL_ROLES = ["Kepala Asrama", "Kepala Bidang Tahfidz", "Musyrif", "Ustadz"] as const;
+export type Role = typeof INTERNAL_ROLES[number] | typeof LEGACY_INTERNAL_ROLES[number] | "Wali Santri";
 export type AuthenticatedUser = {
   id: number;
   email: string;
@@ -11,15 +13,18 @@ export type AuthenticatedUser = {
   guardianPhone?: string;
   authProvider?: "firebase" | "chatgpt" | "guardian";
   permissionIds?: string[];
+  roleReviewRequired?: boolean;
 };
 export const TOOL_PERMISSIONS = ["dashboard","students","employees","classes","rooms","schedule","calendar","academic","grades","tahfidz","tahsin","mutabaah","attendance","permits","counseling","health","characters","finance","sinurpay","admissions","reports","users","payroll","audit","backup","settings"] as const;
 export type ToolPermission = typeof TOOL_PERMISSIONS[number];
-const rolePermissionDefaults: Record<Role, ToolPermission[]> = {
+const rolePermissionDefaults: Partial<Record<Role, ToolPermission[]>> = {
   Admin: [...TOOL_PERMISSIONS],
-  "Kepala Asrama": ["dashboard","students","tahfidz","tahsin","mutabaah","attendance","permits","counseling","health","characters","rooms","schedule","academic","reports"],
-  "Kepala Bidang Tahfidz": ["dashboard","students","tahfidz","tahsin","mutabaah","reports"],
-  Musyrif: ["dashboard","students","tahfidz","tahsin","mutabaah","attendance","permits","counseling","health","characters","academic","schedule","reports"],
-  Ustadz: ["dashboard","students","tahfidz","tahsin","mutabaah","attendance","academic","grades","schedule","reports"],
+  "Kepala UPT": ["dashboard","students","employees","classes","rooms","schedule","academic","grades","finance","reports"],
+  Yayasan: ["dashboard","students","employees","academic","characters","finance","reports"],
+  Bendahara: ["dashboard","finance","sinurpay","reports"],
+  Sekolahan: ["dashboard","students","classes","schedule","calendar","academic","grades","reports"],
+  Kesantrian: ["dashboard","students","rooms","attendance","permits","tahfidz","tahsin","mutabaah","health","counseling","characters","reports"],
+  Tendik: ["dashboard","students","schedule","reports"],
   "Wali Santri": ["dashboard"],
 };
 export function defaultPermissions(role: Role) { return rolePermissionDefaults[role] ?? []; }
@@ -44,7 +49,7 @@ export function ensureDatabaseSchema() {
   const db = database();
   schemaReady = (async () => {
     const definitions = [
-      "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',name TEXT NOT NULL,role TEXT NOT NULL,room_scope TEXT NOT NULL DEFAULT '',permission_json TEXT NOT NULL DEFAULT '',employee_id INTEGER,created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',name TEXT NOT NULL,role TEXT NOT NULL,room_scope TEXT NOT NULL DEFAULT '',permission_json TEXT NOT NULL DEFAULT '',role_review_required INTEGER NOT NULL DEFAULT 0,employee_id INTEGER,created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS institution_profile (id INTEGER PRIMARY KEY CHECK (id=1),institution_name TEXT NOT NULL DEFAULT '',foundation_name TEXT NOT NULL DEFAULT '',address TEXT NOT NULL DEFAULT '',village TEXT NOT NULL DEFAULT '',district TEXT NOT NULL DEFAULT '',city TEXT NOT NULL DEFAULT '',province TEXT NOT NULL DEFAULT '',postal_code TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',whatsapp TEXT NOT NULL DEFAULT '',email TEXT NOT NULL DEFAULT '',website TEXT NOT NULL DEFAULT '',logo_url TEXT NOT NULL DEFAULT '',leader_name TEXT NOT NULL DEFAULT '',system_manager TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,nis TEXT NOT NULL UNIQUE,class_name TEXT NOT NULL,room TEXT NOT NULL,guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,guardian_email TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS tahfidz_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,surah TEXT NOT NULL,verses TEXT NOT NULL,surah_from TEXT NOT NULL DEFAULT '',surah_to TEXT NOT NULL DEFAULT '',verse_from INTEGER NOT NULL DEFAULT 0,verse_to INTEGER NOT NULL DEFAULT 0,amount INTEGER NOT NULL,grade TEXT NOT NULL,teacher TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
@@ -105,7 +110,7 @@ export function ensureDatabaseSchema() {
     await db.batch(definitions.map((sql) => db.prepare(sql)));
 
     const upgrades: Record<string, Record<string, string>> = {
-      users: { room_scope: "TEXT NOT NULL DEFAULT ''", phone: "TEXT NOT NULL DEFAULT ''", permission_json: "TEXT NOT NULL DEFAULT ''", employee_id: "INTEGER" },
+      users: { room_scope: "TEXT NOT NULL DEFAULT ''", phone: "TEXT NOT NULL DEFAULT ''", permission_json: "TEXT NOT NULL DEFAULT ''", role_review_required: "INTEGER NOT NULL DEFAULT 0", employee_id: "INTEGER" },
       students: { guardian_email: "TEXT NOT NULL DEFAULT ''" },
       tahfidz_records: {
         surah_from: "TEXT NOT NULL DEFAULT ''",
@@ -179,6 +184,10 @@ export function ensureDatabaseSchema() {
       await db.prepare("UPDATE users SET permission_json=? WHERE id=?")
         .bind(JSON.stringify(defaultPermissions(role)), legacyUser.id)
         .run();
+    }
+    for (const legacyRole of LEGACY_INTERNAL_ROLES) {
+      await db.prepare("UPDATE users SET role_review_required=1 WHERE role=? AND role_review_required=0")
+        .bind(legacyRole).run();
     }
     await db.prepare("UPDATE tahfidz_records SET surah_from=surah WHERE surah_from=''").run();
     await db.prepare("UPDATE tahfidz_records SET surah_to=surah WHERE surah_to=''").run();
@@ -432,7 +441,7 @@ export async function ensureUser(request: Request) {
     return user;
   };
   const existing = await db
-    .prepare("SELECT id, email, name, role, room_scope AS roomScope, permission_json AS permissionJson FROM users WHERE email = ?")
+    .prepare("SELECT id, email, name, role, room_scope AS roomScope, permission_json AS permissionJson, role_review_required AS roleReviewRequired FROM users WHERE email = ?")
     .bind(identity.email)
     .first<{ id: number; email: string; name: string; role: Role; roomScope: string; permissionJson?: string }>();
 
@@ -452,7 +461,7 @@ export async function ensureUser(request: Request) {
     .bind(identity.email, identity.name, role, JSON.stringify(defaultPermissions(role)), now)
     .run();
   const created = (await db
-    .prepare("SELECT id, email, name, role, room_scope AS roomScope, permission_json AS permissionJson FROM users WHERE email = ?")
+    .prepare("SELECT id, email, name, role, room_scope AS roomScope, permission_json AS permissionJson, role_review_required AS roleReviewRequired FROM users WHERE email = ?")
     .bind(identity.email)
     .first()) as AuthenticatedUser;
   return enforceAdminMfa({ ...created, permissionIds: parsePermissions(role, (created as {permissionJson?:string}).permissionJson), authProvider: identity.authProvider });
@@ -469,18 +478,12 @@ export async function guardianOwnsStudent(user: Pick<AuthenticatedUser,"email"|"
 
 export function canWrite(role: Role, resource: string) {
   if (role === "Admin") return true;
-  if (role === "Kepala Asrama") {
-    return ["tahfidz", "tahsin", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "grades"].includes(resource);
-  }
-  if (role === "Kepala Bidang Tahfidz") {
-    return resource === "tahfidz";
-  }
-  if (role === "Musyrif") {
-    return ["tahfidz", "tahsin", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "grades"].includes(resource);
-  }
-  if (role === "Ustadz") {
-    return ["tahfidz", "tahsin", "mutabaah", "health", "characters", "attendance", "permits", "counseling", "schedules", "grades"].includes(resource);
-  }
+  if (role === "Kepala UPT") return ["students", "employees", "classes", "rooms", "schedules", "subjects", "grades", "reports"].includes(resource);
+  if (role === "Yayasan") return ["reports"].includes(resource);
+  if (role === "Bendahara") return ["transactions", "bills", "wallet_accounts", "wallet_entries", "wallet_topups", "canteen_products", "canteen_sales"].includes(resource);
+  if (role === "Sekolahan") return ["classes", "schedules", "subjects", "grades"].includes(resource);
+  if (role === "Kesantrian") return ["tahfidz", "tahsin", "mutabaah", "health", "characters", "attendance", "permits", "counseling"].includes(resource);
+  if (role === "Tendik") return ["attendance"].includes(resource);
   return false;
 }
 

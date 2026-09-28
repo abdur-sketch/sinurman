@@ -188,7 +188,7 @@ test("seluruh laporan mendukung cetak langsung A4, PDF, CSV, dan pembatasan pera
   assert.match(printClient, /PONDOK PESANTREN NURUL IMAN/);
   assert.match(printClient, /Pimpinan Pesantren/);
   assert.match(exportRoute, /config\.adminOnly&&user\.role!=="Admin"/);
-  assert.match(exportRoute, /user\.role==="Musyrif"\|\|user\.role==="Kepala Asrama"/);
+  assert.match(exportRoute, /user\.role==="Kesantrian"/);
   assert.match(exportRoute, /config\.scopedQuery/);
   assert.match(styles, /@page \{ size:A4 landscape/);
 });
@@ -429,11 +429,11 @@ test("runtime Firebase menolak header lama dan membatasi sesi dashboard internal
   ]);
   assert.match(api, /\} else \{\s+const email = request\.headers\.get\("oai-authenticated-user-email"\)/);
   assert.match(serverAuth, /if \(process\.env\.FIREBASE_RUNTIME === "true"\)[\s\S]*return null;/);
-  assert.match(session, /const internalRoles = new Set\(\["Admin", "Kepala Asrama", "Kepala Bidang Tahfidz", "Musyrif", "Ustadz"\]\)/);
+  assert.match(session, /const internalRoles = new Set\(\["Admin", "Kepala UPT", "Yayasan", "Bendahara", "Sekolahan", "Kesantrian", "Tendik"/);
   assert.match(session, /Akun belum diberi akses oleh Admin SINURMAN/);
 });
 
-test("Musyrif dan Kepala Asrama dibatasi modul serta kamar penugasan", async () => {
+test("Kesantrian dibatasi modul serta kamar penugasan", async () => {
   const [page, lib, bootstrap, records, migration] = await Promise.all([
     file("app/dashboard-client.tsx"),
     file("app/api/_lib.ts"),
@@ -441,9 +441,8 @@ test("Musyrif dan Kepala Asrama dibatasi modul serta kamar penugasan", async () 
     file("app/api/records/route.ts"),
     file("drizzle/0006_faithful_wendell_vaughn.sql"),
   ]);
-  assert.match(page, /role === "Musyrif"/);
-  assert.match(page, /role === "Kepala Asrama"/);
-  assert.match(lib, /role === "Musyrif"/);
+  assert.match(page, /role === "Kesantrian"/);
+  assert.match(lib, /role === "Kesantrian"/);
   assert.match(bootstrap, /WHERE s\.room=\?/);
   assert.match(records, /Santri ini berada di luar penugasan kamar Anda/);
   assert.match(records, /"mutabaah"/);
@@ -635,7 +634,7 @@ test("tombol dashboard utama terhubung ke data nyata dan menghormati hak akses",
   assert.match(dashboard, /data\.characters\.filter/);
   assert.match(dashboard, /character-student-picker/);
   assert.match(dashboard, /editable=\{role==="Admin"\}/);
-  assert.match(dashboard, /canEditSchedule=role==="Admin"\|\|role==="Ustadz"/);
+  assert.match(dashboard, /canEditSchedule=role==="Admin"\|\|role==="Sekolahan"/);
   assert.doesNotMatch(dashboard, /<strong>473<\/strong>/);
   assert.doesNotMatch(dashboard, /Rp46,8jt/);
   assert.match(records, /Nilai karakter harus berada pada rentang 0–100/);
