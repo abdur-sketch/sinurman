@@ -34,7 +34,7 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS health_records (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,complaint TEXT NOT NULL,diagnosis TEXT NOT NULL,treatment TEXT NOT NULL,status TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,type TEXT NOT NULL,category TEXT NOT NULL,amount INTEGER NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL,recorded_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS character_reports (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,category TEXT NOT NULL,score INTEGER NOT NULL,note TEXT NOT NULL,semester TEXT NOT NULL,recorded_at TEXT NOT NULL,workflow_status TEXT NOT NULL DEFAULT 'Dipublikasikan',period_key TEXT NOT NULL DEFAULT '')",
-      "CREATE TABLE IF NOT EXISTS inventory_items (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,location TEXT NOT NULL,quantity INTEGER NOT NULL,unit TEXT NOT NULL,condition TEXT NOT NULL,updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS inventory_items (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,location TEXT NOT NULL,quantity INTEGER NOT NULL,unit TEXT NOT NULL,condition TEXT NOT NULL,updated_at TEXT NOT NULL,seed_source TEXT NOT NULL DEFAULT '')",
       "CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL,content TEXT NOT NULL,audience TEXT NOT NULL,published_at TEXT NOT NULL,author TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS notification_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER,channel TEXT NOT NULL,recipient TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL,sent_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS push_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT,token TEXT NOT NULL UNIQUE,user_email TEXT NOT NULL,role TEXT NOT NULL,user_agent TEXT NOT NULL DEFAULT '',enabled INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
@@ -136,6 +136,9 @@ export function ensureDatabaseSchema() {
         other_allowance: "INTEGER NOT NULL DEFAULT 0",
         attendance_deduction: "INTEGER NOT NULL DEFAULT 0",
         other_deduction: "INTEGER NOT NULL DEFAULT 0",
+      },
+      inventory_items: {
+        seed_source: "TEXT NOT NULL DEFAULT ''",
       },
     };
     for (const [table, columns] of Object.entries(upgrades)) {
@@ -532,12 +535,12 @@ export async function seedIfNeeded() {
     db.prepare("INSERT INTO canteen_products (sku,name,category,price,stock,status,updated_at) VALUES (?,?,?,?,?,?,?)").bind("KTN-006","Pulpen","Alat Tulis",3000,95,"Aktif",now),
   ]);
   if (Number(count?.total ?? 0) === 0) await db.batch([
-    db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind("Ranjang Susun", "Asrama", 248, "unit", "Baik", now),
-    db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind("Lemari Santri", "Asrama", 486, "unit", "Baik", now),
-    db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind("Proyektor", "Ruang Kelas", 14, "unit", "Perawatan", now),
+    db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at, seed_source) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind("Ranjang Susun", "Asrama", 248, "unit", "Baik", now, "development-demo"),
+    db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at, seed_source) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind("Lemari Santri", "Asrama", 486, "unit", "Baik", now, "development-demo"),
+    db.prepare("INSERT INTO inventory_items (name, location, quantity, unit, condition, updated_at, seed_source) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind("Proyektor", "Ruang Kelas", 14, "unit", "Perawatan", now, "development-demo"),
     db.prepare("INSERT INTO announcements (title, category, content, audience, published_at, author) VALUES (?, ?, ?, ?, ?, ?)")
       .bind("Jadwal Ujian Tahfidz Semester", "Akademik", "Ujian tahfidz dilaksanakan mulai 29 Juli 2026.", "Semua", now, "Admin"),
     db.prepare("INSERT INTO announcements (title, category, content, audience, published_at, author) VALUES (?, ?, ?, ?, ?, ?)")

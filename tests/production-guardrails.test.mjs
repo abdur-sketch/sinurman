@@ -67,3 +67,11 @@ test("navigasi seluler hanya merender modul yang tersedia untuk peran aktif",asy
   assert.match(dashboard,/mobileNavItems\.map\(item=>/);
   assert.doesNotMatch(dashboard,/navGroups\[2\]\.items\[1\]/);
 });
+
+test("pembersihan demo tidak menghapus inventaris berdasarkan nama",async()=>{
+  const [cleanup,lib]=await Promise.all([read("app/api/cleanup-demo/route.ts"),read("app/api/_lib.ts")]);
+  assert.match(cleanup,/seed_source='development-demo'/);
+  assert.doesNotMatch(cleanup,/DELETE FROM inventory_items WHERE name IN/);
+  assert.match(lib,/seed_source TEXT NOT NULL DEFAULT ''/);
+  assert.match(lib,/development-demo/);
+});

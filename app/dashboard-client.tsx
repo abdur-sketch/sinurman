@@ -1368,7 +1368,7 @@ function GuardianPortal({ data, onCard, onPayment, reload, notify }: { data:AppD
 }
 
 function IntegrationsPage({ data, onImported, notify }: { data:AppData; onImported:()=>Promise<void>; notify:(s:string)=>void }) {
-  const [status,setStatus]=useState<{midtrans?:boolean;xendit?:boolean;whatsapp?:boolean;bank?:boolean;storage?:boolean;databaseMode?:string;lastBackup?:string;failedNotifications?:number;pendingTopups?:number;pendingAdmissions?:number}>({});
+  const [status,setStatus]=useState<{midtrans?:boolean;xendit?:boolean;whatsapp?:boolean;bank?:boolean;storage?:boolean;push?:boolean;cron?:boolean;databaseMode?:string;lastBackup?:string;failedNotifications?:number;pendingTopups?:number;pendingAdmissions?:number}>({});
   const [uploading,setUploading]=useState(false);
   const [reminding,setReminding]=useState(false);
   const [backingUp,setBackingUp]=useState(false);

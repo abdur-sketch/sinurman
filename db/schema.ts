@@ -111,6 +111,7 @@ export const inventoryItems = sqliteTable("inventory_items", {
   unit: text("unit").notNull(),
   condition: text("condition").notNull(),
   updatedAt: text("updated_at").notNull(),
+  seedSource: text("seed_source").notNull().default(""),
 });
 
 export const announcements = sqliteTable("announcements", {

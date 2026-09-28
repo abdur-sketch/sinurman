@@ -15,8 +15,8 @@ export async function POST(request: Request) {
     for (const table of studentTables) if (ids.length) statements.push(db.prepare(`DELETE FROM ${table} WHERE student_id IN (${ids.map(() => "?").join(",")})`).bind(...ids));
     if (ids.length) statements.push(db.prepare(`DELETE FROM canteen_sale_items WHERE sale_id NOT IN (SELECT id FROM canteen_sales)`));
     statements.push(db.prepare("DELETE FROM students WHERE nis LIKE 'SN-240%'") , db.prepare("DELETE FROM admissions WHERE registration_no IN ('PSB-260001','PSB-260002')"));
-    const knownDemo = ["Ranjang Susun","Lemari Santri","Proyektor"];
-    statements.push(db.prepare(`DELETE FROM inventory_items WHERE name IN (${knownDemo.map(() => "?").join(",")})`).bind(...knownDemo));
+    // Fixtures are marked explicitly; names are editable and may match real assets.
+    statements.push(db.prepare("DELETE FROM inventory_items WHERE seed_source='development-demo'"));
     statements.push(db.prepare("DELETE FROM announcements WHERE title IN ('Jadwal Ujian Tahfidz Semester','Jadwal Kunjungan Wali Santri')"));
     if (statements.length) await db.batch(statements);
     const now = new Date().toISOString();

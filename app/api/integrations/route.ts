@@ -17,6 +17,8 @@ export async function GET(request: Request) {
     whatsapp: Boolean(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID),
     bank: Boolean(env.BANK_NAME && env.BANK_ACCOUNT_NUMBER),
     storage: Boolean(env.FILES),
+    push: Boolean(process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY),
+    cron: Boolean(process.env.CRON_SECRET),
     databaseMode: process.env.FIREBASE_RUNTIME === "true" ? "Firestore terpartisi" : "Cloudflare D1",
     lastBackup: lastBackup?.created_at ?? "",
     failedNotifications: Number(failedNotifications?.total ?? 0),
