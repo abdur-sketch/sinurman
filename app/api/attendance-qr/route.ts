@@ -16,7 +16,7 @@ export async function POST(request:Request) {
     const wallet=await db.prepare("SELECT card_token,status FROM wallet_accounts WHERE student_id=?").bind(student.id).first<{card_token:string;status:string}>();
     if(!wallet||wallet.card_token!==String(payload.walletToken)) return Response.json({error:"Token kartu tidak cocok. Cetak ulang kartu santri."},{status:403});
     if(wallet.status!=="Aktif") return Response.json({error:"Kartu santri tidak aktif."},{status:403});
-    if(user.role === "Kesantrian"&&student.room!==(user.roomScope||"__BELUM_DITUGASKAN__")) return Response.json({error:"Santri berada di luar penugasan kamar Anda."},{status:403});
+    if(user.role === "Kesantrian"&&user.roomScope&&student.room!==user.roomScope) return Response.json({error:"Santri berada di luar penugasan kamar Anda."},{status:403});
     const status=String(body.status||"Hadir");
     if(!["Hadir","Terlambat","Sakit","Izin","Alpa"].includes(status)) return Response.json({error:"Status presensi tidak valid."},{status:400});
     const today=new Date().toISOString().slice(0,10);

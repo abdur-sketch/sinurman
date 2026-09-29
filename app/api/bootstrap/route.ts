@@ -12,7 +12,9 @@ export async function GET(request: Request) {
       seedWarning = error instanceof Error ? error.message : "Data contoh belum dapat disiapkan.";
     }
     const guardian = user.role === "Wali Santri";
-    const staff = user.role === "Kesantrian";
+    // Room scope is optional. A Kesantrian user without an explicit scope is
+    // unrestricted; Tool Permissions still control which datasets are shown.
+    const staff = user.role === "Kesantrian" && Boolean(user.roomScope);
     const guardianKey = user.guardianPhone || user.email.toLocaleLowerCase("id-ID");
     const roomScope = user.roomScope || "__BELUM_DITUGASKAN__";
     const safe = async (operation: Promise<D1Result<unknown>>) => {

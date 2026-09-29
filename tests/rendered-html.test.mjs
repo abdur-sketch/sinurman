@@ -433,7 +433,7 @@ test("runtime Firebase menolak header lama dan membatasi sesi dashboard internal
   assert.match(session, /Akun belum diberi akses oleh Admin SINURMAN/);
 });
 
-test("Kesantrian dibatasi modul serta kamar penugasan", async () => {
+test("Kesantrian memakai room scope opsional tanpa melemahkan permission", async () => {
   const [page, lib, bootstrap, records, migration] = await Promise.all([
     file("app/dashboard-client.tsx"),
     file("app/api/_lib.ts"),
@@ -441,10 +441,13 @@ test("Kesantrian dibatasi modul serta kamar penugasan", async () => {
     file("app/api/records/route.ts"),
     file("drizzle/0006_faithful_wendell_vaughn.sql"),
   ]);
-  assert.match(page, /role === "Kesantrian"/);
+  assert.match(page, /Kesantrian/);
   assert.match(lib, /role === "Kesantrian"/);
-  assert.match(bootstrap, /WHERE s\.room=\?/);
+  assert.match(bootstrap, /user\.role === "Kesantrian" && Boolean\(user\.roomScope\)/);
+  assert.match(page, /Kamar\/asrama penugasan \(opsional\)/);
+  assert.match(page, /Semua kamar \/ Tidak dibatasi/);
   assert.match(records, /Santri ini berada di luar penugasan kamar Anda/);
+  assert.match(records, /user\.role === "Kesantrian" && user\.roomScope/);
   assert.match(records, /"mutabaah"/);
   assert.match(migration, /ADD `room_scope`/);
 });

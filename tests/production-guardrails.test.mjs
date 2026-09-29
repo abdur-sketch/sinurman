@@ -102,7 +102,8 @@ test("struktur role internal baru konsisten dan migrasi lama aman",async()=>{
   }
   assert.match(users,/const managedRoles = new Set<Role>\(INTERNAL_ROLES\)/);
   assert.match(lib,/role_review_required/);
-  assert.match(lib,/UPDATE users SET role_review_required=1/);
+  assert.match(lib,/UPDATE users SET role_review_required=0 WHERE role='Admin'/);
+  assert.match(lib,/UPDATE users SET role_review_required=1 WHERE role=\?/);
   assert.match(lib,/permission_json/);
   assert.match(schema,/Kepala UPT.*Yayasan.*Bendahara.*Sekolahan.*Kesantrian.*Tendik/);
   assert.match(session,/Kepala UPT.*Yayasan.*Bendahara.*Sekolahan.*Kesantrian.*Tendik/);
@@ -110,4 +111,19 @@ test("struktur role internal baru konsisten dan migrasi lama aman",async()=>{
   assert.match(attendance,/user\.role === "Kesantrian"/);
   assert.match(bootstrap,/user\.role === "Kesantrian"/);
   assert.match(users,/USER_ROLE_UPDATED/);
+});
+
+test("room scope internal opsional dan permission tetap menjadi gate",async()=>{
+  const [page,users,records,attendance,bootstrap,exportRoute]=await Promise.all([
+    read("app/dashboard-client.tsx"),read("app/api/admin-users/route.ts"),read("app/api/records/route.ts"),read("app/api/attendance-qr/route.ts"),read("app/api/bootstrap/route.ts"),read("app/api/export/route.ts"),
+  ]);
+  assert.match(page,/Kamar\/asrama penugasan \(opsional\)/);
+  assert.match(page,/Semua kamar \/ Tidak dibatasi/);
+  assert.doesNotMatch(page,/required=\{roomAssignmentRequired\}/);
+  assert.doesNotMatch(users,/Kamar\/asrama penugasan wajib/);
+  assert.match(records,/if \(user\.role === "Kesantrian" && user\.roomScope\)/);
+  assert.match(attendance,/user\.role === "Kesantrian"&&user\.roomScope/);
+  assert.match(bootstrap,/Boolean\(user\.roomScope\)/);
+  assert.match(exportRoute,/user\.role==="Kesantrian"&&Boolean\(user\.roomScope\)/);
+  assert.match(records,/requirePermission\(user,permission\)/);
 });
