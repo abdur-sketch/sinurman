@@ -4,16 +4,20 @@ type Bound = import("node:sqlite").SQLInputValue[];
 type Row = Record<string, unknown>;
 
 const filePath = process.env.RBAC_QA_DB_PATH || ".wrangler/rbac-qa.sqlite";
-const sqlite = new DatabaseSync(filePath);
+let sqlite: DatabaseSync | undefined;
+function getSqlite() {
+  sqlite ??= new DatabaseSync(filePath);
+  return sqlite;
+}
 
 class QAStatement {
   private values: Bound = [];
   constructor(private readonly sql: string) {}
   bind(...values: Bound) { this.values = values; return this; }
-  async all<T = Row>() { return { success: true, results: sqlite.prepare(this.sql).all(...this.values) as T[] }; }
+  async all<T = Row>() { return { success: true, results: getSqlite().prepare(this.sql).all(...this.values) as T[] }; }
   async first<T = Row>() { const rows = await this.all<T>(); return rows.results[0] ?? null; }
   async run() {
-    const statement = sqlite.prepare(this.sql);
+    const statement = getSqlite().prepare(this.sql);
     const result = statement.run(...this.values);
     return { success: true, meta: { changes: Number(result.changes), last_row_id: Number(result.lastInsertRowid || 0) } };
   }
@@ -23,14 +27,14 @@ class QAStatement {
 export class QASqliteD1Database {
   prepare(sql: string) { return new QAStatement(sql); }
   async batch(statements: QAStatement[]) {
-    sqlite.exec("BEGIN");
+    getSqlite().exec("BEGIN");
     try {
       const results = [];
       for (const statement of statements) results.push(await statement.run());
-      sqlite.exec("COMMIT");
+      getSqlite().exec("COMMIT");
       return results;
     } catch (error) {
-      sqlite.exec("ROLLBACK");
+      getSqlite().exec("ROLLBACK");
       throw error;
     }
   }
