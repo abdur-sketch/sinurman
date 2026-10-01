@@ -128,3 +128,9 @@ test("room scope internal opsional dan permission tetap menjadi gate",async()=>{
   assert.match(exportRoute,/user\.role==="Kesantrian"&&Boolean\(user\.roomScope\)/);
   assert.match(records,/requirePermission\(user,permission\)/);
 });
+
+test("kalender menolak direct URL tanpa sesi",async()=>{
+  const proxy=await read("proxy.ts");
+  assert.match(proxy,/matcher: \["\/api\/:path\*", "\/kalender"\]/);
+  assert.match(proxy,/status: 401/);
+});

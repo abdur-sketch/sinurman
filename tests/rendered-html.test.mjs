@@ -621,7 +621,7 @@ test("API terlindungi menolak permintaan tanpa sesi sebagai 401", async () => {
   assert.match(proxy, /oai-authenticated-user-email/);
   assert.match(proxy, /status:\s*401/);
   assert.match(proxy, /request\.method === "GET"/);
-  assert.match(proxy, /matcher:\s*"\/api\/:path\*"/);
+  assert.match(proxy, /matcher:\s*\["\/api\/:path\*", "\/kalender"\]/);
 });
 
 test("tombol dashboard utama terhubung ke data nyata dan menghormati hak akses", async () => {
