@@ -13,6 +13,7 @@
     "build:firebase": "FIREBASE_RUNTIME=true next build",
     "start:firebase": "FIREBASE_RUNTIME=true next start",
     "firebase:emulators": "firebase emulators:start",
+    "qa:rbac": "node scripts/rbac-qa-harness.mjs",
     "firebase:check": "node scripts/check-firebase-config.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",

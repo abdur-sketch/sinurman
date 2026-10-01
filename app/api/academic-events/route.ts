@@ -2,7 +2,7 @@ import { database, ensureUser, requirePermission } from "../_lib";
 
 export async function GET(request:Request) {
   try { const user=await ensureUser(request); requirePermission(user,"calendar"); const url=new URL(request.url); const from=url.searchParams.get("from")||"0000-00-00"; const to=url.searchParams.get("to")||"9999-12-31"; const result=await database().prepare("SELECT * FROM academic_events WHERE start_date<=? AND end_date>=? ORDER BY start_date,start_time,id").bind(to,from).all<Record<string,unknown>>(); return Response.json({events:result.results}); }
-  catch(error){const message=error instanceof Error?error.message:"Agenda gagal dimuat."; return Response.json({error:message},{status:message.includes("Akses ditolak")?403:401});}
+  catch(error){const message=error instanceof Error?error.message:"Agenda gagal dimuat."; return Response.json({error:message},{status:message.includes("Akses ditolak")||message.includes("FORBIDDEN_PERMISSION")?403:401});}
 }
 
 export async function POST(request:Request) {

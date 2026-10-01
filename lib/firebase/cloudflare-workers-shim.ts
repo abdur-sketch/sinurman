@@ -1,5 +1,6 @@
 import { firebaseAdmin } from "./admin";
 import { firestoreD1Database } from "./firestore-d1";
+import { qaSqliteD1Database } from "./qa-sqlite-d1";
 
 const firebaseFiles = {
   async put(
@@ -49,8 +50,18 @@ const firebaseFiles = {
 export const env=new Proxy<Record<string,unknown>>({},{
   get(_target,property) {
     const key=String(property);
-    if(key==="DB") return firestoreD1Database();
-    if(key==="FILES") return firebaseFiles;
+    if(key==="DB") {
+      const runtimeEnv = Reflect.get(Reflect.get(globalThis, "process") as object, "env") as Record<string, string | undefined>;
+      return runtimeEnv.RBAC_QA_EMULATOR === "true" ? qaSqliteD1Database() : firestoreD1Database();
+    }
+    if(key==="FILES") {
+      const runtimeEnv = Reflect.get(Reflect.get(globalThis, "process") as object, "env") as Record<string, string | undefined>;
+      if(runtimeEnv.RBAC_QA_EMULATOR === "true") return {
+        async get() { return null; }, async put() { return { key: "qa" }; }, async delete() {},
+        async list() { return { objects: [] }; },
+      };
+      return firebaseFiles;
+    }
     return process.env[key];
   },
 });

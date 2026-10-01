@@ -222,7 +222,8 @@ export async function PATCH(request: Request) {
     const oldPermissions=target.permissionJson||JSON.stringify(defaultPermissions(target.role));
     await database().prepare("UPDATE users SET email=?,phone=?,name=?,role=?,room_scope=?,permission_json=?,role_review_required=0 WHERE id=?")
       .bind(nextEmail, requestedPhone || target.phone || "", name, role, roomScope, JSON.stringify(permissions), id).run();
-    if (migratedLogin || target.role !== role || target.roomScope !== roomScope) {
+    const permissionsChanged = oldPermissions !== JSON.stringify(permissions);
+    if (migratedLogin || target.role !== role || target.roomScope !== roomScope || permissionsChanged) {
       await firebaseAdmin().auth.revokeRefreshTokens(account.uid);
       await revokeFirebaseSessions(account.uid);
     }

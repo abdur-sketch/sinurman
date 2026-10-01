@@ -241,9 +241,11 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     const requestId=reportServerError("bootstrap.load",error,request);
+    const message = error instanceof Error ? error.message : "Gagal memuat data.";
+    const status = message.includes("Silakan masuk") || message.includes("Sesi Firebase") ? 401 : 500;
     return Response.json(
-      { error: error instanceof Error ? error.message : "Gagal memuat data.", requestId },
-      { status: 500 },
+      { error: message, requestId },
+      { status },
     );
   }
 }

@@ -1,7 +1,11 @@
 export const runtime = "nodejs";
 
+// Firebase Auth is enabled in production and in the explicitly opt-in local
+// emulator harness only. No QA flag is present in deployed environments.
+const firebaseAuthEnabled = () => process.env.FIREBASE_RUNTIME === "true" || process.env.RBAC_QA_EMULATOR === "true";
+
 export async function GET(request: Request) {
-  if (process.env.FIREBASE_RUNTIME !== "true") {
+  if (!firebaseAuthEnabled()) {
     return Response.json({ authenticated: false }, { status: 404 });
   }
   const { getFirebaseSession } = await import("../../../lib/firebase/session");
@@ -15,7 +19,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (process.env.FIREBASE_RUNTIME !== "true") {
+    if (!firebaseAuthEnabled()) {
       return Response.json({ error: "Login Firebase hanya tersedia pada Firebase App Hosting." }, { status: 404 });
     }
     const { createFirebaseSession } = await import("../../../lib/firebase/session");
@@ -37,7 +41,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (process.env.FIREBASE_RUNTIME !== "true") {
+  if (!firebaseAuthEnabled()) {
     return Response.json({ ok: true }, { status: 404 });
   }
   const { removeFirebaseSession } = await import("../../../lib/firebase/session");
@@ -47,7 +51,7 @@ export async function DELETE(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    if (process.env.FIREBASE_RUNTIME !== "true") {
+    if (!firebaseAuthEnabled()) {
       return Response.json({ error: "Sesi Firebase tidak tersedia." }, { status: 404 });
     }
     const { rotateFirebaseSession } = await import("../../../lib/firebase/session");

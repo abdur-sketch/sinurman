@@ -381,7 +381,10 @@ export async function verifyGuardianPin(phoneInput: unknown, pin: string) {
 }
 
 export async function currentIdentity(request: Request) {
-  if (process.env.FIREBASE_RUNTIME === "true") {
+  // The emulator flag is intentionally opt-in and local-only. It reuses the
+  // exact Firebase session flow for QA without changing production behavior.
+  const firebaseSessionEnabled = process.env.FIREBASE_RUNTIME === "true" || process.env.RBAC_QA_EMULATOR === "true";
+  if (firebaseSessionEnabled) {
     const { getFirebaseSession } = await import("../../lib/firebase/session");
     const firebaseSession = await getFirebaseSession(request);
     if (firebaseSession) {
