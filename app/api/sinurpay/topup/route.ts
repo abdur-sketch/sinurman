@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import QRCode from "qrcode";
-import { database, ensureUser, guardianOwnsStudent } from "../../_lib";
+import { database, ensureUser, guardianOwnsStudent, requirePermission } from "../../_lib";
 import { settleWalletTopup } from "../_topup";
 
 export async function POST(request:Request) {
@@ -23,7 +23,7 @@ export async function POST(request:Request) {
     const student=await db.prepare("SELECT id,name,guardian_phone,guardian_email FROM students WHERE id=?").bind(studentId).first<Record<string,unknown>>();
     if(!student) return Response.json({error:"Santri tidak ditemukan."},{status:404});
     if(user.role==="Wali Santri"&&!(await guardianOwnsStudent(user,studentId))) return Response.json({error:"Santri tidak terhubung dengan akun wali ini."},{status:403});
-    if(user.role!=="Admin"&&user.role!=="Wali Santri") return Response.json({error:"Peran Anda tidak dapat membuat top-up."},{status:403});
+    if(user.role!=="Wali Santri") requirePermission(user,"sinurpay");
     const now=new Date();
     const topupNo=`TOP-${now.toISOString().replace(/\D/g,"").slice(2,14)}-${crypto.randomUUID().slice(0,5).toUpperCase()}`;
     const expiresAt=new Date(now.getTime()+24*60*60*1000).toISOString();
@@ -53,6 +53,7 @@ export async function POST(request:Request) {
     const qrDataUrl=paymentUrl?await QRCode.toDataURL(paymentUrl,{width:360,margin:1,color:{dark:"#183153",light:"#ffffff"}}):"";
     return Response.json({ok:true,id:result.meta.last_row_id,topupNo,amount,method,provider,status,paymentUrl,qrDataUrl,bank:method==="Transfer Bank"?{name:String(env.BANK_NAME),number:String(env.BANK_ACCOUNT_NUMBER),holder:String(env.BANK_ACCOUNT_HOLDER||"Pondok Pesantren Nurul Iman")}:null,expiresAt},{status:201});
   } catch(error) {
-    return Response.json({error:error instanceof Error?error.message:"Top-up gagal dibuat."},{status:500});
+    const message=error instanceof Error?error.message:"Top-up gagal dibuat.";
+    return Response.json({error:message},{status:message.includes("FORBIDDEN_PERMISSION")?403:500});
   }
 }

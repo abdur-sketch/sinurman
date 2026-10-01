@@ -164,6 +164,14 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
   },
 ];
 
+const PAGE_PERMISSIONS: Partial<Record<PageKey, string>> = {
+  dashboard: "dashboard", santri: "students", pegawai: "employees", kelas: "classes", jadwal: "schedule",
+  akademik: "academic", tahfidz: "tahfidz", tahsin: "tahsin", mutabaah: "mutabaah", karakter: "characters",
+  absensi: "attendance", kesehatan: "health", keuangan: "finance", sinurpay: "sinurpay", penerimaan: "admissions",
+  laporan: "reports", pengguna: "users", integrasi: "settings", setup: "settings", kalender: "calendar",
+  inventaris: "employees", konseling: "counseling", raporkepesantrenan: "reports",
+};
+
 const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
   dashboard: { title: "Ringkasan Pesantren", subtitle: "Berikut ringkasan perkembangan pesantren hari ini." },
   santri: { title: "Data Santri", subtitle: "Kelola profil, kelas, kamar, dan status seluruh santri." },
@@ -1809,8 +1817,7 @@ export default function DashboardClient() {
   const visibleNavGroups = useMemo(() => {
     const allowed = role === "Wali Santri" ? new Set<PageKey>(["portalwali"]) : null;
     const permissionIds=new Set(data.user?.permissionIds||[]);
-    const pagePermission:Partial<Record<PageKey,string>>={santri:"students",pegawai:"employees",kelas:"classes",jadwal:"schedule",akademik:"academic",tahfidz:"tahfidz",tahsin:"tahsin",mutabaah:"mutabaah",karakter:"characters",absensi:"attendance",kesehatan:"health",keuangan:"finance",sinurpay:"sinurpay",penerimaan:"admissions",laporan:"reports",pengguna:"users",integrasi:"settings",setup:"settings",kalender:"calendar",inventaris:"employees",konseling:"counseling",raporkepesantrenan:"reports"};
-    return navGroups.map(group => ({...group,items:(allowed?group.items.filter(item=>allowed.has(item.key)):group.items).filter(item=>item.key==="dashboard"||role==="Admin"||!pagePermission[item.key]||permissionIds.has(pagePermission[item.key]!))})).filter(group=>group.items.length);
+    return navGroups.map(group => ({...group,items:(allowed?group.items.filter(item=>allowed.has(item.key)):group.items).filter(item=>role==="Admin"||!PAGE_PERMISSIONS[item.key]||permissionIds.has(PAGE_PERMISSIONS[item.key]!))})).filter(group=>group.items.length);
   },[role,data.user?.permissionIds]);
   const mobileNavItems = useMemo(() => {
     if(role==="Wali Santri") return [{key:"portalwali" as PageKey,icon:"fi-rr-home-heart",label:"Portal Wali"}];
@@ -1832,9 +1839,8 @@ export default function DashboardClient() {
       }
     } catch (error) {
       setLoadError(error instanceof Error?error.message:"Data tidak dapat dimuat.");
-      setRole("Admin");
       setPage("dashboard");
-      setData(current=>({...current,user:current.user??{name:"Administrator",email:"",role:"Admin"}}));
+      setData(current=>({...current,user:current.user??{name:"Pengguna",email:"",role:"Tendik",permissionIds:[]}}));
     } finally { setLoading(false); }
   },[]);
 
@@ -1955,6 +1961,9 @@ export default function DashboardClient() {
   }
 
   const content = (() => {
+    if (role !== "Admin" && page !== "portalwali" && PAGE_PERMISSIONS[page] && !data.user?.permissionIds?.includes(PAGE_PERMISSIONS[page]!)) {
+      return <section className="card data-card"><h2>Akses ditolak</h2><p>Anda tidak memiliki akses ke modul ini.</p></section>;
+    }
     const actions=(resource:Resource)=>({onAdd:()=>setEditor({resource}),onEdit:(row:Row)=>setEditor({resource,row}),onDelete:(row:Row)=>void deleteRecord(resource,row)});
     switch (page) {
       case "dashboard": return <Overview data={data} onNavigate={selectPage} />;
@@ -1986,16 +1995,15 @@ export default function DashboardClient() {
   })();
 
   function selectPage(key: PageKey) {
-    if(key==="kalender") { window.location.href="/kalender"; return; }
     if(role==="Wali Santri"&&key!=="portalwali") {
       setPage("portalwali");
       setSidebarOpen(false);
       notify("Akun Wali Santri hanya dapat membuka laporan anak di Portal Wali.");
       return;
     }
-    const pagePermission:Partial<Record<PageKey,string>>={santri:"students",pegawai:"employees",kelas:"classes",jadwal:"schedule",akademik:"academic",tahfidz:"tahfidz",tahsin:"tahsin",mutabaah:"mutabaah",karakter:"characters",absensi:"attendance",kesehatan:"health",keuangan:"finance",sinurpay:"sinurpay",penerimaan:"admissions",laporan:"reports",pengguna:"users",integrasi:"settings",setup:"settings",inventaris:"employees",konseling:"counseling",raporkepesantrenan:"reports"};
-    const permission=pagePermission[key];
+    const permission=PAGE_PERMISSIONS[key];
     if(role!=="Admin"&&permission&&!data.user?.permissionIds?.includes(permission)) { notify("ACCESS DENIED: hak akses modul ini belum diberikan Admin."); return; }
+    if(key==="kalender") { window.location.href="/kalender"; return; }
     setPage(key);
     setSidebarOpen(false);
   }

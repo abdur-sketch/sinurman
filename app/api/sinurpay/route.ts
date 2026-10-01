@@ -1,4 +1,4 @@
-import { database, ensureUser, seedIfNeeded } from "../_lib";
+import { database, ensureUser, requirePermission, seedIfNeeded } from "../_lib";
 import { notifyGuardian } from "../_notifications";
 
 type CartItem = { productId?: number; quantity?: number };
@@ -116,6 +116,7 @@ export async function GET(request:Request) {
       const csv=[columns.map(csvValue).join(","),...result.results.map(row=>columns.map(key=>csvValue(row[key])).join(","))].join("\n");
       return new Response(`\uFEFF${csv}`,{headers:{"content-type":"text/csv; charset=utf-8","content-disposition":'attachment; filename="sinurpay-transaksi.csv"'}});
     }
+    if(user.role!=="Wali Santri") requirePermission(user,"sinurpay");
     return Response.json(await getPayload(user));
   } catch(error) {
     return Response.json({error:error instanceof Error?error.message:"Data SINURPAY gagal dimuat."},{status:500});
@@ -125,7 +126,8 @@ export async function GET(request:Request) {
 export async function POST(request:Request) {
   try {
     const user=await ensureUser(request);
-    if(user.role!=="Admin") return Response.json({error:"Transaksi SINURPAY hanya dapat diproses petugas berwenang."},{status:403});
+    if(user.role!=="Wali Santri") requirePermission(user,"sinurpay");
+    else return Response.json({error:"Transaksi kasir hanya dapat diproses petugas berwenang."},{status:403});
     const body=await request.json() as {
       action?:string;
       scan?:string;
@@ -269,6 +271,6 @@ export async function POST(request:Request) {
     return Response.json({error:"Tindakan SINURPAY tidak valid."},{status:400});
   } catch(error) {
     const message=error instanceof Error?error.message:"Transaksi SINURPAY gagal.";
-    return Response.json({error:message.includes("UNIQUE")?"SKU atau referensi tersebut sudah digunakan.":message},{status:500});
+    return Response.json({error:message.includes("UNIQUE")?"SKU atau referensi tersebut sudah digunakan.":message},{status:message.includes("FORBIDDEN_PERMISSION")?403:500});
   }
 }

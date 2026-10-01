@@ -1,5 +1,5 @@
 import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb } from "pdf-lib";
-import { database, ensureUser } from "../_lib";
+import { database, ensureUser, requirePermission } from "../_lib";
 
 type Column = { key:string; label:string; weight?:number };
 type ExportDefinition = {
@@ -234,6 +234,7 @@ export async function GET(request:Request) {
   try {
     const user=await ensureUser(request);
     if(user.role==="Wali Santri") return Response.json({error:"Laporan lengkap hanya tersedia untuk pengurus."},{status:403});
+    requirePermission(user,"reports");
     const url=new URL(request.url);
     const type=url.searchParams.get("type")??"students";
     const format=url.searchParams.get("format")??"csv";
@@ -270,6 +271,7 @@ export async function GET(request:Request) {
     const csv=[config.columns.map(column=>csvValue(column.label)).join(","),...rows.map(row=>config.columns.map(column=>csvValue(displayValue(column.key,row[column.key]))).join(","))].join("\n");
     return new Response(`\uFEFF${csv}`,{headers:{"content-type":"text/csv; charset=utf-8","content-disposition":`attachment; filename="sinurman-${type}.csv"`}});
   } catch(error) {
-    return Response.json({error:error instanceof Error?error.message:"Ekspor gagal."},{status:500});
+    const message=error instanceof Error?error.message:"Ekspor gagal.";
+    return Response.json({error:message},{status:message.includes("FORBIDDEN_PERMISSION")?403:500});
   }
 }

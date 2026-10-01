@@ -29,8 +29,14 @@ const rolePermissionDefaults: Partial<Record<Role, ToolPermission[]>> = {
 };
 export function defaultPermissions(role: Role) { return rolePermissionDefaults[role] ?? []; }
 function parsePermissions(role: Role, value: unknown) {
-  if (!value) return defaultPermissions(role);
-  try { const parsed = JSON.parse(String(value)); return Array.isArray(parsed) ? parsed.filter((item): item is ToolPermission => TOOL_PERMISSIONS.includes(item)) : defaultPermissions(role); } catch { return defaultPermissions(role); }
+  // Defaults are used only when an account is created. At runtime the stored
+  // user permission list is authoritative; malformed or missing data is deny.
+  if (role === "Admin") return [...TOOL_PERMISSIONS];
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is ToolPermission => TOOL_PERMISSIONS.includes(item)) : [];
+  } catch { return []; }
 }
 export function hasPermission(user: Pick<AuthenticatedUser,"role"|"permissionIds">, permission: ToolPermission) { return user.role === "Admin" || Boolean(user.permissionIds?.includes(permission)); }
 export function requirePermission(user: Pick<AuthenticatedUser,"role"|"permissionIds">, permission: ToolPermission) { if (!hasPermission(user, permission)) throw new Error("FORBIDDEN_PERMISSION: Anda tidak memiliki akses ke modul ini."); }
@@ -176,15 +182,6 @@ export function ensureDatabaseSchema() {
     // Existing Firestore-backed rows can predate the column even after the
     // DDL metadata has been upgraded. Backfill only the new field, preserving
     // every other user value and any explicit permission override.
-    const legacyUsers = await db.prepare("SELECT id,role,permission_json AS permissionJson FROM users")
-      .all<{ id: number; role: Role; permissionJson?: string | null }>();
-    for (const legacyUser of legacyUsers.results) {
-      if (legacyUser.permissionJson) continue;
-      const role = rolePermissionDefaults[legacyUser.role] ? legacyUser.role : "Wali Santri";
-      await db.prepare("UPDATE users SET permission_json=? WHERE id=?")
-        .bind(JSON.stringify(defaultPermissions(role)), legacyUser.id)
-        .run();
-    }
     // Materialise the review marker on existing Firestore-backed rows even
     // when the DDL metadata already contains the column but old documents do
     // not. Never infer a replacement role; legacy users stay unchanged until
@@ -482,14 +479,9 @@ export async function guardianOwnsStudent(user: Pick<AuthenticatedUser,"email"|"
 }
 
 export function canWrite(role: Role, resource: string) {
-  if (role === "Admin") return true;
-  if (role === "Kepala UPT") return ["students", "employees", "classes", "rooms", "schedules", "subjects", "grades", "reports"].includes(resource);
-  if (role === "Yayasan") return ["reports"].includes(resource);
-  if (role === "Bendahara") return ["transactions", "bills", "wallet_accounts", "wallet_entries", "wallet_topups", "canteen_products", "canteen_sales"].includes(resource);
-  if (role === "Sekolahan") return ["classes", "schedules", "subjects", "grades"].includes(resource);
-  if (role === "Kesantrian") return ["tahfidz", "tahsin", "mutabaah", "health", "characters", "attendance", "permits", "counseling"].includes(resource);
-  if (role === "Tendik") return ["attendance"].includes(resource);
-  return false;
+  // Resource permission is checked immediately afterwards by records/route.
+  // Keep this helper limited to identity exceptions; roles never grant tools.
+  return role !== "Wali Santri" && Boolean(resource);
 }
 
 export async function seedIfNeeded() {

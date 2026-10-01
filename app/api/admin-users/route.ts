@@ -68,8 +68,10 @@ export async function GET(request: Request) {
     const users = await Promise.all(rows.results.map(async row => {
       try {
         const account = await firebaseAdmin().auth.getUserByEmail(row.email);
-        let permissionIds=defaultPermissions(row.role);
-        try { const parsed=JSON.parse(String(row.permissionJson||"")); if(Array.isArray(parsed)) permissionIds=parsed.filter((item):item is ToolPermission=>TOOL_PERMISSIONS.includes(item)); } catch {/* default role */}
+        let permissionIds: ToolPermission[] = row.role === "Admin" ? [...TOOL_PERMISSIONS] : [];
+        if (row.role !== "Admin") {
+          try { const parsed=JSON.parse(String(row.permissionJson||"")); if(Array.isArray(parsed)) permissionIds=parsed.filter((item):item is ToolPermission=>TOOL_PERMISSIONS.includes(item)); } catch {/* deny malformed non-admin permissions */}
+        }
         return {
           ...row,
           permissionIds,
@@ -185,7 +187,9 @@ export async function PATCH(request: Request) {
     const requestedPhone = normalizeGuardianPhone(body.phone);
     const role = body.role as Role;
     const roomScope = String(body.roomScope ?? "").trim();
-    const permissions=Array.isArray(body.permissions)?body.permissions.filter(item=>TOOL_PERMISSIONS.includes(item as ToolPermission)) as ToolPermission[]:defaultPermissions(role);
+    const permissions=Array.isArray(body.permissions)
+      ? body.permissions.filter(item=>TOOL_PERMISSIONS.includes(item as ToolPermission)) as ToolPermission[]
+      : role === "Admin" ? [...TOOL_PERMISSIONS] : (() => { try { const parsed=JSON.parse(String(target.permissionJson||"")); return Array.isArray(parsed) ? parsed.filter((item):item is ToolPermission=>TOOL_PERMISSIONS.includes(item)) : []; } catch { return []; } })();
     if (!name) throw new Error("Nama pengguna wajib diisi.");
     if (!managedRoles.has(role)) throw new Error("Peran pengguna internal tidak valid.");
     if (isOwnerEmail(target.email) && role !== "Admin") {

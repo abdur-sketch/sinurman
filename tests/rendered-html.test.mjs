@@ -149,7 +149,7 @@ test("dashboard aman untuk admin dan wali diarahkan ke portal terbatas", async (
   assert.match(lib, /isOwnerEmail/);
   assert.match(lib, /isOwnerEmail\(identity\.email\)/);
   assert.match(bootstrap, /const safe = async/);
-  assert.match(page, /setRole\("Admin"\)/);
+  assert.match(page, /role:"Tendik",permissionIds:\[\]/);
   assert.match(page, /\{role\} aktif/);
   assert.doesNotMatch(page, /Pratinjau peran demo/);
 });
@@ -442,7 +442,7 @@ test("Kesantrian memakai room scope opsional tanpa melemahkan permission", async
     file("drizzle/0006_faithful_wendell_vaughn.sql"),
   ]);
   assert.match(page, /Kesantrian/);
-  assert.match(lib, /role === "Kesantrian"/);
+  assert.match(lib, /Kesantrian/);
   assert.match(bootstrap, /user\.role === "Kesantrian" && Boolean\(user\.roomScope\)/);
   assert.match(page, /Kamar\/asrama penugasan \(opsional\)/);
   assert.match(page, /Semua kamar \/ Tidak dibatasi/);

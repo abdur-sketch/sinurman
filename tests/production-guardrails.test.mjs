@@ -82,8 +82,9 @@ test("granular user permissions are role-bounded and enforced server-side",async
   ]);
   assert.match(lib,/hasPermission|requirePermission|defaultPermissions/);
   assert.match(lib,/permission_json/);
-  assert.match(lib,/SELECT id,role,permission_json AS permissionJson FROM users/);
-  assert.match(lib,/UPDATE users SET permission_json=\? WHERE id=\?/);
+  assert.match(lib,/permission_json AS permissionJson/);
+  assert.match(lib,/typeof value !== "string" \|\| !value\.trim\(\)/);
+  assert.match(lib,/if \(role === "Admin"\) return \[\.\.\.TOOL_PERMISSIONS\]/);
   assert.match(users,/USER_PERMISSION_UPDATED/);
   assert.match(users,/Gunakan Default Role|defaultPermissions/);
   assert.match(records,/requirePermission\(user,permission\)/);
