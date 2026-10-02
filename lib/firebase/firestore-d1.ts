@@ -104,8 +104,19 @@ function execute(engine: Engine, state: RuntimeState, rawSql: string, rawParams:
   // compatibility engine. Other legacy indexes remain metadata-only because
   // they are not needed for correctness and may use SQLite-specific syntax.
   if (/^CREATE\s+UNIQUE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+admissions_idempotency_unique/i.test(sql)) {
-    if (!state.ddl.includes(sql)) state.ddl.push(sql);
-    const value = engine.exec(sql);
+    // AlasQL supports UNIQUE indexes but not SQLite's IF NOT EXISTS clause.
+    // Normalize only this known index before executing; the normalized DDL is
+    // persisted so subsequent requests do not attempt to recreate it.
+    const normalizedIndex = sql.replace(/\s+IF\s+NOT\s+EXISTS/i, "");
+    if (!state.ddl.includes(normalizedIndex)) state.ddl.push(normalizedIndex);
+    let value: unknown = 0;
+    try {
+      value = engine.exec(normalizedIndex);
+    } catch (error) {
+      // Multiple App Hosting instances can initialize the schema concurrently.
+      // Once the index exists, this migration is already satisfied.
+      if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) throw error;
+    }
     return { value, meta: { changes: 0 } satisfies RunMeta };
   }
   if (/^CREATE\s+(?:UNIQUE\s+)?INDEX/i.test(sql)) return { value: 0, meta: { changes: 0 } satisfies RunMeta };
@@ -113,7 +124,14 @@ function execute(engine: Engine, state: RuntimeState, rawSql: string, rawParams:
   if (/^ALTER\s+TABLE/i.test(sql)) {
     const normalized=sql.replace(/\s+ADD\s+(?!COLUMN\b)/i," ADD COLUMN ");
     if (!state.ddl.includes(normalized)) state.ddl.push(normalized);
-    const value=engine.exec(normalized);
+    let value: unknown = 0;
+    try {
+      value=engine.exec(normalized);
+    } catch (error) {
+      // Schema initialization is idempotent across concurrent instances. If
+      // another initializer added this column first, continue normally.
+      if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) throw error;
+    }
     // SQLite would expose NULL/default values for existing rows after ADD
     // COLUMN. Materialise the default in our document rows as well so the
     // Firestore-backed D1 adapter has the same observable schema semantics.
