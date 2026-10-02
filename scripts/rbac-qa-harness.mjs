@@ -147,6 +147,24 @@ async function mutate(session, resource, data = {}) {
   return api("/api/records", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "create", resource, data }) }, session);
 }
 
+async function publicRegistration(key, name, phone, options = {}) {
+  const payload = {
+    name,
+    nisn: options.nisn || `NISN-${suffix}-${name.replace(/\W/g, "").slice(-4)}`,
+    birth_place: "Bandar Lampung",
+    birth_date: "2012-01-01",
+    gender: "Laki-laki",
+    desired_level: options.level || "SMP",
+    guardian_name: "Wali QA",
+    guardian_phone: phone,
+    previous_school: "SD QA",
+    address: "Alamat QA",
+    submission_id: key,
+  };
+  return api("/api/ppdb", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(payload) });
+}
+
+
 async function remove(session, resource, id) {
   if (!id) return;
   await api("/api/records", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "delete", resource, id }) }, session);
@@ -156,6 +174,17 @@ async function run() {
   const health = await api("/api/health?qa=1");
   check("local QA database ready", health.response.status === 200, `HTTP ${health.response.status}`);
   clearLocalDb();
+  const ppdbKey = `qa-spmb-${suffix}`;
+  const firstPpdb = await publicRegistration(ppdbKey, "QA Calon Satu", `62879000${suffix.slice(-5)}`);
+  check("SPMB one submit creates one registration", firstPpdb.response.status === 201, `HTTP ${firstPpdb.response.status}`);
+  const replayPpdb = await publicRegistration(ppdbKey, "QA Calon Satu", `62879000${suffix.slice(-5)}`);
+  check("SPMB sequential replay is idempotent", replayPpdb.response.status === 200 && replayPpdb.body?.id === firstPpdb.body?.id, `HTTP ${replayPpdb.response.status}`);
+  const concurrent = await Promise.all(Array.from({ length: 5 }, () => publicRegistration(ppdbKey, "QA Calon Satu", `62879000${suffix.slice(-5)}`)));
+  check("SPMB five concurrent requests create one registration", concurrent.every((item) => [200, 201].includes(item.response.status)) && new Set(concurrent.map((item) => item.body?.id)).size === 1, JSON.stringify(concurrent.map((item) => item.response.status)));
+  const different = await publicRegistration(`qa-spmb-different-${suffix}`, "QA Calon Dua", `62879001${suffix.slice(-5)}`);
+  check("two distinct SPMB applicants remain separate", different.response.status === 201 && different.body?.id !== firstPpdb.body?.id, `HTTP ${different.response.status}`);
+  const businessDuplicate = await publicRegistration(`qa-spmb-new-key-${suffix}`, "QA Calon Satu", `62879000${suffix.slice(-5)}`);
+  check("same applicant new submission is business-blocked", businessDuplicate.response.status === 409 && businessDuplicate.body?.code === "DUPLICATE_BLOCKED", `HTTP ${businessDuplicate.response.status}`);
   const anonymousCalendar = await api("/api/academic-events");
   check("anonymous calendar API denied", anonymousCalendar.response.status === 401, `HTTP ${anonymousCalendar.response.status}`);
   await seedAdmin();

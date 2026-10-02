@@ -100,6 +100,14 @@ function pragmaRows(engine: Engine, sql: string) {
 
 function execute(engine: Engine, state: RuntimeState, rawSql: string, rawParams: unknown[]) {
   const sql = rawSql.trim().replace(/\btotal\b/gi, "[total]");
+  // Persist and enforce the admissions idempotency index in the Firestore
+  // compatibility engine. Other legacy indexes remain metadata-only because
+  // they are not needed for correctness and may use SQLite-specific syntax.
+  if (/^CREATE\s+UNIQUE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+admissions_idempotency_unique/i.test(sql)) {
+    if (!state.ddl.includes(sql)) state.ddl.push(sql);
+    const value = engine.exec(sql);
+    return { value, meta: { changes: 0 } satisfies RunMeta };
+  }
   if (/^CREATE\s+(?:UNIQUE\s+)?INDEX/i.test(sql)) return { value: 0, meta: { changes: 0 } satisfies RunMeta };
   if (/^PRAGMA\s+table_info/i.test(sql)) return { value: pragmaRows(engine, sql), meta: { changes: 0 } satisfies RunMeta };
   if (/^ALTER\s+TABLE/i.test(sql)) {

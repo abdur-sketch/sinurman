@@ -107,6 +107,22 @@ test("PPDB online menyediakan formulir dan pelacakan status untuk wali", async (
   assert.match(bootstrap, /admissionDocuments/);
 });
 
+test("SPMB submission memakai submit lock dan idempotency database", async () => {
+  const [page, publicRoute, adminRoute, schema, qa] = await Promise.all([
+    file("app/ppdb/page.tsx"),
+    file("app/api/ppdb/route.ts"),
+    file("app/api/admissions/route.ts"),
+    file("app/api/_lib.ts"),
+    file("scripts/rbac-qa-harness.mjs"),
+  ]);
+  assert.match(page, /submitLock=useRef/);
+  assert.match(page, /Idempotency-Key/);
+  assert.match(publicRoute, /idempotency_key/);
+  assert.match(adminRoute, /IDEMPOTENT_REPLAY/);
+  assert.match(schema, /idempotency_key TEXT NOT NULL DEFAULT ''/);
+  assert.match(qa, /five concurrent requests create one registration/);
+});
+
 test("unggah dokumen PPDB membatasi tipe, ukuran, dan kepemilikan", async () => {
   const [documents, hosting, migration] = await Promise.all([
     file("app/api/admissions/documents/route.ts"),

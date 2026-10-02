@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import BrandMark from "../brand-mark";
 
 const documentTypes = ["Kartu Keluarga","Akta Kelahiran","Rapor Terakhir","Pas Foto","KIP / SKTM"];
@@ -17,14 +17,19 @@ export default function PublicPpdbPage() {
   const [created,setCreated]=useState<Result|null>(null);
   const [tracking,setTracking]=useState({registrationNo:"",token:""});
   const [status,setStatus]=useState<StatusResult|null>(null);
+  const submissionId=useRef("");
+  const submitLock=useRef(false);
   const field=(key:keyof typeof form,value:string)=>setForm(current=>({...current,[key]:value}));
 
   async function submit(event:React.FormEvent) {
-    event.preventDefault(); setSaving(true); setError("");
+    event.preventDefault();
+    if (submitLock.current) return;
+    submitLock.current=true; setSaving(true); setError("");
+    if (!submissionId.current) submissionId.current=crypto.randomUUID();
     try {
       const missing=documentTypes.slice(0,4).find(type=>!files[type]);
       if(missing) throw new Error(`${missing} wajib diunggah.`);
-      const response=await fetch("/api/ppdb",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(form)});
+      const response=await fetch("/api/ppdb",{method:"POST",headers:{"content-type":"application/json","Idempotency-Key":submissionId.current,"X-Request-Id":crypto.randomUUID()},body:JSON.stringify({...form,submission_id:submissionId.current})});
       const result=await response.json() as Result&{error?:string};
       if(!response.ok) throw new Error(result.error||"Pendaftaran gagal.");
       for(const [docType,file] of Object.entries(files)) {
@@ -35,7 +40,7 @@ export default function PublicPpdbPage() {
       }
       setCreated(result); setTracking({registrationNo:result.registrationNo,token:result.trackingToken});
     } catch(e) { setError(e instanceof Error?e.message:"Pendaftaran gagal."); }
-    finally { setSaving(false); }
+    finally { submitLock.current=false; setSaving(false); }
   }
 
   async function checkStatus(event:React.FormEvent) {

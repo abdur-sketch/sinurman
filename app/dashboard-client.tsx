@@ -973,14 +973,20 @@ function PpdbApplicationModal({ onClose, onSaved, notify }: { onClose:()=>void; 
   const [form,setForm]=useState({name:"",nisn:"",birth_place:"",birth_date:"",gender:"Laki-laki",desired_level:"SMP",guardian_name:"",guardian_phone:"",previous_school:"",address:""});
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
+  const submissionId=useRef("");
+  const submitLock=useRef(false);
   async function submit(event:React.FormEvent) {
-    event.preventDefault(); setSaving(true); setError("");
+    event.preventDefault();
+    if (submitLock.current) return;
+    submitLock.current=true; setSaving(true); setError("");
+    if (!submissionId.current) submissionId.current=crypto.randomUUID();
     try {
-      const response=await fetch("/api/admissions",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(form)});
+      const response=await fetch("/api/admissions",{method:"POST",headers:{"content-type":"application/json","Idempotency-Key":submissionId.current,"X-Request-Id":crypto.randomUUID()},body:JSON.stringify({...form,submission_id:submissionId.current})});
       const result=await response.json() as {error?:string;message?:string;registrationNo?:string};
       if(!response.ok) throw new Error(result.error||"Pendaftaran gagal disimpan.");
       await onSaved(); notify(`${result.message} Nomor: ${result.registrationNo}`); onClose();
-    } catch(e) { setError(e instanceof Error?e.message:"Pendaftaran gagal disimpan."); setSaving(false); }
+    } catch(e) { setError(e instanceof Error?e.message:"Pendaftaran gagal disimpan."); }
+    finally { submitLock.current=false; setSaving(false); }
   }
   const field=(key:keyof typeof form,value:string)=>setForm(current=>({...current,[key]:value}));
   return <div className="modal-backdrop" onMouseDown={onClose}><form className="record-modal ppdb-form-modal" onSubmit={submit} onMouseDown={e=>e.stopPropagation()}>
