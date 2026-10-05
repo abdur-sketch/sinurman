@@ -1,5 +1,6 @@
 import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb } from "pdf-lib";
 import { database, ensureUser, requirePermission } from "../_lib";
+import { ppdbRequirements } from "../../../lib/ppdb-requirements";
 
 type Column = { key:string; label:string; weight?:number };
 type ExportDefinition = {
@@ -8,6 +9,7 @@ type ExportDefinition = {
   query:string;
   scopedQuery?:string;
   columns:Column[];
+  pdfColumns?:Column[];
   dateKey?:string;
   adminOnly?:boolean;
 };
@@ -116,9 +118,10 @@ const exports:Record<string,ExportDefinition> = {
   },
   admissions: {
     title:"Laporan Penerimaan Santri Baru",
-    description:"Data pendaftar, jenjang pilihan, asal sekolah, nilai, dan verifikasi.",
-    query:"SELECT registration_no,name,desired_level,previous_school,guardian_name,status,score,wave,test_date,test_time,test_location,created_at FROM admissions ORDER BY id DESC",
-    columns:[{key:"registration_no",label:"No. Daftar",weight:1.2},{key:"name",label:"Calon Santri",weight:1.5},{key:"desired_level",label:"Jenjang"},{key:"previous_school",label:"Asal Sekolah",weight:1.5},{key:"guardian_name",label:"Wali",weight:1.3},{key:"status",label:"Status"},{key:"score",label:"Nilai"},{key:"wave",label:"Gelombang"},{key:"test_date",label:"Tanggal Tes"},{key:"test_time",label:"Jam Tes"},{key:"test_location",label:"Lokasi Tes"},{key:"created_at",label:"Tanggal"}],
+    description:"Excel memuat profil, kontak, dokumen, status, nilai, dan peringkat seluruh pendaftar. PDF dibuat ringkas untuk laporan resmi.",
+    query:"SELECT id,registration_no,name,applicant_email,nisn,birth_place,birth_date,gender,desired_level,previous_school,address,guardian_name,guardian_phone,status,score,verification_note,registration_requirement_version,wave,test_date,test_time,test_location,created_at FROM admissions ORDER BY id DESC",
+    columns:[{key:"registration_no",label:"No. Daftar",weight:1.2},{key:"name",label:"Calon Santri",weight:1.5},{key:"nisn",label:"NISN"},{key:"birth_place",label:"Tempat Lahir"},{key:"birth_date",label:"Tanggal Lahir"},{key:"gender",label:"Jenis Kelamin"},{key:"desired_level",label:"Jenjang"},{key:"previous_school",label:"Asal Sekolah",weight:1.5},{key:"address",label:"Alamat",weight:2},{key:"guardian_name",label:"Wali",weight:1.3},{key:"guardian_phone",label:"WA Wali",weight:1.2},{key:"applicant_email",label:"Email Pendaftar",weight:1.3},{key:"status",label:"Status"},{key:"score",label:"Nilai"},{key:"rank",label:"Peringkat"},{key:"wave",label:"Gelombang"},{key:"test_date",label:"Tanggal Tes"},{key:"test_time",label:"Jam Tes"},{key:"test_location",label:"Lokasi Tes"},{key:"document_status",label:"Status Dokumen",weight:1.3},{key:"documents",label:"Dokumen",weight:2},{key:"verification_note",label:"Catatan Verifikasi",weight:2},{key:"registration_requirement_version",label:"Versi Persyaratan"},{key:"created_at",label:"Tanggal Daftar"}],
+    pdfColumns:[{key:"registration_no",label:"No. Daftar",weight:1.2},{key:"name",label:"Calon Santri",weight:1.5},{key:"desired_level",label:"Jenjang"},{key:"previous_school",label:"Asal Sekolah",weight:1.5},{key:"status",label:"Status"},{key:"score",label:"Nilai"},{key:"rank",label:"Peringkat"},{key:"created_at",label:"Tanggal"}],
     dateKey:"created_at",
     adminOnly:true,
   },
@@ -126,6 +129,18 @@ const exports:Record<string,ExportDefinition> = {
 
 function csvValue(value:unknown) {
   return `"${String(value??"").replaceAll('"','""')}"`;
+}
+
+function excelValue(value:unknown) {
+  return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&apos;");
+}
+
+function createExcelXml(config:ExportDefinition,rows:Record<string,unknown>[]) {
+  const columns=config.columns;
+  const header=`<Row>${columns.map(column=>`<Cell><Data ss:Type="String">${excelValue(column.label)}</Data></Cell>`).join("")}</Row>`;
+  const body=rows.map(row=>`<Row>${columns.map(column=>`<Cell><Data ss:Type="String">${excelValue(displayValue(column.key,row[column.key]))}</Data></Cell>`).join("")}</Row>`).join("");
+  return `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="${excelValue(config.title.slice(0,31))}"><Table>${header}${body}</Table></Worksheet></Workbook>`;
 }
 
 function dateLabel(value:string) {
@@ -147,6 +162,42 @@ function safePdfText(value:unknown) {
     .replace(/[‘’]/g,"'")
     .replace(/[–—]/g,"-")
     .replace(/[^\x20-\x7E\u00A0-\u00FF]/g,"?");
+}
+
+async function enrichAdmissionRows(rows:Record<string,unknown>[]) {
+  const documents=(await database().prepare("SELECT admission_id,doc_type,status FROM admission_documents ORDER BY id ASC").all<{ admission_id:number; doc_type:string; status:string }>()).results;
+  const byAdmission=new Map<number,{doc_type:string;status:string}[]>();
+  documents.forEach(document=>{
+    const list=byAdmission.get(Number(document.admission_id))??[];
+    list.push({doc_type:document.doc_type,status:document.status});
+    byAdmission.set(Number(document.admission_id),list);
+  });
+  const enriched=rows.map(row=>{
+    const version=Number(row.registration_requirement_version||1);
+    const docs=byAdmission.get(Number(row.id))??[];
+    const requirements=ppdbRequirements(version);
+    const present=new Set(docs.map(document=>document.doc_type));
+    const complete=requirements.required.every(required=>present.has(required));
+    const documentStatus=version<2?"Legacy v1 - aturan lama":complete?"Lengkap":"Belum lengkap";
+    return {
+      ...row,
+      documents:docs.length?docs.map(document=>`${document.doc_type} (${document.status||"Menunggu"})`).join("; "):"-",
+      document_status:documentStatus,
+    };
+  });
+  const rankRows=[...enriched].sort((left,right)=>{
+    const leftWave=String(left.wave||"Gelombang 1");
+    const rightWave=String(right.wave||"Gelombang 1");
+    if(leftWave!==rightWave) return leftWave.localeCompare(rightWave);
+    return Number(right.score||0)-Number(left.score||0);
+  });
+  rankRows.forEach(row=>{
+    const wave=String(row.wave||"Gelombang 1");
+    const score=Number(row.score||0);
+    const rank=rankRows.filter(candidate=>String(candidate.wave||"Gelombang 1")===wave&&Number(candidate.score||0)>score).length+1;
+    row.rank=rank;
+  });
+  return enriched;
 }
 
 function truncate(font:PDFFont,value:string,maxWidth:number,size:number) {
@@ -184,26 +235,27 @@ async function createPdf(config:ExportDefinition,rows:Record<string,unknown>[],p
   const pdf=await PDFDocument.create();
   const font=await pdf.embedFont(StandardFonts.Helvetica);
   const bold=await pdf.embedFont(StandardFonts.HelveticaBold);
-  const totalWeight=config.columns.reduce((sum,column)=>sum+(column.weight??1),0);
-  const widths=config.columns.map(column=>754*((column.weight??1)/totalWeight));
+  const columns=config.pdfColumns??config.columns;
+  const totalWeight=columns.reduce((sum,column)=>sum+(column.weight??1),0);
+  const widths=columns.map(column=>754*((column.weight??1)/totalWeight));
   let pageNumber=1;
   let page=pdf.addPage([842,595]);
   drawPdfHeader(page,config.title,period,font,bold,pageNumber);
   let y=500;
-  y=drawTableHeader(page,config.columns,widths,y,font,bold);
+  y=drawTableHeader(page,columns,widths,y,font,bold);
   rows.forEach((row,rowIndex)=>{
     if(y<82) {
       pageNumber+=1;
       page=pdf.addPage([842,595]);
       drawPdfHeader(page,config.title,period,font,bold,pageNumber);
       y=500;
-      y=drawTableHeader(page,config.columns,widths,y,font,bold);
+      y=drawTableHeader(page,columns,widths,y,font,bold);
     }
     if(rowIndex%2===1) page.drawRectangle({x:30,y:y-17,width:782,height:18,color:rgb(.975,.985,.995)});
     let x=34;
     page.drawText(String(rowIndex+1),{x,y:y-12,size:6.6,font,color:rgb(.2,.26,.34)});
     x+=28;
-    config.columns.forEach((column,index)=>{
+    columns.forEach((column,index)=>{
       const value=displayValue(column.key,row[column.key]);
       page.drawText(truncate(font,value,widths[index]-7,6.6),{x,y:y-12,size:6.6,font,color:rgb(.2,.26,.34)});
       x+=widths[index];
@@ -247,17 +299,18 @@ export async function GET(request:Request) {
     const scoped=user.role==="Kesantrian"&&Boolean(user.roomScope);
     const statement=database().prepare(scoped&&config.scopedQuery?config.scopedQuery:config.query);
     const result=scoped&&config.scopedQuery?await statement.bind(user.roomScope||"__BELUM_DITUGASKAN__").all<Record<string,unknown>>():await statement.all<Record<string,unknown>>();
-    const dateFiltered=config.dateKey?result.results.filter(row=>{
+    const preparedRows=type==="admissions"?await enrichAdmissionRows(result.results):result.results;
+    const dateFiltered=config.dateKey?preparedRows.filter(row=>{
       const value=String(row[config.dateKey!]??"").slice(0,10);
       return (!from||value>=from)&&(!to||value<=to);
-    }):result.results;
+    }):preparedRows;
     const rows=studentFilter?dateFiltered.filter(row=>[row.nis,row.name,row.santri].some(value=>String(value??"").trim().toLowerCase()===studentFilter)):dateFiltered;
     const generatedAt=new Intl.DateTimeFormat("id-ID",{dateStyle:"long",timeStyle:"short",timeZone:"Asia/Jakarta"}).format(new Date());
     const periodLabel=from&&to?`${dateLabel(from)} - ${dateLabel(to)}`:from?`Mulai ${dateLabel(from)}`:to?`Sampai ${dateLabel(to)}`:"Seluruh data";
     if(format==="json") return Response.json({
       title:config.title,
       description:config.description,
-      columns:config.columns.map(({key,label})=>({key,label})),
+      columns:(config.pdfColumns??config.columns).map(({key,label})=>({key,label})),
       rows,
       generatedAt,
       period:{from,to,label:config.dateKey?periodLabel:"Seluruh data aktif"},
@@ -266,6 +319,10 @@ export async function GET(request:Request) {
     if(format==="pdf") {
       const bytes=await createPdf(config,rows,config.dateKey?periodLabel:"Seluruh data aktif",user.name);
       return new Response(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer,{headers:{"content-type":"application/pdf","content-disposition":`attachment; filename="sinurman-${type}.pdf"`}});
+    }
+    if(format==="excel"||format==="xls") {
+      const workbook=createExcelXml(config,rows);
+      return new Response(workbook,{headers:{"content-type":"application/vnd.ms-excel; charset=utf-8","content-disposition":`attachment; filename="sinurman-${type}.xls"`}});
     }
     if(format!=="csv") return Response.json({error:"Format laporan tidak valid."},{status:400});
     const csv=[config.columns.map(column=>csvValue(column.label)).join(","),...rows.map(row=>config.columns.map(column=>csvValue(displayValue(column.key,row[column.key]))).join(","))].join("\n");
