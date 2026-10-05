@@ -1,0 +1,9 @@
+"use client";
+import { useEffect, useState } from "react";
+
+type Result = { valid?: boolean; error?: string; student?: { name?:string; nis?:string; nisn?:string; education_level?:string; class_name?:string; entry_year?:string; status?:string; photo_url?:string } };
+export default function VerifyStudent({ params }: { params: { token: string } }) {
+  const [result, setResult] = useState<Result | null>(null);
+  useEffect(() => { void fetch(`/api/student-card/verify?token=${encodeURIComponent(params.token)}`, { cache: "no-store" }).then(async r => setResult(await r.json() as Result)).catch(() => setResult({ error: "Verifikasi gagal." })); }, [params.token]);
+  return <main style={{minHeight:"100vh",background:"#eef4fb",padding:"48px 20px",fontFamily:"Arial,sans-serif",color:"#183153"}}><section style={{maxWidth:560,margin:"0 auto",background:"white",borderRadius:24,padding:32,boxShadow:"0 20px 60px #18315318"}}><p style={{color:"#2879e8",fontWeight:700,letterSpacing:2}}>VERIFIKASI KARTU SANTRI</p><h1 style={{marginTop:8}}>SINURMAN</h1>{!result&&<p>Memeriksa kartu…</p>}{result?.error&&<><h2 style={{color:"#c0392b"}}>Kartu tidak valid</h2><p>{result.error}</p></>}{result?.student&&<><h2 style={{color:result.valid?"#16875c":"#c0392b"}}>{result.valid?"Kartu Aktif":"Kartu Tidak Aktif"}</h2><div style={{display:"grid",gap:12,marginTop:24}}>{[["Nama",result.student.name],["ID/NIS",result.student.nis],["NISN",result.student.nisn],["Unit",result.student.education_level],["Kelas",result.student.class_name],["Tahun masuk",result.student.entry_year],["Status",result.student.status]].map(([label,value])=><div key={label}><small style={{color:"#71839b"}}>{label}</small><div style={{fontWeight:700}}>{value||"-"}</div></div>)}</div><p style={{marginTop:28,color:"#71839b",fontSize:13}}>Halaman ini hanya menampilkan data identitas yang aman untuk verifikasi.</p></>}</section></main>;
+}

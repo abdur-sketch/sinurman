@@ -1072,7 +1072,7 @@ function PpdbVerifyModal({ admission, onClose, onUpdated, notify }: { admission:
   </div></div>;
 }
 
-function AdmissionsPage({ data, role, reload, notify, remove }: { data:AppData; role:Role; reload:()=>Promise<void>; notify:(message:string)=>void; remove:(r:Resource,row:Row)=>void }) {
+function AdmissionsPage({ data, role, reload, notify, remove, onCard }: { data:AppData; role:Role; reload:()=>Promise<void>; notify:(message:string)=>void; remove:(r:Resource,row:Row)=>void; onCard:(row:Row)=>void }) {
   const [showForm,setShowForm]=useState(false);
   const [documentsFor,setDocumentsFor]=useState<Row|null>(null);
   const [verifyFor,setVerifyFor]=useState<Row|null>(null);
@@ -1080,6 +1080,16 @@ function AdmissionsPage({ data, role, reload, notify, remove }: { data:AppData; 
   const rankById=new Map(rows.filter(x=>Number(x.score)>0).sort((a,b)=>Number(b.score)-Number(a.score)).map((x,index)=>[String(x.id),index+1]));
   const verified=rows.filter(x=>["Terverifikasi","Tes","Lulus"].includes(String(x.status))).length;
   const needsFix=rows.filter(x=>x.status==="Perlu Perbaikan").length;
+  async function activate(row:Row) {
+    if (String(row.status) !== "Lulus") { notify("Calon santri harus berstatus Lulus terlebih dahulu."); return; }
+    if (!window.confirm(`Tetapkan ${row.name} sebagai santri aktif?`)) return;
+    const response=await fetch("/api/admissions/activate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({admissionId:Number(row.id)})});
+    const result=await response.json() as {error?:string;message?:string};
+    if(!response.ok){notify(result.error||"Penetapan santri gagal.");return;}
+    notify(result.message||"Calon santri berhasil ditetapkan sebagai santri."); await reload();
+  }
+  void activate;
+  void onCard;
   if(role==="Wali Santri") return <div className="feature-app admissions-app"><section className="summary-banner admission-banner"><div><span>SPMB ONLINE 2027–2028</span><strong>{rows.length?`${rows.length} Pendaftaran`:"Masa depan dimulai di sini."}</strong><p>Isi formulir, unggah dokumen, dan pantau hasil verifikasi secara online.</p></div><button className="light-button" onClick={()=>setShowForm(true)}>＋ Formulir Baru</button></section>
     <section className="ppdb-steps">{["Isi Formulir","Unggah Dokumen","Verifikasi Admin","Tes & Kelulusan"].map((x,i)=><article className="card" key={x}><span>{i+1}</span><strong>{x}</strong><small>{i===0?"Data calon santri":i===1?"PDF/JPG/PNG maks. 5 MB":i===2?"Pantau catatan perbaikan":"Hasil diumumkan di portal"}</small></article>)}</section>
     <section className="ppdb-applications">{rows.map(row=>{const docs=data.admissionDocuments.filter(x=>Number(x.admission_id)===Number(row.id));const valid=docs.filter(x=>x.status==="Valid").length;return <article className="card ppdb-application-card" key={String(row.id)}><header><div><span>{row.registration_no}</span><h3>{row.name}</h3><p>{row.desired_level} · {row.previous_school}</p></div><Status tone={ppdbTone(row.status)}>{row.status}</Status></header><div className="ppdb-progress"><span><i style={{width:`${Math.min(100,Math.max(15,ppdbStatuses.indexOf(String(row.status))*18+15))}%`}}/></span><small>{valid} dokumen valid · {docs.length} berkas diunggah</small></div>{row.verification_note&&<div className="verification-note"><strong>Catatan verifikator</strong><p>{row.verification_note}</p></div>}<footer><button className="primary-button" onClick={()=>setDocumentsFor(row)}>Kelola Dokumen</button><small>Dibuat {new Date(String(row.created_at)).toLocaleDateString("id-ID")}</small></footer></article>})}{!rows.length&&<article className="card ppdb-empty"><span>＋</span><h3>Belum ada pendaftaran</h3><p>Mulai pendaftaran calon santri SMP atau SMK Nurul Iman.</p><button className="primary-button" onClick={()=>setShowForm(true)}>Isi Formulir PPDB</button></article>}</section>
@@ -1422,7 +1432,7 @@ function IntegrationsPage({ data, onImported, notify }: { data:AppData; onImport
 
 function StudentCardModal({ student, onClose }: { student:Row; onClose:()=>void }) {
   const [qr,setQr]=useState(""); useEffect(()=>{void (async()=>{const response=await fetch(`/api/student-card?id=${student.id}`);const result=await response.json() as {qr?:string};setQr(result.qr||"");})();},[student.id]);
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="student-card-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close no-print" onClick={onClose}>×</button><div className="student-id-card"><header><BrandMark className="brand-mark"/><div><strong>SINURMAN</strong><small>Pondok Pesantren Nurul Iman</small></div></header><div className="student-card-body"><div><span className="student-photo">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><h3>{student.name}</h3><p>{student.nis}</p><dl><dt>Kelas</dt><dd>{student.class_name}</dd><dt>Kamar</dt><dd>{student.room}</dd><dt>Status</dt><dd>{student.status}</dd></dl></div>{qr?<img src={qr} alt={`QR ${student.name}`} />:<span className="qr-loading">Memuat QR…</span>}</div><footer>Kartu Santri Digital · Tahun Ajaran 2026/2027</footer></div><button className="primary-button print-card no-print" onClick={()=>window.print()}>Cetak Kartu</button></div></div>;
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="student-card-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close no-print" onClick={onClose}>×</button><div className="student-id-card"><header><BrandMark className="brand-mark"/><div><strong>SINURMAN</strong><small>Pondok Pesantren Nurul Iman</small></div></header><div className="student-card-body"><div><span className="student-photo">{String(student.name).split(" ").map(x=>x[0]).slice(0,2).join("")}</span><h3>{student.name}</h3><p>{student.nis}</p><dl><dt>Kelas</dt><dd>{student.class_name}</dd><dt>Kamar</dt><dd>{student.room}</dd><dt>Status</dt><dd>{student.status}</dd></dl></div>{qr?<img src={qr} alt={`QR ${student.name}`} />:<span className="qr-loading">Memuat QR…</span>}</div><footer>Kartu Santri Digital · Tahun Ajaran 2026/2027</footer></div><div className="header-actions no-print"><a className="secondary-button link-button" href={`/api/student-card?id=${student.id}&format=pdf`}>Unduh PDF</a><button className="primary-button print-card" onClick={()=>window.print()}>Cetak Kartu</button></div></div></div>;
 }
 
 function ReportsPage({ role }: { role:Role }) {
@@ -1991,7 +2001,7 @@ export default function DashboardClient() {
       case "laporan": return <ReportsPage role={role} />;
       case "absensi": return <AttendancePage data={data} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} reload={loadData} notify={notify} />;
       case "jadwal": return <SchedulePage data={data} role={role} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
-      case "penerimaan": return <AdmissionsPage data={data} role={role} reload={loadData} notify={notify} remove={(resource,row)=>void deleteRecord(resource,row)} />;
+      case "penerimaan": return <AdmissionsPage data={data} role={role} reload={loadData} notify={notify} remove={(resource,row)=>void deleteRecord(resource,row)} onCard={setCardStudent} />;
       case "konseling": return <CounselingPage rows={data.counseling} edit={(resource,row)=>setEditor({resource,row})} remove={(resource,row)=>void deleteRecord(resource,row)} />;
       case "raporkepesantrenan": return <PesantrenReportPage data={data} />;
       case "pusatinformasi": return <InformationHub data={data} role={role} onNavigate={selectPage} />;

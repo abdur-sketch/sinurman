@@ -117,7 +117,6 @@ export function ensureDatabaseSchema() {
 
     const upgrades: Record<string, Record<string, string>> = {
       users: { room_scope: "TEXT NOT NULL DEFAULT ''", phone: "TEXT NOT NULL DEFAULT ''", permission_json: "TEXT NOT NULL DEFAULT ''", role_review_required: "INTEGER NOT NULL DEFAULT 0", employee_id: "INTEGER" },
-      students: { guardian_email: "TEXT NOT NULL DEFAULT ''" },
       tahfidz_records: {
         surah_from: "TEXT NOT NULL DEFAULT ''",
         surah_to: "TEXT NOT NULL DEFAULT ''",
@@ -155,6 +154,7 @@ export function ensureDatabaseSchema() {
         test_date: "TEXT NOT NULL DEFAULT ''",
         test_time: "TEXT NOT NULL DEFAULT ''",
         test_location: "TEXT NOT NULL DEFAULT ''",
+        student_id: "INTEGER",
       },
       guardian_accounts: {
         google_uid: "TEXT NOT NULL DEFAULT ''",
@@ -172,6 +172,15 @@ export function ensureDatabaseSchema() {
       inventory_items: {
         seed_source: "TEXT NOT NULL DEFAULT ''",
       },
+      students: {
+        guardian_email: "TEXT NOT NULL DEFAULT ''",
+        admission_id: "INTEGER",
+        nisn: "TEXT NOT NULL DEFAULT ''",
+        education_level: "TEXT NOT NULL DEFAULT ''",
+        entry_year: "TEXT NOT NULL DEFAULT ''",
+        photo_url: "TEXT NOT NULL DEFAULT ''",
+        card_public_token: "TEXT NOT NULL DEFAULT ''",
+      },
     };
     for (const [table, columns] of Object.entries(upgrades)) {
       const info = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
@@ -185,6 +194,8 @@ export function ensureDatabaseSchema() {
     // uniqueness guard. No existing registration number or status is changed.
     await db.prepare("UPDATE admissions SET idempotency_key='legacy-'||id WHERE idempotency_key='' OR idempotency_key IS NULL").run();
     await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS admissions_idempotency_unique ON admissions(idempotency_key)").run();
+    await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS students_admission_unique ON students(admission_id) WHERE admission_id IS NOT NULL").run();
+    await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS students_card_token_unique ON students(card_public_token) WHERE card_public_token<>''").run();
     // Existing Firestore-backed rows can predate the column even after the
     // DDL metadata has been upgraded. Backfill only the new field, preserving
     // every other user value and any explicit permission override.
