@@ -172,7 +172,7 @@ async function enrichAdmissionRows(rows:Record<string,unknown>[]) {
     list.push({doc_type:document.doc_type,status:document.status});
     byAdmission.set(Number(document.admission_id),list);
   });
-  const enriched=rows.map(row=>{
+  const enriched:Record<string,unknown>[]=rows.map(row=>{
     const version=Number(row.registration_requirement_version||1);
     const docs=byAdmission.get(Number(row.id))??[];
     const requirements=ppdbRequirements(version);
