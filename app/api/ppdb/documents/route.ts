@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { database, ensureDatabaseSchema } from "../../_lib";
 
-const documentTypes = new Set(["Kartu Keluarga", "Akta Kelahiran", "Rapor Terakhir", "Pas Foto", "KIP / SKTM"]);
+const documentTypes = new Set(["Kartu Keluarga", "Akta Kelahiran", "Rapor Terakhir", "Pas Foto", "KIP / SKTM", "Slip/Bukti Pembayaran Uang Pendaftaran"]);
 const contentTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 const maxSize = 5 * 1024 * 1024;
 
@@ -37,9 +37,6 @@ export async function POST(request: Request) {
        (admission_id,doc_type,file_name,object_key,content_type,size_bytes,status,verification_note,verified_by,verified_at,uploaded_at)
        VALUES (?,?,?,?,?,?,'Menunggu','','','',?)`,
     ).bind(admissionId, docType, file.name, key, file.type, file.size, now).run();
-    await database().prepare(
-      "UPDATE admissions SET status=CASE WHEN status IN ('Pendaftaran','Perlu Perbaikan') THEN 'Verifikasi Dokumen' ELSE status END WHERE id=?",
-    ).bind(admissionId).run();
     return Response.json({ ok:true, message:`${docType} berhasil diunggah.` });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Berkas belum dapat diunggah." }, { status: 500 });

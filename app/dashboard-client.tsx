@@ -959,7 +959,7 @@ function SchedulePage({ data, role, edit, remove }: { data:AppData; role:Role; e
   <article className="card data-card"><header className="card-header"><div><h3>Kamar & Hunian</h3><p>Kapasitas dan pembina asrama</p></div>{role==="Admin"&&<button className="primary-button" onClick={()=>edit("rooms")}>+ Kamar</button>}</header><div className="room-grid">{data.rooms.map(x=><div className="room-card" key={String(x.id)}><span>◇</span><div><strong>{x.name}</strong><small>{x.supervisor}</small><p>Kapasitas {x.capacity} santri</p></div><Status>{x.status}</Status>{role==="Admin"&&<DataActions row={x} onEdit={r=>edit("rooms",r)} onDelete={r=>remove("rooms",r)} />}</div>)}</div></article></section></>;
 }
 
-const ppdbDocumentTypes = ["Kartu Keluarga","Akta Kelahiran","Rapor Terakhir","Pas Foto","KIP / SKTM"];
+const ppdbDocumentTypes = ["Kartu Keluarga","Akta Kelahiran","Pas Foto","Slip/Bukti Pembayaran Uang Pendaftaran","Rapor Terakhir","KIP / SKTM"];
 const ppdbStatuses = ["Pendaftaran","Verifikasi Dokumen","Perlu Perbaikan","Terverifikasi","Tes","Lulus","Tidak Lulus"];
 
 function ppdbTone(status: unknown) {
@@ -1011,6 +1011,7 @@ function PpdbDocumentsModal({ admission, documents, role, onClose, onUpdated, no
   const [uploading,setUploading]=useState("");
   const [error,setError]=useState("");
   const relevant=documents.filter(x=>Number(x.admission_id)===Number(admission.id));
+  const requirementVersion=Number(admission.registration_requirement_version||1);
   async function upload(docType:string,file:File) {
     setUploading(docType); setError("");
     try {
@@ -1038,7 +1039,7 @@ function PpdbDocumentsModal({ admission, documents, role, onClose, onUpdated, no
     await onUpdated(); notify(result.message||"Dokumen dihapus.");
   }
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="record-modal ppdb-documents-modal" onMouseDown={e=>e.stopPropagation()}>
-    <button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">BERKAS SPMB</span><h2>{admission.name}</h2><p>{admission.registration_no} · PDF/JPG/PNG, maksimal 5 MB per berkas.</p>
+    <button type="button" className="modal-close" onClick={onClose}>×</button><span className="modal-eyebrow">BERKAS SPMB</span><h2>{admission.name}</h2><p>{admission.registration_no} · Persyaratan: Versi {requirementVersion} · PDF/JPG/PNG, maksimal 5 MB per berkas.</p>{requirementVersion<2&&<small className="cell-note">Slip pembayaran tidak diwajibkan pada saat pendaftaran lama.</small>}
     <div className="document-checklist">{ppdbDocumentTypes.map(docType=>{
       const entries=relevant.filter(x=>x.doc_type===docType);
       const latest=entries[0];

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { database, ensureUser } from "../../_lib";
 
-const documentTypes = ["Kartu Keluarga", "Akta Kelahiran", "Rapor Terakhir", "Pas Foto", "KIP / SKTM"] as const;
+const documentTypes = ["Kartu Keluarga", "Akta Kelahiran", "Pas Foto", "Slip/Bukti Pembayaran Uang Pendaftaran", "Rapor Terakhir", "KIP / SKTM"] as const;
 const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 const maxSize = 5 * 1024 * 1024;
 

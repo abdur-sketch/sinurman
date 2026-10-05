@@ -70,8 +70,8 @@ export async function POST(request: Request) {
     const registrationNo = registrationNumber();
     const result = await database().prepare(
       `INSERT INTO admissions
-       (registration_no,name,applicant_email,nisn,birth_place,birth_date,gender,desired_level,guardian_name,guardian_phone,previous_school,address,status,score,verification_note,verified_by,verified_at,idempotency_key,created_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       (registration_no,name,applicant_email,nisn,birth_place,birth_date,gender,desired_level,guardian_name,guardian_phone,previous_school,address,status,score,verification_note,verified_by,verified_at,idempotency_key,registration_requirement_version,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).bind(
       registrationNo,
       text(body.name),
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       0,
       "",
       "",
-      "", key || `legacy-${crypto.randomUUID()}`,
+      "", key || `legacy-${crypto.randomUUID()}`, 2,
       now,
     ).run();
     const id = Number(result.meta.last_row_id);

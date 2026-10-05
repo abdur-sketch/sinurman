@@ -2,8 +2,9 @@
 
 import { useRef, useState } from "react";
 import BrandMark from "../brand-mark";
+import { CURRENT_OPTIONAL_DOCUMENTS, CURRENT_REQUIRED_DOCUMENTS } from "../../lib/ppdb-requirements";
 
-const documentTypes = ["Kartu Keluarga","Akta Kelahiran","Rapor Terakhir","Pas Foto","KIP / SKTM"];
+const documentTypes = [...CURRENT_REQUIRED_DOCUMENTS, ...CURRENT_OPTIONAL_DOCUMENTS];
 type Result = { id:number; registrationNo:string; trackingToken:string; message:string };
 type StatusResult = { admission:Record<string,unknown>; documents:Record<string,unknown>[] };
 
@@ -38,6 +39,9 @@ export default function PublicPpdbPage() {
         const uploadResult=await upload.json() as {error?:string};
         if(!upload.ok) throw new Error(uploadResult.error||`${docType} gagal diunggah.`);
       }
+      const finalized=await fetch("/api/ppdb/finalize",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id:result.id,trackingToken:result.trackingToken})});
+      const finalizeResult=await finalized.json() as {error?:string};
+      if(!finalized.ok) throw new Error(finalizeResult.error||"Dokumen wajib belum lengkap.");
       setCreated(result); setTracking({registrationNo:result.registrationNo,token:result.trackingToken});
     } catch(e) { setError(e instanceof Error?e.message:"Pendaftaran gagal."); }
     finally { submitLock.current=false; setSaving(false); }
