@@ -56,6 +56,9 @@ export async function POST(request: Request) {
     ).bind(admissionId, docType, file.name, objectKey, file.type, file.size, now).run();
     if (["Pendaftaran", "Perlu Perbaikan"].includes(admission.status)) {
       await database().prepare("UPDATE admissions SET status='Verifikasi Dokumen' WHERE id=?").bind(admissionId).run();
+      await database().prepare(
+        "INSERT INTO admission_status_history (admission_id,from_status,to_status,score,public_note,internal_note,changed_by,created_at) SELECT id,?, 'Verifikasi Dokumen',score,public_note,internal_note,?,? FROM admissions WHERE id=?",
+      ).bind(admission.status, user.email, now, admissionId).run();
     }
     return Response.json({ ok: true, message: `${docType} berhasil diunggah.` });
   } catch (error) {
@@ -114,9 +117,13 @@ export async function PATCH(request: Request) {
       "SELECT admission_id FROM admission_documents WHERE id=?",
     ).bind(id).first<{ admission_id: number }>();
     if (status === "Ditolak" && document) {
+      const admission = await database().prepare("SELECT status,score,internal_note FROM admissions WHERE id=?").bind(document.admission_id).first<{status:string;score:number;internal_note:string}>();
       await database().prepare(
-        "UPDATE admissions SET status='Perlu Perbaikan',verification_note=? WHERE id=?",
-      ).bind(note, document.admission_id).run();
+        "UPDATE admissions SET status='Perlu Perbaikan',verification_note=?,public_note=? WHERE id=?",
+      ).bind(note, note, document.admission_id).run();
+      await database().prepare(
+        "INSERT INTO admission_status_history (admission_id,from_status,to_status,score,public_note,internal_note,changed_by,created_at) VALUES (?,?,?,?,?,?,?,?)",
+      ).bind(document.admission_id, admission?.status ?? "", "Perlu Perbaikan", admission?.score ?? 0, note, admission?.internal_note ?? "", user.email, now).run();
     }
     return Response.json({ ok: true, message: "Status dokumen berhasil diperbarui." });
   } catch (error) {

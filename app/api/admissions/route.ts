@@ -122,7 +122,10 @@ export async function PATCH(request: Request) {
     const body = await request.json() as Record<string, unknown>;
     const id = Number(body.id);
     const status = text(body.status);
-    const note = text(body.verification_note);
+    // Legacy verification_note is retained as the public-facing note.
+    const publicNote = text(body.public_note ?? body.verification_note);
+    const internalNote = text(body.internal_note);
+    const publishResult = body.publish_result === true;
     const score = Math.max(0, Math.min(100, Number(body.score ?? 0)));
     const wave = text(body.wave) || "Gelombang 1";
     const testDate = text(body.test_date);
@@ -132,21 +135,27 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "Data atau status verifikasi tidak valid." }, { status: 400 });
     }
     const admission = await database().prepare(
-      "SELECT name,registration_no,guardian_phone FROM admissions WHERE id=?",
-    ).bind(id).first<{ name: string; registration_no: string; guardian_phone: string }>();
+      "SELECT name,registration_no,guardian_phone,status,score FROM admissions WHERE id=?",
+    ).bind(id).first<{ name: string; registration_no: string; guardian_phone: string; status: string; score: number }>();
     if (!admission) return Response.json({ error: "Pendaftaran tidak ditemukan." }, { status: 404 });
 
     const now = new Date().toISOString();
+    const resultPublishedAt = publishResult && ["Lulus", "Tidak Lulus"].includes(status) ? now : "";
     await database().prepare(
-      "UPDATE admissions SET status=?,score=?,verification_note=?,wave=?,test_date=?,test_time=?,test_location=?,verified_by=?,verified_at=? WHERE id=?",
-    ).bind(status, score, note, wave, testDate, testTime, testLocation, user.email, now, id).run();
+      "UPDATE admissions SET status=?,score=?,verification_note=?,public_note=?,internal_note=?,result_published_at=CASE WHEN ?<>'' THEN ? ELSE result_published_at END,wave=?,test_date=?,test_time=?,test_location=?,verified_by=?,verified_at=? WHERE id=?",
+    ).bind(status, score, publicNote, publicNote, internalNote, resultPublishedAt, resultPublishedAt, wave, testDate, testTime, testLocation, user.email, now, id).run();
+    if (admission.status !== status || Number(admission.score) !== score || publicNote || internalNote) {
+      await database().prepare(
+        "INSERT INTO admission_status_history (admission_id,from_status,to_status,score,public_note,internal_note,changed_by,created_at) VALUES (?,?,?,?,?,?,?,?)",
+      ).bind(id, admission.status, status, score, publicNote, internalNote, user.email, now).run();
+    }
     await database().prepare(
       "INSERT INTO audit_logs (user_email,action,resource,record_id,detail,created_at) VALUES (?,?,?,?,?,?)",
     ).bind(user.email, "Verifikasi", "admissions", id, `${admission.registration_no} menjadi ${status}`, now).run();
     if (admission.guardian_phone) {
       await sendWhatsappNotification({
         recipient: admission.guardian_phone,
-        message: `SINURMAN PPDB: Status ${admission.name} (${admission.registration_no}) kini ${status}.${note ? ` Catatan: ${note}` : ""}`,
+        message: `SINURMAN PPDB: Status ${admission.name} (${admission.registration_no}) kini ${status}.${publicNote ? ` Catatan: ${publicNote}` : ""}`,
       });
     }
     return Response.json({ ok: true, message: "Status pendaftaran berhasil diperbarui." });

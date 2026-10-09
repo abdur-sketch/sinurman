@@ -103,10 +103,17 @@ export async function GET(request: Request) {
     const token = clean(url.searchParams.get("token"), 80);
     if (!registrationNo || !token) return Response.json({ error: "Nomor pendaftaran dan kode pelacakan wajib diisi." }, { status: 400 });
     const admission = await database().prepare(
-      `SELECT id,registration_no,name,desired_level,previous_school,status,score,verification_note,registration_requirement_version,wave,test_date,test_time,test_location,created_at
+      `SELECT id,registration_no,name,desired_level,previous_school,status,score,verification_note,public_note,result_published_at,registration_requirement_version,wave,test_date,test_time,test_location,created_at
        FROM admissions WHERE registration_no=? AND tracking_token=?`,
     ).bind(registrationNo, token).first<Record<string, unknown>>();
     if (!admission) return Response.json({ error: "Pendaftaran tidak ditemukan. Periksa kembali nomor dan kode pelacakan." }, { status: 404 });
+    const rawStatus = String(admission.status ?? "");
+    const published = Boolean(admission.result_published_at) && ["Lulus", "Tidak Lulus"].includes(rawStatus);
+    admission.status = !published && ["Lulus", "Tidak Lulus"].includes(rawStatus) ? "Menunggu Pengumuman" : rawStatus;
+    admission.score = published ? admission.score : null;
+    admission.verification_note = admission.public_note || admission.verification_note || "";
+    delete admission.public_note;
+    delete admission.result_published_at;
     const documents = await database().prepare(
       "SELECT id,doc_type,file_name,status,verification_note,uploaded_at FROM admission_documents WHERE admission_id=? ORDER BY id DESC",
     ).bind(admission.id).all();
