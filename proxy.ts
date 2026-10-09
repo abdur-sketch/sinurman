@@ -8,6 +8,8 @@ const publicApiRoutes = new Set([
   "/api/payments/webhook",
   "/api/ppdb",
   "/api/ppdb/documents",
+  "/api/spmb/track/start",
+  "/api/spmb/track/verify",
   "/api/wali-auth",
   "/api/wali-google-auth",
   "/api/wali-register",
