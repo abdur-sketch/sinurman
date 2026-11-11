@@ -78,13 +78,25 @@ export async function GET(request: Request) {
     }
     if (params.get("stats") === "1" || params.get("format") === "stats-csv") {
       const unit = params.get("unit") || "";
+      const wave = text(params.get("wave"), 80);
+      const status = text(params.get("status"), 30);
+      const year = text(params.get("year"), 10);
+      const from = text(params.get("from"), 30);
+      const to = text(params.get("to"), 30);
       const allowedUnits = new Set(["", "SMP IT", "SMK"]);
       if (!allowedUnits.has(unit)) return Response.json({ error: "Filter unit tidak valid." }, { status: 400 });
-      const where = unit ? "WHERE p.desired_level=?" : "";
-      const query = `SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN a.status='Ditugaskan' THEN 1 ELSE 0 END),0) assigned, COALESCE(SUM(CASE WHEN a.status='Dikerjakan' THEN 1 ELSE 0 END),0) in_progress, COALESCE(SUM(CASE WHEN a.submitted_at<>'' THEN 1 ELSE 0 END),0) completed, COALESCE(SUM(CASE WHEN a.submitted_at<>'' AND a.published=0 THEN 1 ELSE 0 END),0) pending, COALESCE(SUM(CASE WHEN a.result_status='Lulus' THEN 1 ELSE 0 END),0) passed, COALESCE(SUM(CASE WHEN a.result_status='Tidak Lulus' THEN 1 ELSE 0 END),0) failed, AVG(CASE WHEN a.published=1 THEN a.score END) average_score, MAX(CASE WHEN a.published=1 THEN a.score END) highest_score, MIN(CASE WHEN a.published=1 THEN a.score END) lowest_score FROM spmb_test_assignments a JOIN admissions p ON p.id=a.admission_id ${where}`;
-      const stats = await database().prepare(query).bind(...(unit ? [unit] : [])).first<Record<string, unknown>>();
+      const filters: string[] = [], bindings: string[] = [];
+      if (unit) { filters.push("p.desired_level=?"); bindings.push(unit); }
+      if (wave) { filters.push("p.wave=?"); bindings.push(wave); }
+      if (status) { filters.push("a.status=?"); bindings.push(status); }
+      if (year) { filters.push("substr(p.created_at,1,4)=?"); bindings.push(year); }
+      if (from) { filters.push("p.created_at>=?"); bindings.push(from); }
+      if (to) { filters.push("p.created_at<=?"); bindings.push(to); }
+      const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+      const query = `SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN a.status='Ditugaskan' THEN 1 ELSE 0 END),0) assigned, COALESCE(SUM(CASE WHEN a.status='Dikerjakan' THEN 1 ELSE 0 END),0) in_progress, COALESCE(SUM(CASE WHEN a.submitted_at<>'' THEN 1 ELSE 0 END),0) completed, COALESCE(SUM(CASE WHEN a.submitted_at<>'' AND a.published=0 THEN 1 ELSE 0 END),0) pending, COALESCE(SUM(CASE WHEN a.result_status='Lulus' THEN 1 ELSE 0 END),0) passed, COALESCE(SUM(CASE WHEN a.result_status='Tidak Lulus' THEN 1 ELSE 0 END),0) failed, AVG(CASE WHEN a.published=1 THEN a.score END) average_score, MAX(CASE WHEN a.published=1 THEN a.score END) highest_score, MIN(CASE WHEN a.published=1 THEN a.score END) lowest_score, ROUND(100.0*SUM(CASE WHEN a.published=1 AND a.result_status='Lulus' THEN 1 ELSE 0 END)/NULLIF(SUM(CASE WHEN a.published=1 THEN 1 ELSE 0 END),0),2) pass_rate FROM spmb_test_assignments a JOIN admissions p ON p.id=a.admission_id ${where}`;
+      const stats = await database().prepare(query).bind(...bindings).first<Record<string, unknown>>();
       if (params.get("format") === "stats-csv") {
-        const headers = ["unit","total","assigned","in_progress","completed","pending","passed","failed","average_score","highest_score","lowest_score"];
+        const headers = ["unit","total","assigned","in_progress","completed","pending","passed","failed","average_score","highest_score","lowest_score","pass_rate"];
         const values = [unit || "Semua", ...headers.slice(1).map((key) => stats?.[key] ?? "")];
         const csv = [headers, values].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
         return new Response(csv, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": "attachment; filename=spmb-statistik-tes.csv" } });
@@ -232,12 +244,16 @@ export async function PATCH(request: Request) {
     if (!assignment) return Response.json({ error: "Penugasan tes tidak ditemukan." }, { status: 404 });
     const timestamp = now();
     if (action === "publish") {
-      const state = await database().prepare("SELECT submitted_at,published FROM spmb_test_assignments WHERE id=?").bind(assignmentId).first<{submitted_at:string;published:number}>();
-      if (!state?.submitted_at || state.published) return Response.json({ error: "Hanya hasil tes selesai yang belum disahkan dapat dipublikasikan." }, { status: 409 });
       const resultStatus = Number(assignment.score) >= Number(assignment.passing_score) ? "Lulus" : "Tidak Lulus";
-      await database().prepare("UPDATE spmb_test_assignments SET published=1,status='Dinilai',result_status=?,updated_at=? WHERE id=?").bind(resultStatus, timestamp, assignmentId).run();
-      await database().prepare("UPDATE admissions SET score=?,public_note='Hasil tes tersedia di portal pelacakan.',verified_by=?,verified_at=? WHERE id=?").bind(assignment.score, user.email, timestamp, assignment.admission_id).run();
-      await database().prepare("INSERT INTO audit_logs (user_email,action,resource,record_id,detail,created_at) VALUES (?,?,?,?,?,?)").bind(user.email, "Publikasi Tes SPMB", "admissions", assignment.admission_id, `Nilai tes dipublikasikan melalui penugasan ${assignmentId}`, timestamp).run();
+      // The conditional first statement is the compare-and-set gate. D1 batches are
+      // atomic, so only the request that changes published 0 -> 1 may write the
+      // admission result and audit row; concurrent requests become no-ops.
+      const publication = await database().batch([
+        database().prepare("UPDATE spmb_test_assignments SET published=1,status='Dinilai',result_status=?,updated_at=? WHERE id=? AND submitted_at<>'' AND published=0").bind(resultStatus, timestamp, assignmentId),
+        database().prepare("UPDATE admissions SET score=?,public_note='Hasil tes tersedia di portal pelacakan.',verified_by=?,verified_at=? WHERE id=? AND EXISTS (SELECT 1 FROM spmb_test_assignments WHERE id=? AND published=1 AND updated_at=? AND admission_id=?)").bind(assignment.score, user.email, timestamp, assignment.admission_id, assignmentId, timestamp, assignment.admission_id),
+        database().prepare("INSERT INTO audit_logs (user_email,action,resource,record_id,detail,created_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM spmb_test_assignments WHERE id=? AND published=1 AND updated_at=? AND admission_id=?)").bind(user.email, "Publikasi Tes SPMB", "admissions", assignment.admission_id, `Nilai tes dipublikasikan melalui penugasan ${assignmentId}`, timestamp, assignmentId, timestamp, assignment.admission_id),
+      ]);
+      if (!publication[0]?.meta.changes) return Response.json({ error: "Hasil tes sudah disahkan atau belum disubmit." }, { status: 409 });
     } else {
       const state = await database().prepare("SELECT started_at,submitted_at,published FROM spmb_test_assignments WHERE id=?").bind(assignmentId).first<{started_at:string;submitted_at:string;published:number}>();
       if (action === "reopen" && (state?.started_at || state?.submitted_at || state?.published)) return Response.json({ error: "Tes yang sudah dibuka tidak dapat diulang tanpa prosedur reset terpisah." }, { status: 409 });

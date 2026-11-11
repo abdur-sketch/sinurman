@@ -35,7 +35,9 @@ test("SPMB test APIs enforce admin and OTP portal boundaries", async () => {
 
 test("SPMB result publication is explicit and audited", async () => {
   const source = await read("app/api/admissions/test/route.ts");
-  assert.match(source, /state\?\.submitted_at/);
+  assert.match(source, /submitted_at<>'' AND published=0/);
+  assert.match(source, /publication\[0\]\?\.meta\.changes/);
+  assert.match(source, /database\(\)\.batch\(\[/);
   assert.match(source, /published=1/);
   assert.match(source, /Publikasi Tes SPMB/);
   assert.match(source, /result_status/);
