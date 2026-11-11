@@ -76,8 +76,19 @@ export async function GET(request: Request) {
       const submitted = detail.submitted_at ? Date.parse(String(detail.submitted_at)) : 0;
       return Response.json({ assignment: detail, answers: rows, summary: { correct: rows.filter((row) => row.status === "Benar").length, incorrect: rows.filter((row) => row.status === "Salah").length, unanswered: rows.filter((row) => row.status === "Tidak dijawab").length, duration_seconds: started && submitted ? Math.max(0, Math.round((submitted - started) / 1000)) : 0 } });
     }
-    if (params.get("stats") === "1") {
-      const stats = await database().prepare(`SELECT COUNT(*) total, SUM(CASE WHEN status='Ditugaskan' THEN 1 ELSE 0 END) assigned, SUM(CASE WHEN status='Dikerjakan' THEN 1 ELSE 0 END) in_progress, SUM(CASE WHEN submitted_at<>'' THEN 1 ELSE 0 END) completed, SUM(CASE WHEN submitted_at<>'' AND published=0 THEN 1 ELSE 0 END) pending, SUM(CASE WHEN result_status='Lulus' THEN 1 ELSE 0 END) passed, SUM(CASE WHEN result_status='Tidak Lulus' THEN 1 ELSE 0 END) failed, AVG(CASE WHEN published=1 THEN score END) average_score, MAX(CASE WHEN published=1 THEN score END) highest_score, MIN(CASE WHEN published=1 THEN score END) lowest_score FROM spmb_test_assignments`).first();
+    if (params.get("stats") === "1" || params.get("format") === "stats-csv") {
+      const unit = params.get("unit") || "";
+      const allowedUnits = new Set(["", "SMP IT", "SMK"]);
+      if (!allowedUnits.has(unit)) return Response.json({ error: "Filter unit tidak valid." }, { status: 400 });
+      const where = unit ? "WHERE p.desired_level=?" : "";
+      const query = `SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN a.status='Ditugaskan' THEN 1 ELSE 0 END),0) assigned, COALESCE(SUM(CASE WHEN a.status='Dikerjakan' THEN 1 ELSE 0 END),0) in_progress, COALESCE(SUM(CASE WHEN a.submitted_at<>'' THEN 1 ELSE 0 END),0) completed, COALESCE(SUM(CASE WHEN a.submitted_at<>'' AND a.published=0 THEN 1 ELSE 0 END),0) pending, COALESCE(SUM(CASE WHEN a.result_status='Lulus' THEN 1 ELSE 0 END),0) passed, COALESCE(SUM(CASE WHEN a.result_status='Tidak Lulus' THEN 1 ELSE 0 END),0) failed, AVG(CASE WHEN a.published=1 THEN a.score END) average_score, MAX(CASE WHEN a.published=1 THEN a.score END) highest_score, MIN(CASE WHEN a.published=1 THEN a.score END) lowest_score FROM spmb_test_assignments a JOIN admissions p ON p.id=a.admission_id ${where}`;
+      const stats = await database().prepare(query).bind(...(unit ? [unit] : [])).first<Record<string, unknown>>();
+      if (params.get("format") === "stats-csv") {
+        const headers = ["unit","total","assigned","in_progress","completed","pending","passed","failed","average_score","highest_score","lowest_score"];
+        const values = [unit || "Semua", ...headers.slice(1).map((key) => stats?.[key] ?? "")];
+        const csv = [headers, values].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+        return new Response(csv, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": "attachment; filename=spmb-statistik-tes.csv" } });
+      }
       return Response.json({ stats });
     }
     if (params.get("format") === "csv" || params.get("format") === "template") {
