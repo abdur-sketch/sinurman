@@ -5,6 +5,31 @@ const now = () => new Date().toISOString();
 const categories = new Set(["Akademik", "Keagamaan", "Pengetahuan Umum", "Umum"]);
 const difficulties = new Set(["Mudah", "Sedang", "Sulit"]);
 
+function csvCell(value: unknown) {
+  const textValue = String(value ?? "");
+  return /[",\n\r]/.test(textValue) ? `"${textValue.replaceAll('"', '""')}"` : textValue;
+}
+
+function parseCsv(input: string) {
+  const rows: string[][] = [];
+  let row: string[] = [], cell = "", quoted = false;
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input[index];
+    if (character === '"') {
+      if (quoted && input[index + 1] === '"') { cell += '"'; index += 1; }
+      else quoted = !quoted;
+    } else if (character === "," && !quoted) { row.push(cell); cell = ""; }
+    else if ((character === "\n" || character === "\r") && !quoted) {
+      if (character === "\r" && input[index + 1] === "\n") index += 1;
+      row.push(cell); cell = "";
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+    } else cell += character;
+  }
+  if (cell || row.length) { row.push(cell); if (row.some((value) => value.trim())) rows.push(row); }
+  return rows;
+}
+
 function parseOptions(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => text(item, 300)).filter(Boolean).slice(0, 6);
@@ -20,7 +45,8 @@ async function admin(request: Request) {
 export async function GET(request: Request) {
   try {
     await admin(request);
-    const admissionId = Number(new URL(request.url).searchParams.get("admissionId") || 0);
+    const params = new URL(request.url).searchParams;
+    const admissionId = Number(params.get("admissionId") || 0);
     const questions = await database().prepare(
       "SELECT id,prompt,options_json,correct_option,points,category,difficulty,active,archived_at,created_by,created_at,updated_at FROM spmb_test_questions ORDER BY id DESC",
     ).all();
@@ -31,6 +57,15 @@ export async function GET(request: Request) {
        ${admissionId ? "WHERE a.admission_id=?" : ""} ORDER BY a.id DESC`,
     ).bind(...(admissionId ? [admissionId] : [])).all();
     const admissions = await database().prepare("SELECT id,name,registration_no,status FROM admissions WHERE status NOT IN ('Tidak Lulus') ORDER BY id DESC").all();
+    if (params.get("format") === "csv" || params.get("format") === "template") {
+      const headers = ["id", "prompt", "option_1", "option_2", "option_3", "option_4", "option_5", "option_6", "correct_option", "points", "category", "difficulty", "active"];
+      const rows = params.get("format") === "template" ? [] : questions.results.map((row) => {
+        const options = JSON.parse(String(row.options_json || "[]")) as string[];
+        return [row.id, row.prompt, ...Array.from({ length: 6 }, (_, index) => options[index] || ""), row.correct_option, row.points, row.category, row.difficulty, row.active];
+      });
+      const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+      return new Response(csv, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename=spmb-bank-soal-${params.get("format")}.csv` } });
+    }
     return Response.json({
       questions: questions.results.map((row) => ({ ...row, options: JSON.parse(String(row.options_json || "[]")) })),
       assignments: assignments.results,
@@ -76,6 +111,36 @@ export async function POST(request: Request) {
       if (!questionId) return Response.json({ error: "Soal tidak ditemukan." }, { status: 404 });
       await database().prepare("UPDATE spmb_test_questions SET active=0,archived_at=?,updated_at=? WHERE id=?").bind(timestamp, timestamp, questionId).run();
       return Response.json({ ok: true, message: "Soal diarsipkan dan tidak akan dipakai untuk penugasan baru." });
+    }
+    if (action === "import-csv") {
+      const csv = text(body.csv, 1_000_000);
+      const rows = parseCsv(csv);
+      if (rows.length < 2) return Response.json({ error: "CSV kosong atau hanya berisi header." }, { status: 400 });
+      const headers = rows[0].map((header) => header.trim().toLowerCase());
+      const required = ["prompt", "option_1", "option_2", "correct_option", "points", "category", "difficulty"];
+      const missing = required.filter((header) => !headers.includes(header));
+      if (missing.length) return Response.json({ error: `Kolom wajib belum ada: ${missing.join(", ")}` }, { status: 400 });
+      const index = (name: string) => headers.indexOf(name);
+      const existingQuestions = await database().prepare("SELECT prompt,options_json FROM spmb_test_questions").all<{prompt:string;options_json:string}>();
+      const signatures = new Set(existingQuestions.results.map((question) => `${question.prompt.toLowerCase()}|${(JSON.parse(question.options_json || "[]") as string[]).map((option) => option.toLowerCase()).join("|")}`));
+      const errors: string[] = [], inserts: Array<[string, string, string, number, string, string]> = [];
+      rows.slice(1).forEach((values, offset) => {
+        const line = offset + 2;
+        const prompt = text(values[index("prompt")], 4000);
+        const options = Array.from({ length: 6 }, (_, optionIndex) => text(values[index(`option_${optionIndex + 1}`)], 300)).filter(Boolean);
+        const correctOption = text(values[index("correct_option")], 100);
+        const points = Number(values[index("points")] || 1);
+        const category = text(values[index("category")], 40) || "Umum";
+        const difficulty = text(values[index("difficulty")], 20) || "Sedang";
+        const signature = `${prompt.toLowerCase()}|${options.map((option) => option.toLowerCase()).join("|")}`;
+        if (prompt.length < 5 || options.length < 2 || !options.includes(correctOption) || !Number.isFinite(points) || points < 1 || points > 100 || !categories.has(category) || !difficulties.has(difficulty)) errors.push(`Baris ${line}: pertanyaan, opsi, jawaban, poin, kategori, atau kesulitan tidak valid.`);
+        else if (signatures.has(signature)) errors.push(`Baris ${line}: soal duplikat dengan bank soal atau baris lain.`);
+        else { signatures.add(signature); inserts.push([prompt, JSON.stringify(options), correctOption, Math.round(points), category, difficulty]); }
+      });
+      if (errors.length) return Response.json({ ok: false, imported: 0, errors }, { status: 400 });
+      if (inserts.length > 500) return Response.json({ error: "Maksimal 500 soal per impor." }, { status: 400 });
+      if (inserts.length) await database().batch(inserts.map(([prompt, optionsJson, correctOption, points, category, difficulty]) => database().prepare("INSERT INTO spmb_test_questions (prompt,options_json,correct_option,points,category,difficulty,active,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,1,?,?,?)").bind(prompt, optionsJson, correctOption, points, category, difficulty, user.email, timestamp, timestamp)));
+      return Response.json({ ok: true, imported: inserts.length, errors: [] });
     }
     if (action === "assign") {
       const admissionId = Number(body.admission_id);
