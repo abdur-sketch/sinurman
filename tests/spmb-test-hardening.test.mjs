@@ -40,3 +40,14 @@ test("SPMB result publication is explicit and audited", async () => {
   assert.match(source, /Publikasi Tes SPMB/);
   assert.match(source, /result_status/);
 });
+
+test("SPMB admin supports guarded CSV workflow and result inspection", async () => {
+  const source = await read("app/api/admissions/test/route.ts");
+  assert.match(source, /parseCsv/);
+  assert.match(source, /Maksimal 500 soal per impor/);
+  assert.match(source, /soal duplikat dengan bank soal/);
+  assert.match(source, /format.*template/);
+  assert.match(source, /params\.get\("detail"/);
+  assert.match(source, /params\.get\("stats"\)/);
+  assert.match(source, /correct_option/);
+});

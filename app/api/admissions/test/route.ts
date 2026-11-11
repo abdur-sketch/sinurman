@@ -6,10 +6,9 @@ const categories = new Set(["Akademik", "Keagamaan", "Pengetahuan Umum", "Umum"]
 const difficulties = new Set(["Mudah", "Sedang", "Sulit"]);
 
 function csvCell(value: unknown) {
-  const textValue = String(value ?? "");
-  // Prevent spreadsheet applications from evaluating exported cells as formulas.
-  const safe = /^[\s]*[=+@-]/.test(textValue) ? `'${textValue}` : textValue;
-  return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
+  const raw = String(value ?? "");
+  const textValue = /^[\s]*[=+@-]/.test(raw) ? `'${raw}` : raw;
+  return /[",\n\r]/.test(textValue) ? `"${textValue.replaceAll('"', '""')}"` : textValue;
 }
 
 function parseCsv(input: string) {
@@ -28,6 +27,7 @@ function parseCsv(input: string) {
       row = [];
     } else cell += character;
   }
+  if (quoted) throw new Error("CSV memiliki tanda kutip yang tidak berpasangan.");
   if (cell || row.length) { row.push(cell); if (row.some((value) => value.trim())) rows.push(row); }
   return rows;
 }
@@ -59,6 +59,27 @@ export async function GET(request: Request) {
        ${admissionId ? "WHERE a.admission_id=?" : ""} ORDER BY a.id DESC`,
     ).bind(...(admissionId ? [admissionId] : [])).all();
     const admissions = await database().prepare("SELECT id,name,registration_no,status FROM admissions WHERE status NOT IN ('Tidak Lulus') ORDER BY id DESC").all();
+    const detailId = Number(params.get("detail") || 0);
+    if (detailId) {
+      const detail = await database().prepare(`SELECT a.id,a.admission_id,a.status,a.result_status,a.test_name,a.category,a.opens_at,a.closes_at,a.duration_minutes,a.question_count,a.passing_score,a.started_at,a.submitted_at,a.score,a.total_points,a.published,p.name,p.registration_no,p.desired_level AS unit
+        FROM spmb_test_assignments a JOIN admissions p ON p.id=a.admission_id WHERE a.id=?`).bind(detailId).first<Record<string, unknown>>();
+      if (!detail) return Response.json({ error: "Penugasan tes tidak ditemukan." }, { status: 404 });
+      const answers = await database().prepare(`SELECT aq.question_id,aq.snapshot_json,ans.answer,ans.is_correct,ans.points_awarded,ans.answered_at
+        FROM spmb_test_assignment_questions aq LEFT JOIN spmb_test_answers ans ON ans.assignment_id=aq.assignment_id AND ans.question_id=aq.question_id WHERE aq.assignment_id=? ORDER BY aq.question_id ASC`).bind(detailId).all();
+      const rows = answers.results.map((row) => {
+        const snapshot = row.snapshot_json ? JSON.parse(String(row.snapshot_json)) as Record<string, unknown> : {};
+        const answer = row.answer == null ? "" : String(row.answer);
+        const correct = String(snapshot.correct_option ?? "");
+        return { question_id: row.question_id, prompt: snapshot.prompt ?? "", answer, correct_option: correct, status: !answer ? "Tidak dijawab" : Number(row.is_correct) ? "Benar" : "Salah", points: Number(snapshot.points ?? 0), points_awarded: Number(row.points_awarded ?? 0), answered_at: row.answered_at ?? "" };
+      });
+      const started = detail.started_at ? Date.parse(String(detail.started_at)) : 0;
+      const submitted = detail.submitted_at ? Date.parse(String(detail.submitted_at)) : 0;
+      return Response.json({ assignment: detail, answers: rows, summary: { correct: rows.filter((row) => row.status === "Benar").length, incorrect: rows.filter((row) => row.status === "Salah").length, unanswered: rows.filter((row) => row.status === "Tidak dijawab").length, duration_seconds: started && submitted ? Math.max(0, Math.round((submitted - started) / 1000)) : 0 } });
+    }
+    if (params.get("stats") === "1") {
+      const stats = await database().prepare(`SELECT COUNT(*) total, SUM(CASE WHEN status='Ditugaskan' THEN 1 ELSE 0 END) assigned, SUM(CASE WHEN status='Dikerjakan' THEN 1 ELSE 0 END) in_progress, SUM(CASE WHEN submitted_at<>'' THEN 1 ELSE 0 END) completed, SUM(CASE WHEN submitted_at<>'' AND published=0 THEN 1 ELSE 0 END) pending, SUM(CASE WHEN result_status='Lulus' THEN 1 ELSE 0 END) passed, SUM(CASE WHEN result_status='Tidak Lulus' THEN 1 ELSE 0 END) failed, AVG(CASE WHEN published=1 THEN score END) average_score, MAX(CASE WHEN published=1 THEN score END) highest_score, MIN(CASE WHEN published=1 THEN score END) lowest_score FROM spmb_test_assignments`).first();
+      return Response.json({ stats });
+    }
     if (params.get("format") === "csv" || params.get("format") === "template") {
       const headers = ["id", "prompt", "option_1", "option_2", "option_3", "option_4", "option_5", "option_6", "correct_option", "points", "category", "difficulty", "active"];
       const rows = params.get("format") === "template" ? [] : questions.results.map((row) => {
@@ -116,7 +137,8 @@ export async function POST(request: Request) {
     }
     if (action === "import-csv") {
       const csv = text(body.csv, 1_000_000);
-      const rows = parseCsv(csv);
+      let rows: string[][];
+      try { rows = parseCsv(csv); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Format CSV tidak valid." }, { status: 400 }); }
       if (rows.length < 2) return Response.json({ error: "CSV kosong atau hanya berisi header." }, { status: 400 });
       if (rows.length - 1 > 500) return Response.json({ error: "Maksimal 500 baris soal per impor." }, { status: 400 });
       const headers = rows[0].map((header) => header.trim().toLowerCase());
