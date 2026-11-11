@@ -7,7 +7,9 @@ const difficulties = new Set(["Mudah", "Sedang", "Sulit"]);
 
 function csvCell(value: unknown) {
   const textValue = String(value ?? "");
-  return /[",\n\r]/.test(textValue) ? `"${textValue.replaceAll('"', '""')}"` : textValue;
+  // Prevent spreadsheet applications from evaluating exported cells as formulas.
+  const safe = /^[\\s]*[=+@-]/.test(textValue) ? `'${textValue}` : textValue;
+  return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
 
 function parseCsv(input: string) {
@@ -116,6 +118,7 @@ export async function POST(request: Request) {
       const csv = text(body.csv, 1_000_000);
       const rows = parseCsv(csv);
       if (rows.length < 2) return Response.json({ error: "CSV kosong atau hanya berisi header." }, { status: 400 });
+      if (rows.length - 1 > 500) return Response.json({ error: "Maksimal 500 baris soal per impor." }, { status: 400 });
       const headers = rows[0].map((header) => header.trim().toLowerCase());
       const required = ["prompt", "option_1", "option_2", "correct_option", "points", "category", "difficulty"];
       const missing = required.filter((header) => !headers.includes(header));
