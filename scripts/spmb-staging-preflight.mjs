@@ -1,30 +1,42 @@
 #!/usr/bin/env node
-/** Read-only safety gate for staging in the SAME Firebase project. Never deploys. */
+/**
+ * Read-only staging deployment gate. No Firebase/GCP API calls or mutations.
+ * Manual confirmations MUST be backed by inspected cloud IAM/resource evidence.
+ */
 import { readFile } from "node:fs/promises";
+import { firebaseRuntimeTargets, STAGING } from "../lib/firebase/runtime-isolation.mjs";
 
 const errors = [];
-const productionProject = "sinurman-2026";
-const project = process.env.SINURMAN_STAGING_PROJECT?.trim();
-const config = JSON.parse(await readFile(new URL("../firebase.json", import.meta.url), "utf8"));
-const stagingConfig = JSON.parse(await readFile(new URL("../firebase.staging.json", import.meta.url), "utf8"));
-const productionSite = config.hosting?.site;
-const productionBackend = config.apphosting?.backendId;
-const productionService = config.hosting?.rewrites?.find((r) => r.run)?.run?.serviceId;
-const stagingSite = stagingConfig.hosting?.site;
-const stagingService = stagingConfig.hosting?.rewrites?.find((r) => r.run)?.run?.serviceId;
+const production = JSON.parse(await readFile(new URL("../firebase.json", import.meta.url), "utf8"));
+const staging = JSON.parse(await readFile(new URL("../firebase.staging.json", import.meta.url), "utf8"));
+const env = process.env;
 
-if (project !== productionProject) errors.push("Project must be the explicitly approved sinurman-2026.");
-if (!stagingSite || stagingSite === productionSite) errors.push("Staging Hosting site must differ from production.");
-if (!stagingService || stagingService === productionService) errors.push("Staging Cloud Run service must differ from production.");
-if (stagingConfig.apphosting?.backendId && stagingConfig.apphosting.backendId === productionBackend) errors.push("Staging App Hosting backend must differ from production.");
-if (process.env.SINURMAN_STAGING_DATABASE_CONFIRMED !== "isolated") errors.push("Independent database must be verified, then set SINURMAN_STAGING_DATABASE_CONFIRMED=isolated.");
-if (process.env.SINURMAN_STAGING_OTP_MODE !== "mock") errors.push("OTP must be mock in automated staging UAT.");
-if (process.env.SINURMAN_STAGING_SECRETS_CONFIRMED !== "isolated") errors.push("Independent secrets/service credentials must be verified.");
-if (process.env.SINURMAN_STAGING_SERVICE_CONFIRMED !== "isolated") errors.push("Verify staging Cloud Run service exists and is isolated.");
-if (process.env.SINURMAN_STAGING_SITE_CONFIRMED !== "isolated") errors.push("Verify staging Hosting site exists and is isolated.");
-if (stagingConfig.hosting?.rewrites?.length !== 1 || !stagingConfig.hosting.rewrites[0].run) errors.push("Staging must have exactly one reviewed Cloud Run rewrite.");
+try { firebaseRuntimeTargets(env); }
+catch (error) { errors.push(error instanceof Error ? error.message : String(error)); }
+
+const productionSite = production.hosting?.site;
+const productionService = production.hosting?.rewrites?.find(r => r.run)?.run?.serviceId;
+const productionBackend = production.apphosting?.backendId;
+const stageSite = staging.hosting?.site;
+const stageRewrites = staging.hosting?.rewrites ?? [];
+const stageService = stageRewrites[0]?.run?.serviceId;
+
+if (env.SINURMAN_RUNTIME_ENV !== "staging") errors.push("SINURMAN_RUNTIME_ENV=staging is required");
+if (!stageSite || stageSite === productionSite || stageSite !== "sinurman-2026-staging") errors.push("Dedicated staging Hosting site required");
+if (stageService !== STAGING.cloudRunService || stageService === productionService || stageRewrites.length !== 1) errors.push("Only staging Cloud Run rewrite allowed");
+if (staging.apphosting?.backendId && staging.apphosting.backendId === productionBackend) errors.push("Staging App Hosting cannot reuse production backend");
+for (const [key, requirement] of [
+  ["SINURMAN_STAGING_DATABASE_CONFIRMED", "named database IAM isolation"],
+  ["SINURMAN_STAGING_BUCKET_CONFIRMED", "dedicated bucket IAM isolation"],
+  ["SINURMAN_STAGING_SECRETS_CONFIRMED", "dedicated secrets and credentials"],
+  ["SINURMAN_STAGING_SERVICE_CONFIRMED", "dedicated Cloud Run runtime identity"],
+  ["SINURMAN_STAGING_SITE_CONFIRMED", "independent Hosting site"],
+]) if (env[key] !== "isolated") errors.push("Cloud verification missing for " + requirement + " (" + key + ")");
+if (env.SINURMAN_STAGING_OTP_MODE !== "mock") errors.push("OTP must be mock for staging UAT");
 
 for (const error of errors) console.error("BLOCKED:", error);
-console.log(errors.length ? "NO-GO: isolation preflight failed." : "PREFLIGHT PASS (self-attested): independently verify actual resources and permissions before deployment.");
+console.log(errors.length
+  ? "NO-GO: staging safety gate failed. No deployment performed."
+  : "PREFLIGHT ONLY: configuration and manual attestations pass; cloud authorization, IAM and end-to-end checks are NOT independently verified.");
 console.log("Read-only: no cloud resources accessed or modified.");
 process.exitCode = errors.length ? 1 : 0;
