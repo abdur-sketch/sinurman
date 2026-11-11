@@ -22,6 +22,7 @@ function hasSession(request: NextRequest) {
     request.cookies.get("__session")?.value ||
       request.cookies.get("sinurman_admin_session")?.value ||
       request.cookies.get("sinurman_wali_session")?.value ||
+      request.cookies.get("spmb_portal_session")?.value ||
       request.headers.get("oai-authenticated-user-email"),
   );
 }
