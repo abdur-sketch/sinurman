@@ -2,14 +2,28 @@
 
 Status: **NO-GO production** until evidence below is recorded. This document does not authorize a deployment.
 
-## Safety prerequisites
+## Safety prerequisites — same Firebase project
 
-1. Create or identify a **separate** Firebase/GCP project, Hosting site, Cloud Run service, database, secrets and IAM scope. Do not reuse `sinurman-2026` or its data.
-2. Have the authorized owner confirm the project IDs, billing impact, deployment permissions, and staging secrets **outside Git**.
-3. Verify database isolation and backup/restore procedure using synthetic admissions only. Never import real production applicants for testing.
-4. Ensure staging configuration never resolves to production Hosting site `sinurman-2026`, production Cloud Run service `sinurman`, or production database.
-5. Set `SINURMAN_STAGING_PROJECT=<approved-staging-project>`, `SINURMAN_STAGING_DATABASE_CONFIRMED=isolated`, `SINURMAN_STAGING_OTP_MODE=mock`; run `node scripts/spmb-staging-preflight.mjs`. This script is **read-only**, not proof of actual isolation.
-6. Review generated deploy plan and resource destinations with owner before any cloud deployment. No automatic production deploy or merge.
+1. Use existing Firebase project `sinurman-2026`, **without modifying its production site or Cloud Run service**.
+2. Proposed staging resources inside that project: Hosting site `sinurman-2026-staging`, Cloud Run service `sinurman-staging` in `asia-southeast1`. These are **names in a configuration file**, not proof of resource creation.
+3. Staging needs its **own database**, application secrets, runtime identity, data access rules, and mock OTP. Sharing a Firebase project means project-wide IAM, billing, quotas and some services remain shared; this is weaker isolation than a separate project.
+4. Review all Firebase Auth, Firestore, Storage and backend access: if production and staging use the same default Auth/Firestore resources, do not run destructive or state-changing UAT. A second Hosting site does not isolate them.
+5. Confirm a backup/rollback plan and use synthetic applicant data only.
+6. The default `firebase.json` targets production. **Never deploy staging with that default file.** Use only the reviewed `firebase.staging.json` after all safety gates.
+7. Read-only preflight (manual confirmations must be based on verified resource configuration):
+
+```bash
+SINURMAN_STAGING_PROJECT=sinurman-2026 \
+SINURMAN_STAGING_DATABASE_CONFIRMED=isolated \
+SINURMAN_STAGING_SECRETS_CONFIRMED=isolated \
+SINURMAN_STAGING_SERVICE_CONFIRMED=isolated \
+SINURMAN_STAGING_SITE_CONFIRMED=isolated \
+SINURMAN_STAGING_OTP_MODE=mock \
+node scripts/spmb-staging-preflight.mjs
+```
+
+8. Only after verified separation, approved costs, authorized credentials, and successful build should an operator review the explicit target command: `firebase deploy --project sinurman-2026 --config firebase.staging.json --only hosting`. **This command is documentation, not authorization to execute it.** It assumes staging Cloud Run service is independently provisioned and configured; Hosting deploy alone does not deploy the backend.
+9. Project-level security boundaries cannot be guaranteed by this preflight script. If separate backend/database/Auth/storage cannot be established, stop and use a separate Firebase project instead.
 
 ## UAT evidence matrix
 
@@ -44,13 +58,6 @@ Record **date, build SHA, tester, browser/OS, staging URL, test-case ID, PASS/FA
 - Production **GO** requires zero critical defects, verified isolated staging, completed required UAT, security review, successful migration/rollback rehearsal, and explicit owner approval.
 - If staging credentials or devices are unavailable, keep PR **DRAFT** and production **NO-GO**.
 
-## Approved target and provisioning gate (2026-11-11)
+## Decision update (2026-11-11)
 
-- User-approved proposed staging project ID: `sinurman-staging-2026`.
-- The repository file `firebase.staging.rc.json` is a **reference manifest only**, not an automatically loaded Firebase CLI configuration. Do not treat it as proof the cloud project exists.
-- **Never run** `firebase deploy` using the repository's default `firebase.json`: it explicitly targets production Hosting site `sinurman-2026`, App Hosting backend `sinurman`, and Cloud Run service `sinurman`.
-- Before provisioning, verify project ID availability, Firebase account authorization, required billing plan, region, service quotas, and independent data store. Record the owner-approved resource inventory and cost estimate.
-- Use explicit `--project sinurman-staging-2026` plus a separately reviewed staging Firebase configuration with **unique staging service/site IDs**. Merely passing `--project` is insufficient to prevent cross-project or production-named resource mistakes.
-- Keep service account credentials and application secrets in authorized secret storage, never in Git.
-- Only deploy after an independent reviewer confirms target project, database bindings, OTP mock behavior, Hosting/App Hosting/Cloud Run IDs, and rollback plan.
-- If Firebase connection or billing authorization is unavailable, mark provisioning **BLOCKED**, not completed.
+The owner requested **same-project staging** in `sinurman-2026`. The prior proposed separate project `sinurman-staging-2026` and `firebase.staging.rc.json` are obsolete references and must **not** be used for staging deployment. Use `firebase.staging.json` only after verifying independent resources and explicit target. Staging remains **NOT DEPLOYED**, mobile/WhatsApp UAT **NOT VERIFIED**, and production **NO-GO**.
