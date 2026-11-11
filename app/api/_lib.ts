@@ -77,9 +77,9 @@ export function ensureDatabaseSchema() {
       "CREATE TABLE IF NOT EXISTS admissions (id INTEGER PRIMARY KEY AUTOINCREMENT,registration_no TEXT NOT NULL UNIQUE,name TEXT NOT NULL,applicant_email TEXT NOT NULL DEFAULT '',nisn TEXT NOT NULL DEFAULT '',birth_place TEXT NOT NULL DEFAULT '',birth_date TEXT NOT NULL DEFAULT '',gender TEXT NOT NULL DEFAULT '',desired_level TEXT NOT NULL DEFAULT 'SMP',guardian_name TEXT NOT NULL,guardian_phone TEXT NOT NULL,previous_school TEXT NOT NULL,address TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,score INTEGER NOT NULL DEFAULT 0,verification_note TEXT NOT NULL DEFAULT '',public_note TEXT NOT NULL DEFAULT '',internal_note TEXT NOT NULL DEFAULT '',result_published_at TEXT NOT NULL DEFAULT '',verified_by TEXT NOT NULL DEFAULT '',verified_at TEXT NOT NULL DEFAULT '',tracking_token TEXT NOT NULL DEFAULT '',idempotency_key TEXT NOT NULL DEFAULT '',registration_requirement_version INTEGER NOT NULL DEFAULT 1,wave TEXT NOT NULL DEFAULT 'Gelombang 1',test_date TEXT NOT NULL DEFAULT '',test_time TEXT NOT NULL DEFAULT '',test_location TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS admission_status_history (id INTEGER PRIMARY KEY AUTOINCREMENT,admission_id INTEGER NOT NULL,from_status TEXT NOT NULL DEFAULT '',to_status TEXT NOT NULL,score INTEGER NOT NULL DEFAULT 0,public_note TEXT NOT NULL DEFAULT '',internal_note TEXT NOT NULL DEFAULT '',changed_by TEXT NOT NULL,created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS admission_status_history_admission_idx ON admission_status_history(admission_id,created_at)",
-      "CREATE TABLE IF NOT EXISTS spmb_test_questions (id INTEGER PRIMARY KEY AUTOINCREMENT,prompt TEXT NOT NULL,options_json TEXT NOT NULL,correct_option TEXT NOT NULL,points INTEGER NOT NULL DEFAULT 1,active INTEGER NOT NULL DEFAULT 1,created_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS spmb_test_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT,admission_id INTEGER NOT NULL UNIQUE,status TEXT NOT NULL DEFAULT 'Ditugaskan',opens_at TEXT NOT NULL DEFAULT '',closes_at TEXT NOT NULL DEFAULT '',started_at TEXT NOT NULL DEFAULT '',submitted_at TEXT NOT NULL DEFAULT '',score INTEGER NOT NULL DEFAULT 0,total_points INTEGER NOT NULL DEFAULT 0,published INTEGER NOT NULL DEFAULT 0,created_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS spmb_test_assignment_questions (assignment_id INTEGER NOT NULL,question_id INTEGER NOT NULL,PRIMARY KEY(assignment_id,question_id))",
+      "CREATE TABLE IF NOT EXISTS spmb_test_questions (id INTEGER PRIMARY KEY AUTOINCREMENT,prompt TEXT NOT NULL,options_json TEXT NOT NULL,correct_option TEXT NOT NULL,points INTEGER NOT NULL DEFAULT 1,category TEXT NOT NULL DEFAULT 'Umum',difficulty TEXT NOT NULL DEFAULT 'Sedang',active INTEGER NOT NULL DEFAULT 1,archived_at TEXT NOT NULL DEFAULT '',created_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS spmb_test_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT,admission_id INTEGER NOT NULL UNIQUE,test_name TEXT NOT NULL DEFAULT 'Tes SPMB',category TEXT NOT NULL DEFAULT 'Umum',status TEXT NOT NULL DEFAULT 'Ditugaskan',result_status TEXT NOT NULL DEFAULT 'Menunggu Pengesahan',opens_at TEXT NOT NULL DEFAULT '',closes_at TEXT NOT NULL DEFAULT '',duration_minutes INTEGER NOT NULL DEFAULT 0,question_count INTEGER NOT NULL DEFAULT 0,shuffle_questions INTEGER NOT NULL DEFAULT 0,shuffle_options INTEGER NOT NULL DEFAULT 0,instructions TEXT NOT NULL DEFAULT '',passing_score INTEGER NOT NULL DEFAULT 75,started_at TEXT NOT NULL DEFAULT '',submitted_at TEXT NOT NULL DEFAULT '',score INTEGER NOT NULL DEFAULT 0,total_points INTEGER NOT NULL DEFAULT 0,published INTEGER NOT NULL DEFAULT 0,created_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS spmb_test_assignment_questions (assignment_id INTEGER NOT NULL,question_id INTEGER NOT NULL,snapshot_json TEXT NOT NULL DEFAULT '',PRIMARY KEY(assignment_id,question_id))",
       "CREATE TABLE IF NOT EXISTS spmb_test_answers (assignment_id INTEGER NOT NULL,question_id INTEGER NOT NULL,answer TEXT NOT NULL DEFAULT '',is_correct INTEGER NOT NULL DEFAULT 0,points_awarded INTEGER NOT NULL DEFAULT 0,answered_at TEXT NOT NULL,PRIMARY KEY(assignment_id,question_id))",
       "CREATE INDEX IF NOT EXISTS spmb_test_assignment_admission_idx ON spmb_test_assignments(admission_id)",
       "CREATE TABLE IF NOT EXISTS admission_documents (id INTEGER PRIMARY KEY AUTOINCREMENT,admission_id INTEGER NOT NULL,doc_type TEXT NOT NULL,file_name TEXT NOT NULL,object_key TEXT NOT NULL UNIQUE,content_type TEXT NOT NULL,size_bytes INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'Menunggu',verification_note TEXT NOT NULL DEFAULT '',verified_by TEXT NOT NULL DEFAULT '',verified_at TEXT NOT NULL DEFAULT '',uploaded_at TEXT NOT NULL)",
@@ -194,6 +194,25 @@ export function ensureDatabaseSchema() {
         entry_year: "TEXT NOT NULL DEFAULT ''",
         photo_url: "TEXT NOT NULL DEFAULT ''",
         card_public_token: "TEXT NOT NULL DEFAULT ''",
+      },
+      spmb_test_questions: {
+        category: "TEXT NOT NULL DEFAULT 'Umum'",
+        difficulty: "TEXT NOT NULL DEFAULT 'Sedang'",
+        archived_at: "TEXT NOT NULL DEFAULT ''",
+      },
+      spmb_test_assignments: {
+        test_name: "TEXT NOT NULL DEFAULT 'Tes SPMB'",
+        category: "TEXT NOT NULL DEFAULT 'Umum'",
+        duration_minutes: "INTEGER NOT NULL DEFAULT 0",
+        question_count: "INTEGER NOT NULL DEFAULT 0",
+        shuffle_questions: "INTEGER NOT NULL DEFAULT 0",
+        shuffle_options: "INTEGER NOT NULL DEFAULT 0",
+        instructions: "TEXT NOT NULL DEFAULT ''",
+        passing_score: "INTEGER NOT NULL DEFAULT 75",
+        result_status: "TEXT NOT NULL DEFAULT 'Menunggu Pengesahan'",
+      },
+      spmb_test_assignment_questions: {
+        snapshot_json: "TEXT NOT NULL DEFAULT ''",
       },
     };
     for (const [table, columns] of Object.entries(upgrades)) {
