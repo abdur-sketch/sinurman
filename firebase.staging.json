@@ -1,0 +1,13 @@
+{
+  "hosting": {
+    "site": "sinurman-2026-staging",
+    "public": ".firebase-hosting-staging",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": { "serviceId": "sinurman-staging", "region": "asia-southeast1" }
+      }
+    ]
+  }
+}
