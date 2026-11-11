@@ -8,7 +8,7 @@ const difficulties = new Set(["Mudah", "Sedang", "Sulit"]);
 function csvCell(value: unknown) {
   const textValue = String(value ?? "");
   // Prevent spreadsheet applications from evaluating exported cells as formulas.
-  const safe = /^[\\s]*[=+@-]/.test(textValue) ? `'${textValue}` : textValue;
+  const safe = /^[\s]*[=+@-]/.test(textValue) ? `'${textValue}` : textValue;
   return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
 
