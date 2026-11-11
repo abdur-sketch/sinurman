@@ -58,6 +58,7 @@ firebase hosting:sites:list --project sinurman-2026
 ```bash
 FIREBASE_RUNTIME=true \
 SINURMAN_RUNTIME_ENV=staging \
+K_SERVICE=sinurman-spmb-staging \
 FIREBASE_PROJECT_ID=sinurman-2026 \
 FIREBASE_FIRESTORE_DATABASE_ID=spmb-staging \
 FIREBASE_STORAGE_BUCKET=sinurman-2026-spmb-staging \
@@ -102,3 +103,11 @@ Record date, exact build SHA, tester, browser/OS, staging URL, test ID, PASS/FAI
 ## Release decision
 
 Run TypeScript, ESLint, Firebase build, tests, and Git diff checks on the exact candidate commit. GitHub Actions workflow billing failures are BLOCKED/FAIL, never PASS. Physical device tests cannot be replaced with desktop emulation. Keep PR #1 **DRAFT** and production **NO-GO** until cloud isolation, security controls, UAT, and explicit production release approval are all verified.
+
+## Security blockers found in Work audit (2026-11-11)
+
+- **Fixed in code, pending independent verification:** Cloud Run `K_SERVICE=sinurman-spmb-staging` now refuses to enter implicit production mode if `SINURMAN_RUNTIME_ENV` is missing. The staging runtime also requires the explicit named database and bucket.
+- **Implemented in code, pending integration test:** `/api/spmb/track/start` uses a staging-only six-digit `SINURMAN_STAGING_TEST_OTP_CODE` supplied through a dedicated staging secret, accepts only synthetic `STG-` registration numbers, and never calls the WhatsApp delivery function in staging. The code must not be printed in responses or logs. Rate limiting and five-minute OTP expiry remain in force. Remove/rotate the secret after UAT; never store it in Git.
+- **Unresolved security release blocker:** The installed lockfile contains known-vulnerable runtime dependencies (`next@16.2.12`, `sharp@0.35.2` per Work audit). Update both the dependency manifest **and regenerated lockfile** using `npm install next@^16.4.1` and a patched Sharp version (`>=0.35.5`), then run `npm ci`, production dependency audit, TypeScript, ESLint, build and UAT against the resulting exact SHA. Do not hand-edit npm integrity hashes or approve deployment with a stale lockfile.
+- **Verification gap:** The preceding code changes have not yet been executed through a green GitHub Actions CI, and the OTP implementation has not yet been exercised against real isolated staging resources. Tests that inspect source strings do not prove behavior.
+- **Cost approval:** Firebase Work estimated low-load costs of US$0–3/month and recommended a US$10/month alert. These are not hard spending caps. Provisioning resource creation requires the owner's explicit cost approval.
