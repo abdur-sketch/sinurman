@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     return Response.json({
       available: isOpen(assignment as {status:string;opens_at:string;closes_at:string}) || Boolean(assignment.submitted_at),
       assignment: { id: assignment.id, status: assignment.status, opens_at: assignment.opens_at, closes_at: assignment.closes_at, submitted_at: assignment.submitted_at, score: assignment.published ? assignment.score : null, total_points: assignment.published ? assignment.total_points : null },
-      questions: questionRows.results.map((row) => ({ id: row.id, prompt: row.prompt, options: JSON.parse(String(row.options_json || "[]")), points: row.points })),
+      questions: isOpen(assignment as {status:string;opens_at:string;closes_at:string}) && !assignment.submitted_at ? questionRows.results.map((row) => ({ id: row.id, prompt: row.prompt, options: JSON.parse(String(row.options_json || "[]")), points: row.points })) : [],
       answers: answers.results,
     });
   } catch {
@@ -60,12 +60,13 @@ export async function POST(request: Request) {
     const body = await request.json() as { answers?: Array<{question_id?:unknown;answer?:unknown}> };
     const assignment = await database().prepare("SELECT id,status,opens_at,closes_at,submitted_at FROM spmb_test_assignments WHERE admission_id=?").bind(session.admission_id).first<{id:number;status:string;opens_at:string;closes_at:string;submitted_at:string}>();
     if (!assignment) return Response.json({ error: "Belum ada soal tes yang ditugaskan." }, { status: 404 });
-    if (!isOpen(assignment)) return Response.json({ error: "Tes belum dibuka, sudah ditutup, atau sudah dikirim." }, { status: 409 });
+    if (!isOpen(assignment) || assignment.submitted_at) return Response.json({ error: "Tes belum dibuka, sudah ditutup, atau sudah dikirim." }, { status: 409 });
     const submitted = Array.isArray(body.answers) ? body.answers.slice(0, 100) : [];
     const ids = submitted.map((item) => Number(item.question_id)).filter((id) => Number.isInteger(id) && id > 0);
-    if (!ids.length) return Response.json({ error: "Jawaban tes belum diisi." }, { status: 400 });
+    if (!ids.length || new Set(ids).size !== ids.length || ids.length !== submitted.length) return Response.json({ error: "Jawaban tes belum diisi." }, { status: 400 });
     const questions = await database().prepare(`SELECT q.id,q.correct_option,q.points FROM spmb_test_questions q JOIN spmb_test_assignment_questions aq ON aq.question_id=q.id WHERE aq.assignment_id=? AND q.id IN (${ids.map(() => "?").join(",")})`).bind(assignment.id, ...ids).all<{id:number;correct_option:string;points:number}>();
     const byId = new Map(questions.results.map((question) => [question.id, question]));
+    if (questions.results.length !== ids.length) return Response.json({ error: "Jawaban memuat soal yang tidak ditugaskan." }, { status: 400 });
     const timestamp = new Date().toISOString();
     let score = 0;
     const writes = submitted.flatMap((item) => {
@@ -76,10 +77,9 @@ export async function POST(request: Request) {
       if (correct) score += Number(question.points || 0);
       return [database().prepare("INSERT OR REPLACE INTO spmb_test_answers (assignment_id,question_id,answer,is_correct,points_awarded,answered_at) VALUES (?,?,?,?,?,?)").bind(assignment.id, question.id, answer, correct ? 1 : 0, correct ? question.points : 0, timestamp)];
     });
-    await database().batch([
-      ...writes,
-      database().prepare("UPDATE spmb_test_assignments SET status='Dinilai',submitted_at=?,score=?,updated_at=? WHERE id=?").bind(timestamp, score, timestamp, assignment.id),
-    ]);
+    const lock = await database().prepare("UPDATE spmb_test_assignments SET status='Dinilai',submitted_at=?,score=?,updated_at=? WHERE id=? AND submitted_at='' AND status IN ('Ditugaskan','Dikerjakan') AND (opens_at='' OR opens_at<=?) AND (closes_at='' OR closes_at>=?)").bind(timestamp, score, timestamp, assignment.id, timestamp, timestamp).run();
+    if (!lock.meta.changes) return Response.json({ error: "Tes sudah dikirim atau waktu pengerjaan berakhir." }, { status: 409 });
+    await database().batch(writes);
     return Response.json({ ok: true, message: "Jawaban tes berhasil dikirim. Menunggu pengesahan admin." });
   } catch {
     return Response.json({ error: "Jawaban tes gagal disimpan." }, { status: 500 });
