@@ -43,3 +43,14 @@ Record **date, build SHA, tester, browser/OS, staging URL, test-case ID, PASS/FA
 - Record all real browser and OTP tests separately. Simulated mobile viewport is not equivalent to a physical Android/iPhone test.
 - Production **GO** requires zero critical defects, verified isolated staging, completed required UAT, security review, successful migration/rollback rehearsal, and explicit owner approval.
 - If staging credentials or devices are unavailable, keep PR **DRAFT** and production **NO-GO**.
+
+## Approved target and provisioning gate (2026-11-11)
+
+- User-approved proposed staging project ID: `sinurman-staging-2026`.
+- The repository file `firebase.staging.rc.json` is a **reference manifest only**, not an automatically loaded Firebase CLI configuration. Do not treat it as proof the cloud project exists.
+- **Never run** `firebase deploy` using the repository's default `firebase.json`: it explicitly targets production Hosting site `sinurman-2026`, App Hosting backend `sinurman`, and Cloud Run service `sinurman`.
+- Before provisioning, verify project ID availability, Firebase account authorization, required billing plan, region, service quotas, and independent data store. Record the owner-approved resource inventory and cost estimate.
+- Use explicit `--project sinurman-staging-2026` plus a separately reviewed staging Firebase configuration with **unique staging service/site IDs**. Merely passing `--project` is insufficient to prevent cross-project or production-named resource mistakes.
+- Keep service account credentials and application secrets in authorized secret storage, never in Git.
+- Only deploy after an independent reviewer confirms target project, database bindings, OTP mock behavior, Hosting/App Hosting/Cloud Run IDs, and rollback plan.
+- If Firebase connection or billing authorization is unavailable, mark provisioning **BLOCKED**, not completed.
