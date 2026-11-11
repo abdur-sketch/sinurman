@@ -68,7 +68,8 @@ export async function POST(request: Request) {
       const questions = await database().prepare(`SELECT id,points FROM spmb_test_questions WHERE active=1 AND id IN (${questionIds.map(() => "?").join(",")})`).bind(...questionIds).all<{id:number;points:number}>();
       if (questions.results.length !== new Set(questionIds).size) return Response.json({ error: "Ada soal yang tidak aktif atau tidak ditemukan." }, { status: 400 });
       const totalPoints = questions.results.reduce((sum, row) => sum + Number(row.points || 0), 0);
-      const existing = await database().prepare("SELECT id FROM spmb_test_assignments WHERE admission_id=?").bind(admissionId).first<{id:number}>();
+      const existing = await database().prepare("SELECT id,started_at,submitted_at,published FROM spmb_test_assignments WHERE admission_id=?").bind(admissionId).first<{id:number;started_at:string;submitted_at:string;published:number}>();
+      if (existing && (existing.started_at || existing.submitted_at || existing.published)) return Response.json({ error: "Soal tidak dapat diubah setelah tes dibuka atau diselesaikan." }, { status: 409 });
       let assignmentId: number;
       if (existing) {
         assignmentId = existing.id;
@@ -102,10 +103,14 @@ export async function PATCH(request: Request) {
     if (!assignment) return Response.json({ error: "Penugasan tes tidak ditemukan." }, { status: 404 });
     const timestamp = now();
     if (action === "publish") {
+      const state = await database().prepare("SELECT submitted_at,published FROM spmb_test_assignments WHERE id=?").bind(assignmentId).first<{submitted_at:string;published:number}>();
+      if (!state?.submitted_at || state.published) return Response.json({ error: "Hanya hasil tes selesai yang belum disahkan dapat dipublikasikan." }, { status: 409 });
       await database().prepare("UPDATE spmb_test_assignments SET published=1,status='Dinilai',updated_at=? WHERE id=?").bind(timestamp, assignmentId).run();
       await database().prepare("UPDATE admissions SET score=?,public_note='Hasil tes tersedia di portal pelacakan.',verified_by=?,verified_at=? WHERE id=?").bind(assignment.score, user.email, timestamp, assignment.admission_id).run();
       await database().prepare("INSERT INTO audit_logs (user_email,action,resource,record_id,detail,created_at) VALUES (?,?,?,?,?,?)").bind(user.email, "Publikasi Tes SPMB", "admissions", assignment.admission_id, `Nilai tes dipublikasikan melalui penugasan ${assignmentId}`, timestamp).run();
     } else {
+      const state = await database().prepare("SELECT started_at,submitted_at,published FROM spmb_test_assignments WHERE id=?").bind(assignmentId).first<{started_at:string;submitted_at:string;published:number}>();
+      if (action === "reopen" && (state?.started_at || state?.submitted_at || state?.published)) return Response.json({ error: "Tes yang sudah dibuka tidak dapat diulang tanpa prosedur reset terpisah." }, { status: 409 });
       await database().prepare("UPDATE spmb_test_assignments SET status=?,updated_at=? WHERE id=?").bind(action === "close" ? "Ditutup" : "Ditugaskan", timestamp, assignmentId).run();
     }
     return Response.json({ ok: true, message: "Status penugasan tes diperbarui." });
