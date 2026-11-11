@@ -6,7 +6,7 @@
     "rewrites": [
       {
         "source": "**",
-        "run": { "serviceId": "sinurman-staging", "region": "asia-southeast1" }
+        "run": { "serviceId": "sinurman-spmb-staging", "region": "asia-southeast1" }
       }
     ]
   }
