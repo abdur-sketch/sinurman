@@ -1,30 +1,30 @@
 #!/usr/bin/env node
-/**
- * Read-only staging preflight. Never deploys, creates resources, or contacts production.
- * Usage: SINURMAN_STAGING_PROJECT=my-isolated-project node scripts/spmb-staging-preflight.mjs
- */
+/** Read-only safety gate for staging in the SAME Firebase project. Never deploys. */
 import { readFile } from "node:fs/promises";
 
 const errors = [];
-const warnings = [];
-const project = process.env.SINURMAN_STAGING_PROJECT?.trim() || "";
 const productionProject = "sinurman-2026";
-const productionSite = "sinurman-2026";
+const project = process.env.SINURMAN_STAGING_PROJECT?.trim();
 const config = JSON.parse(await readFile(new URL("../firebase.json", import.meta.url), "utf8"));
-const aliases = JSON.parse(await readFile(new URL("../.firebaserc", import.meta.url), "utf8"));
-const productionAliases = new Set([productionProject, ...Object.values(aliases.projects || {})]);
+const stagingConfig = JSON.parse(await readFile(new URL("../firebase.staging.json", import.meta.url), "utf8"));
+const productionSite = config.hosting?.site;
+const productionBackend = config.apphosting?.backendId;
+const productionService = config.hosting?.rewrites?.find((r) => r.run)?.run?.serviceId;
+const stagingSite = stagingConfig.hosting?.site;
+const stagingService = stagingConfig.hosting?.rewrites?.find((r) => r.run)?.run?.serviceId;
 
-if (!project) errors.push("SINURMAN_STAGING_PROJECT is required; no staging project has been selected.");
-else if (productionAliases.has(project)) errors.push("Staging project must be different from every configured production project.");
-if (config.hosting?.site === productionSite) warnings.push("firebase.json targets production Hosting. Do not deploy with this config.");
-if (config.apphosting?.backendId === "sinurman") warnings.push("firebase.json names the production App Hosting backend. Do not deploy with this config.");
-if (config.hosting?.rewrites?.some((r) => r.run?.serviceId === "sinurman")) warnings.push("firebase.json rewrites to production-named Cloud Run service. Require independent staging service.");
-if (!process.env.SINURMAN_STAGING_DATABASE_CONFIRMED) errors.push("Confirm an independent staging database using SINURMAN_STAGING_DATABASE_CONFIRMED=isolated.");
-else if (process.env.SINURMAN_STAGING_DATABASE_CONFIRMED !== "isolated") errors.push("Staging database confirmation must equal isolated.");
-if (process.env.SINURMAN_STAGING_OTP_MODE !== "mock") warnings.push("OTP must be mocked for automated tests; real WhatsApp requires separately approved test numbers.");
-if (project && /prod|production/i.test(project)) warnings.push("Review staging project name carefully.");
+if (project !== productionProject) errors.push("Project must be the explicitly approved sinurman-2026.");
+if (!stagingSite || stagingSite === productionSite) errors.push("Staging Hosting site must differ from production.");
+if (!stagingService || stagingService === productionService) errors.push("Staging Cloud Run service must differ from production.");
+if (stagingConfig.apphosting?.backendId && stagingConfig.apphosting.backendId === productionBackend) errors.push("Staging App Hosting backend must differ from production.");
+if (process.env.SINURMAN_STAGING_DATABASE_CONFIRMED !== "isolated") errors.push("Independent database must be verified, then set SINURMAN_STAGING_DATABASE_CONFIRMED=isolated.");
+if (process.env.SINURMAN_STAGING_OTP_MODE !== "mock") errors.push("OTP must be mock in automated staging UAT.");
+if (process.env.SINURMAN_STAGING_SECRETS_CONFIRMED !== "isolated") errors.push("Independent secrets/service credentials must be verified.");
+if (process.env.SINURMAN_STAGING_SERVICE_CONFIRMED !== "isolated") errors.push("Verify staging Cloud Run service exists and is isolated.");
+if (process.env.SINURMAN_STAGING_SITE_CONFIRMED !== "isolated") errors.push("Verify staging Hosting site exists and is isolated.");
+if (stagingConfig.hosting?.rewrites?.length !== 1 || !stagingConfig.hosting.rewrites[0].run) errors.push("Staging must have exactly one reviewed Cloud Run rewrite.");
 
-for (const message of errors) console.error("BLOCKED:", message);
-for (const message of warnings) console.warn("REVIEW:", message);
-console.log(errors.length ? "NO-GO: staging preflight blocked. No deployment performed." : "PREFLIGHT ONLY: checks passed; manual Firebase isolation review and approval still required. No deployment performed.");
+for (const error of errors) console.error("BLOCKED:", error);
+console.log(errors.length ? "NO-GO: isolation preflight failed." : "PREFLIGHT PASS (self-attested): independently verify actual resources and permissions before deployment.");
+console.log("Read-only: no cloud resources accessed or modified.");
 process.exitCode = errors.length ? 1 : 0;
