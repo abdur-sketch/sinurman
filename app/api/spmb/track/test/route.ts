@@ -16,9 +16,22 @@ async function getSession(request: Request) {
 }
 
 function effectiveClose(assignment: { closes_at: string; started_at?: string; duration_minutes?: number }) {
-  if (assignment.closes_at) return Date.parse(assignment.closes_at);
-  if (assignment.started_at && Number(assignment.duration_minutes || 0) > 0) return Date.parse(assignment.started_at) + Number(assignment.duration_minutes) * 60_000;
-  return Number.POSITIVE_INFINITY;
+  const scheduledClose = assignment.closes_at ? Date.parse(assignment.closes_at) : Number.POSITIVE_INFINITY;
+  const duration = Number(assignment.duration_minutes || 0);
+  const durationClose = assignment.started_at && duration > 0
+    ? Date.parse(assignment.started_at) + duration * 60_000
+    : Number.POSITIVE_INFINITY;
+  return Math.min(scheduledClose, durationClose);
+}
+
+// Stable per-assignment ordering: refreshes must never rearrange questions or options.
+function stableOrder(seed: string) {
+  let value = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    value ^= seed.charCodeAt(i);
+    value = Math.imul(value, 16777619);
+  }
+  return value >>> 0;
 }
 function isOpen(assignment: { status: string; opens_at: string; closes_at: string; started_at?: string; duration_minutes?: number }) {
   const current = Date.now();
@@ -46,8 +59,17 @@ export async function GET(request: Request) {
        WHERE aq.assignment_id=? ORDER BY q.id ASC`,
     ).bind(assignment.id).all();
     const answers = await database().prepare("SELECT question_id,answer FROM spmb_test_answers WHERE assignment_id=?").bind(assignment.id).all();
-    const visibleQuestions = questionRows.results.map((row) => { const snapshot = row.snapshot_json ? JSON.parse(String(row.snapshot_json)) : { prompt: row.prompt, options: JSON.parse(String(row.options_json || "[]")), points: row.points }; const options = [...snapshot.options]; if (Number(assignment.shuffle_options)) options.sort(() => Math.random() - 0.5); return { id: row.question_id, prompt: snapshot.prompt, options, points: snapshot.points }; });
-    if (Number(assignment.shuffle_questions)) visibleQuestions.sort(() => Math.random() - 0.5);
+    const visibleQuestions = questionRows.results.map((row) => {
+      const snapshot = row.snapshot_json ? JSON.parse(String(row.snapshot_json)) : { prompt: row.prompt, options: JSON.parse(String(row.options_json || "[]")), points: row.points };
+      const options: string[] = [...snapshot.options];
+      if (Number(assignment.shuffle_options)) {
+        options.sort((a, b) => stableOrder(`${assignment.id}:${row.question_id}:option:${a}`) - stableOrder(`${assignment.id}:${row.question_id}:option:${b}`) || a.localeCompare(b));
+      }
+      return { id: row.question_id, prompt: snapshot.prompt, options, points: snapshot.points };
+    });
+    if (Number(assignment.shuffle_questions)) {
+      visibleQuestions.sort((a, b) => stableOrder(`${assignment.id}:question:${a.id}`) - stableOrder(`${assignment.id}:question:${b.id}`) || Number(a.id) - Number(b.id));
+    }
     return Response.json({
       available: isOpen(assignment as {status:string;opens_at:string;closes_at:string;started_at:string;duration_minutes:number}) || Boolean(assignment.submitted_at),
       assignment: { id: assignment.id, test_name: assignment.test_name, instructions: assignment.instructions, duration_minutes: assignment.duration_minutes, status: assignment.status, result_status: assignment.published ? assignment.result_status : "Menunggu Pengesahan", opens_at: assignment.opens_at, closes_at: effectiveClose(assignment as {closes_at:string;started_at:string;duration_minutes:number}) === Number.POSITIVE_INFINITY ? "" : new Date(effectiveClose(assignment as {closes_at:string;started_at:string;duration_minutes:number})).toISOString(), submitted_at: assignment.submitted_at, score: assignment.published ? assignment.score : null, total_points: assignment.published ? 100 : null },
