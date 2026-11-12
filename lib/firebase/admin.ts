@@ -2,10 +2,15 @@ import { applicationDefault, cert, getApps, initializeApp, type App } from "fire
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
-import { assertRuntimeIsolation } from "./runtime-isolation.mjs";
+import { firebaseRuntimeTargets } from "./runtime-isolation.mjs";
+
+function runtimeEnv() {
+  // Do not allow build-time substitution of production .env.local values in staging.
+  return Reflect.get(Reflect.get(globalThis, "process") as object, "env") as Record<string, string | undefined>;
+}
 
 function serviceAccount() {
-  const raw=process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const raw=runtimeEnv().FIREBASE_SERVICE_ACCOUNT_JSON;
   if(!raw) return null;
   const parsed=JSON.parse(raw) as {project_id:string;client_email:string;private_key:string};
   return {
@@ -16,31 +21,34 @@ function serviceAccount() {
 }
 
 export function firebaseAdminApp():App {
+  const env=runtimeEnv();
+  const targets=firebaseRuntimeTargets(env); // fail closed BEFORE reusing an initialized Admin app
   const existing=getApps()[0];
-  if(existing) return existing;
-  assertRuntimeIsolation(process.env);
+  if(existing) {
+    if(targets.mode==="staging" &&
+       (existing.options.projectId!==env.FIREBASE_PROJECT_ID || existing.options.storageBucket!==targets.bucket)) {
+      throw new Error("Existing Firebase Admin app is not configured for staging resources.");
+    }
+    return existing;
+  }
+  const qaEmulator=env.RBAC_QA_EMULATOR==="true";
   const account=serviceAccount();
-  // QA is deliberately pinned to the explicitly supplied local emulator
-  // project so a test process cannot accidentally address production.
-  // Read through a dynamic key so Next/Turbopack cannot inline the value from
-  // the production .env.local while compiling the QA server.
-  const runtimeEnv = Reflect.get(Reflect.get(globalThis, "process") as object, "env") as Record<string, string | undefined>;
-  const qaEmulator = runtimeEnv.RBAC_QA_EMULATOR === "true";
-  const staging = process.env.SINURMAN_ENV === "staging" || process.env.FIREBASE_RUNTIME_ENV === "staging";
-  if (staging && !account) throw new Error("Firebase staging memerlukan FIREBASE_SERVICE_ACCOUNT_JSON eksplisit.");
   return initializeApp({
-    credential:qaEmulator ? applicationDefault() : account?cert(account):applicationDefault(),
-    projectId:qaEmulator ? (runtimeEnv.RBAC_QA_PROJECT_ID || "demo-sinurman") : process.env.FIREBASE_PROJECT_ID||process.env.GCLOUD_PROJECT,
-    storageBucket:qaEmulator ? undefined : process.env.FIREBASE_STORAGE_BUCKET,
+    credential:qaEmulator ? applicationDefault() : account ? cert(account) : applicationDefault(),
+    projectId:qaEmulator ? (env.RBAC_QA_PROJECT_ID || "demo-sinurman") : env.FIREBASE_PROJECT_ID || env.GCLOUD_PROJECT,
+    storageBucket:qaEmulator ? undefined : env.FIREBASE_STORAGE_BUCKET,
   });
 }
 
 export function firebaseAdmin() {
+  const targets=firebaseRuntimeTargets(runtimeEnv());
   const app=firebaseAdminApp();
   return {
     app,
     auth:getAuth(app),
-    firestore:getFirestore(app),
+    // Explicitly use the named staging database; no implicit default DB fallback.
+    firestore:targets.mode==="staging" ? getFirestore(app,targets.databaseId) : getFirestore(app),
+    // getStorage(app).bucket() uses the bucket enforced above in staging.
     storage:getStorage(app),
   };
 }

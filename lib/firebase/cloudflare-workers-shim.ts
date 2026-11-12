@@ -1,7 +1,7 @@
 import { firebaseAdmin } from "./admin";
 import { firestoreD1Database } from "./firestore-d1";
 import { qaSqliteD1Database } from "./qa-sqlite-d1";
-import { assertRuntimeIsolation } from "./runtime-isolation.mjs";
+import { firebaseRuntimeTargets } from "./runtime-isolation.mjs";
 
 const firebaseFiles = {
   async put(
@@ -53,12 +53,12 @@ export const env=new Proxy<Record<string,unknown>>({},{
     const key=String(property);
     if(key==="DB") {
       const runtimeEnv = Reflect.get(Reflect.get(globalThis, "process") as object, "env") as Record<string, string | undefined>;
-      assertRuntimeIsolation(runtimeEnv);
+      firebaseRuntimeTargets(runtimeEnv);
       return runtimeEnv.RBAC_QA_EMULATOR === "true" ? qaSqliteD1Database() : firestoreD1Database();
     }
     if(key==="FILES") {
       const runtimeEnv = Reflect.get(Reflect.get(globalThis, "process") as object, "env") as Record<string, string | undefined>;
-      assertRuntimeIsolation(runtimeEnv);
+      firebaseRuntimeTargets(runtimeEnv);
       if(runtimeEnv.RBAC_QA_EMULATOR === "true") return {
         async get() { return null; }, async put() { return { key: "qa" }; }, async delete() {},
         async list() { return { objects: [] }; },

@@ -32,8 +32,8 @@ test("SPMB test APIs enforce admin and OTP portal boundaries", async () => {
   assert.match(portal, /spmb_portal_session/);
   assert.match(proxy, /spmb_portal_session/);
   const otp = await read("app/api/spmb/track/start/route.ts");
-  assert.match(otp, /SPMB_OTP_MOCK/);
-  assert.match(otp, /\^TEST-\|\^QA-/i);
+  assert.match(otp, /SINURMAN_STAGING_OTP_MODE/);
+  assert.match(otp, /startsWith\("STG-"\)/);
   assert.doesNotMatch(otp, /return Response\.json\(\{[^}]*code/);
 });
 
