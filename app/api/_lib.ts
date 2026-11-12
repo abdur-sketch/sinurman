@@ -224,10 +224,16 @@ export function ensureDatabaseSchema() {
         // instances. Re-check/ignore a duplicate ALTER rather than failing the
         // entire request (which would make /api/health return 503).
         for (const [name, definition] of missing) {
-          try {
-            await db.prepare(`ALTER TABLE ${table} ADD ${name} ${definition}`).run();
-          } catch (error) {
-            if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) throw error;
+          for (let attempt = 0; ; attempt += 1) {
+            try {
+              await db.prepare(`ALTER TABLE ${table} ADD ${name} ${definition}`).run();
+              break;
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              if (/already exists|duplicate/i.test(message)) break;
+              if (!/database is locked|database busy|\bbusy\b/i.test(message) || attempt >= 4) throw error;
+              await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+            }
           }
         }
       }
