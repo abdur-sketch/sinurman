@@ -220,7 +220,16 @@ export function ensureDatabaseSchema() {
       const existing = new Set(info.results.map((column) => column.name));
       const missing = Object.entries(columns).filter(([name]) => !existing.has(name));
       if (missing.length) {
-        await db.batch(missing.map(([name, definition]) => db.prepare(`ALTER TABLE ${table} ADD ${name} ${definition}`)));
+        // Schema initialization can run concurrently on multiple App Hosting
+        // instances. Re-check/ignore a duplicate ALTER rather than failing the
+        // entire request (which would make /api/health return 503).
+        for (const [name, definition] of missing) {
+          try {
+            await db.prepare(`ALTER TABLE ${table} ADD ${name} ${definition}`).run();
+          } catch (error) {
+            if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) throw error;
+          }
+        }
       }
     }
     // Backfill stable keys for legacy rows before installing the atomic

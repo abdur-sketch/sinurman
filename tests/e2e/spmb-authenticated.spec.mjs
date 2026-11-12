@@ -65,12 +65,12 @@ test.describe.serial("authenticated SPMB flow in isolated QA", () => {
     await page.getByRole("textbox", { name: "Opsi jawaban" }).fill("3\n4\n5");
     await page.getByLabel("Jawaban benar").fill("4");
     await page.getByRole("button", { name: "Tambah Soal" }).click();
-    await expect(page.getByText(questionPrompt)).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: new RegExp(questionPrompt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).first()).toBeVisible();
     const questionResponse = await page.request.get("/api/admissions/test");
     const questionData = await questionResponse.json();
     questionId = questionData.questions.find((item) => item.prompt === questionPrompt).id;
     await page.getByLabel("Calon santri").selectOption({ value: String(admissionId) });
-    await page.locator("label").filter({ hasText: questionPrompt }).getByRole("checkbox").check();
+    await page.getByRole("checkbox", { name: questionPrompt }).first().check();
     await page.getByLabel("Durasi (menit)").fill("10");
     await page.getByRole("button", { name: "Tugaskan Soal" }).click();
     await expect(page.getByText("Soal berhasil ditugaskan")).toBeVisible();
