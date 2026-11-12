@@ -831,3 +831,12 @@ test("Tahsin dan Profil Santri 360 memakai satu ID santri terpadu", async () => 
   assert.match(migration, /FOREIGN KEY \(`student_id`\) REFERENCES `students`\(`id`\)/);
   assert.match(backup, /"tahsin_records"/);
 });
+
+test("Firestore-D1 schema initialization guards duplicate ALTER metadata", async () => {
+  const source = await file("lib/firebase/firestore-d1.ts");
+  assert.match(source, /function duplicateSchemaError\(error: unknown\)/);
+  assert.match(source, /const alter = ddl\.match\(\/\^\\s\*ALTER\\s\+TABLE/);
+  assert.match(source, /engine\.tables\[alter\[1\]\]\?\.columns\.some/);
+  assert.match(source, /if \(!alter \|\| !duplicateSchemaError\(error\)\) throw error/);
+  assert.match(source, /if \(!duplicateSchemaError\(error\)\) throw error/);
+});
