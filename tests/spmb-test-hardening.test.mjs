@@ -43,6 +43,7 @@ test("SPMB result publication is explicit and audited", async () => {
   assert.match(source, /publication\[0\]\?\.meta\.changes/);
   assert.match(source, /database\(\)\.batch\(\[/);
   assert.match(source, /published=1/);
+  assert.match(source, /result_published_at/);
   assert.match(source, /Publikasi Tes SPMB/);
   assert.match(source, /result_status/);
 });

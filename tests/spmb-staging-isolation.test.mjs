@@ -96,7 +96,20 @@ test("staging OTP route does not send WhatsApp or expose the test code", async (
   const source = await readFile(new URL("../app/api/spmb/track/start/route.ts", import.meta.url), "utf8");
   assert.match(source, /firebaseRuntimeTargets\(runtime\)/);
   assert.match(source, /SINURMAN_STAGING_TEST_OTP_CODE/);
-  assert.match(source, /if \(!staging\) \{/);
+  assert.match(source, /if \(!mockOtp\) \{/);
   assert.match(source, /registrationNo\.startsWith\("STG-"\)/);
   assert.doesNotMatch(source, /return Response\.json\(\{[^\n]*code\b/);
+});
+
+test("local E2E harness requires loopback emulators and never production", () => {
+  const qa = {
+    SINURMAN_E2E_HARNESS: "true", RBAC_QA_EMULATOR: "true", RBAC_QA_PROJECT_ID: "sinurman-e2e",
+    FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9099", FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
+    FIREBASE_STORAGE_EMULATOR_HOST: "127.0.0.1:9199", SINURMAN_STAGING_OTP_MODE: "mock",
+  };
+  assert.deepEqual(firebaseRuntimeTargets(qa), { mode: "qa-e2e", databaseId: "qa-sqlite", bucket: "qa-local" });
+  assert.throws(() => firebaseRuntimeTargets({ ...qa, RBAC_QA_PROJECT_ID: "sinurman-2026" }), /production project/);
+  assert.throws(() => firebaseRuntimeTargets({ ...qa, FIRESTORE_EMULATOR_HOST: "10.0.0.2:8080" }), /loopback/);
+  assert.throws(() => firebaseRuntimeTargets({ ...qa, K_SERVICE: "sinurman" }), /Cloud Run/);
+  assert.throws(() => firebaseRuntimeTargets({ ...qa, FIREBASE_AUTH_EMULATOR_HOST: "" }), /Auth emulator/);
 });

@@ -17,6 +17,7 @@
     "firebase:check": "node scripts/check-firebase-config.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:e2e": "playwright test",
+    "test:e2e:auth": "node scripts/spmb-e2e-runner.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

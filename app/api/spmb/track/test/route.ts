@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     await ensureDatabaseSchema();
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Sesi portal tidak ditemukan atau sudah berakhir." }, { status: 401 });
-    const body = await request.json() as { answers?: Array<{question_id?:unknown;answer?:unknown}> };
+    const body = await request.json() as { mode?: string; answers?: Array<{question_id?:unknown;answer?:unknown}> };
     const assignment = await database().prepare("SELECT id,status,opens_at,closes_at,started_at,duration_minutes,total_points,submitted_at FROM spmb_test_assignments WHERE admission_id=?").bind(session.admission_id).first<{id:number;status:string;opens_at:string;closes_at:string;started_at:string;duration_minutes:number;total_points:number;submitted_at:string}>();
     if (!assignment) return Response.json({ error: "Belum ada soal tes yang ditugaskan." }, { status: 404 });
     if (!isOpen(assignment) || assignment.submitted_at) return Response.json({ error: "Tes belum dibuka, sudah ditutup, atau sudah dikirim." }, { status: 409 });
@@ -97,6 +97,12 @@ export async function POST(request: Request) {
     const byId = new Map(questions.results.map((question) => { const snapshot = question.snapshot_json ? JSON.parse(question.snapshot_json) : question; return [question.question_id, { correct_option: String(snapshot.correct_option ?? question.correct_option), points: Number(snapshot.points ?? question.points) }]; }));
     if (questions.results.length !== ids.length) return Response.json({ error: "Jawaban memuat soal yang tidak ditugaskan." }, { status: 400 });
     const timestamp = new Date().toISOString();
+    if (body.mode === "draft") {
+      await database().batch(submitted.map((item) => database().prepare(
+        "INSERT OR REPLACE INTO spmb_test_answers (assignment_id,question_id,answer,is_correct,points_awarded,answered_at) VALUES (?,?,?,?,?,?)",
+      ).bind(assignment.id, Number(item.question_id), text(item.answer, 300), 0, 0, timestamp)));
+      return Response.json({ ok: true, message: "Jawaban sementara tersimpan." });
+    }
     let rawScore = 0;
     const writes = submitted.flatMap((item) => {
       const question = byId.get(Number(item.question_id));
