@@ -841,3 +841,11 @@ test("Firestore-D1 schema initialization guards duplicate ALTER metadata", async
   assert.match(source, /if \(!alter \|\| !duplicateSchemaError\(error\)\) throw error/);
   assert.match(source, /if \(!duplicateSchemaError\(error\)\) throw error/);
 });
+
+test("Playwright memakai port khusus dan standalone server", async () => {
+  const config = await file("playwright.config.mjs");
+  assert.match(config, /PLAYWRIGHT_PORT \?\? "3100"/);
+  assert.match(config, /\.next\/standalone\/server\.js/);
+  assert.match(config, /reuseExistingServer: true/);
+  assert.doesNotMatch(config, /next start/);
+});
