@@ -58,3 +58,14 @@ test("SPMB admin supports guarded CSV workflow and result inspection", async () 
   assert.match(source, /params\.get\("stats"\)/);
   assert.match(source, /correct_option/);
 });
+
+test("sidebar admin menyediakan navigasi seluruh tools Tes Online SPMB", async () => {
+  const page = await read("app/dashboard-client.tsx");
+  for (const label of ["Tes Online SPMB", "Bank Soal", "Tambah Soal", "Impor CSV", "Jadwal Tes", "Penugasan Peserta", "Hasil Tes", "Statistik"]) {
+    assert.match(page, new RegExp(`label: "${label}"`));
+  }
+  for (const anchor of ["#bank-soal", "#tambah-soal", "#impor-csv", "#jadwal-tes", "#penugasan-peserta", "#hasil-tes", "#statistik-tes"]) {
+    assert.match(page, new RegExp(anchor.replace("#", "\\#")));
+  }
+  assert.match(page, /item\.children&&role==="Admin"/);
+});

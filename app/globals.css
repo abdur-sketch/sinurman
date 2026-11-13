@@ -46,6 +46,11 @@ button { cursor: pointer; }
 .nav-group button.active { color:var(--blue); background:rgba(44,123,229,.1); font-weight:650; }
 .nav-group button i { font-style:normal; width:18px; text-align:center; font-size:16px; }
 .nav-group button b { margin-left:auto; border-radius:20px; background:#e63757; color:#fff; font-size:10px; min-width:19px; padding:3px 5px; text-align:center; }
+.nav-item-wrap { display:flex; flex-direction:column; }
+.nav-submenu { display:grid; gap:2px; margin:0 0 7px 41px; padding:3px 0 3px 12px; border-left:1px solid color-mix(in srgb,var(--blue) 24%,var(--line)); }
+.nav-submenu a { display:block; overflow:hidden; padding:5px 8px; border-radius:6px; color:var(--muted); font-size:10px; line-height:1.2; text-decoration:none; text-overflow:ellipsis; white-space:nowrap; }
+.nav-submenu a:first-child { color:var(--blue); font-weight:750; }
+.nav-submenu a:hover,.nav-submenu a:focus-visible { color:var(--blue); background:rgba(44,123,229,.08); outline:0; }
 .sidebar-help { width:100%; padding:14px 12px; margin:28px 0 18px; border:1px solid transparent; border-radius:10px; display:flex; gap:10px; align-items:center; background:linear-gradient(135deg,rgba(44,123,229,.11),rgba(0,168,118,.08)); text-align:left; }
 .sidebar-help:hover { border-color:rgba(44,123,229,.18); transform:translateY(-1px); }
 .sidebar-help>span:first-child { width:29px; height:29px; flex:0 0 29px; border-radius:50%; background:var(--blue); color:white; display:grid; place-items:center; font-weight:bold; }

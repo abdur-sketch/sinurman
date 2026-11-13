@@ -95,7 +95,8 @@ type PageKey =
   | "integrasi"
   | "portalwali";
 
-const navGroups: { label: string; items: { key: PageKey; icon: string; label: string }[] }[] = [
+type NavItem = { key: PageKey; icon: string; label: string; href?: string; children?: { label: string; href: string }[] };
+const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: "RINGKASAN",
     items: [
@@ -148,7 +149,16 @@ const navGroups: { label: string; items: { key: PageKey; icon: string; label: st
     items: [
       { key: "pengumuman", icon: "fi-rr-megaphone", label: "Pengumuman" },
       { key: "laporan", icon: "fi-rr-file-chart-line", label: "Laporan" },
-      { key: "penerimaan", icon: "fi-rr-user-add", label: "Penerimaan Santri" },
+      { key: "penerimaan", icon: "fi-rr-user-add", label: "Penerimaan Santri", children: [
+        { label: "Tes Online SPMB", href: "/spmb/tes/admin#tambah-soal" },
+        { label: "Bank Soal", href: "/spmb/tes/admin#bank-soal" },
+        { label: "Tambah Soal", href: "/spmb/tes/admin#tambah-soal" },
+        { label: "Impor CSV", href: "/spmb/tes/admin#impor-csv" },
+        { label: "Jadwal Tes", href: "/spmb/tes/admin#jadwal-tes" },
+        { label: "Penugasan Peserta", href: "/spmb/tes/admin#penugasan-peserta" },
+        { label: "Hasil Tes", href: "/spmb/tes/admin#hasil-tes" },
+        { label: "Statistik", href: "/spmb/tes/admin#statistik-tes" },
+      ] },
       { key: "portalwali", icon: "fi-rr-home-heart", label: "Portal Wali" },
       { key: "pusatinformasi", icon: "fi-rr-bell", label: "Pusat Informasi" },
     ],
@@ -2089,7 +2099,7 @@ export default function DashboardClient() {
     <div className={`app-shell ${dark ? "dark" : ""}`}>
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="brand"><button className="brand-home" aria-label={role==="Wali Santri"?"Kembali ke Portal Wali":"Kembali ke dashboard"} onClick={()=>selectPage(role==="Wali Santri"?"portalwali":"dashboard")}><BrandMark className="brand-mark"/><span><strong>SINURMAN</strong><small>Sistem Informasi Nurul Iman</small></span></button><button className="close-sidebar" onClick={()=>setSidebarOpen(false)}>×</button></div>
-        <nav>{visibleNavGroups.map(group=><div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item=><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><ToolIcon name={item.icon} /><span>{item.label}</span>{item.key==="pengumuman"&&data.announcements.length>0&&<b>{data.announcements.length}</b>}{item.key==="penerimaan"&&data.admissions.filter(row=>!["Lulus","Tidak Lulus"].includes(String(row.status))).length>0&&<b>{data.admissions.filter(row=>!["Lulus","Tidak Lulus"].includes(String(row.status))).length}</b>}{item.key==="portalwali"&&data.guardianMessages.filter(row=>row.status==="Baru").length>0&&<b>{data.guardianMessages.filter(row=>row.status==="Baru").length}</b>}</button>)}</div>)}</nav>
+        <nav>{visibleNavGroups.map(group=><div className="nav-group" key={group.label}><span className="nav-label">{group.label}</span>{group.items.map(item=><div className="nav-item-wrap" key={item.key}><button key={item.key} className={page===item.key?"active":""} onClick={()=>selectPage(item.key)}><ToolIcon name={item.icon} /><span>{item.label}</span>{item.key==="pengumuman"&&data.announcements.length>0&&<b>{data.announcements.length}</b>}{item.key==="penerimaan"&&data.admissions.filter(row=>!["Lulus","Tidak Lulus"].includes(String(row.status))).length>0&&<b>{data.admissions.filter(row=>!["Lulus","Tidak Lulus"].includes(String(row.status))).length}</b>}{item.key==="portalwali"&&data.guardianMessages.filter(row=>row.status==="Baru").length>0&&<b>{data.guardianMessages.filter(row=>row.status==="Baru").length}</b>}</button>{item.children&&role==="Admin"&&<div className="nav-submenu" aria-label={`${item.label} tools`}>{item.children.map(child=><a key={child.href} href={child.href} onClick={()=>setSidebarOpen(false)}>{child.label}</a>)}</div>}</div>)}</div>)}</nav>
         <button type="button" className="sidebar-help" aria-haspopup="dialog" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}><span>?</span><span><strong>Butuh bantuan?</strong><small>Buka pusat bantuan</small></span></button>
         <div className="sidebar-footer"><span>© 2026 SINURMAN</span><button type="button" onClick={()=>{setShowHelp(true);setSidebarOpen(false);}}>Bantuan · v1.3</button></div>
       </aside>
