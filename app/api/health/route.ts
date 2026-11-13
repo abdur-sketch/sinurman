@@ -6,8 +6,10 @@ export async function GET(request:Request) {
   const started=Date.now();
   try {
     await ensureDatabaseSchema();
-    const databaseCheck=await database().prepare("SELECT COUNT(*) AS total FROM users").first<{total:number}>();
-    const storageCheck=await env.FILES.get("backups/.automatic-backup.json");
+    const [databaseCheck,storageCheck]=await Promise.all([
+      database().prepare("SELECT COUNT(*) AS total FROM users").first<{total:number}>(),
+      env.FILES.get("backups/.automatic-backup.json"),
+    ]);
     let backupAgeHours:number|null=null;
     if(storageCheck)try{const marker=JSON.parse(await new Response(storageCheck.body).text()) as {lastRunAt?:string};if(marker.lastRunAt)backupAgeHours=Math.round((Date.now()-new Date(marker.lastRunAt).getTime())/36_000)/100;}catch{/* marker is reported as stale */}
     const backupStatus=backupAgeHours===null?"missing":backupAgeHours<=26?"ready":"stale";

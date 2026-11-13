@@ -764,6 +764,7 @@ test("health check produksi memeriksa database dan backup otomatis", async () =>
     file("proxy.ts"),
   ]);
   assert.match(health, /SELECT COUNT\(\*\) AS total FROM users/);
+  assert.match(health, /Promise\.all/);
   assert.match(health, /backups\/\.automatic-backup\.json/);
   assert.match(health, /latencyMs/);
   assert.match(proxy, /\/api\/health/);
