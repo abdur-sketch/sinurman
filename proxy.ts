@@ -11,6 +11,8 @@ const publicApiRoutes = new Set([
   "/api/spmb/track/start",
   "/api/spmb/track/verify",
   "/api/spmb/track/logout",
+  "/api/spmb/pin/config",
+  "/api/spmb/pin/login",
   "/api/wali-auth",
   "/api/wali-google-auth",
   "/api/wali-register",

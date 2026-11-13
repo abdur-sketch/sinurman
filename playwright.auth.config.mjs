@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: "spmb-authenticated.spec.mjs",
+  testMatch: ["spmb-authenticated.spec.mjs", "spmb-pin-authenticated.spec.mjs"],
   timeout: 60_000,
   fullyParallel: false,
   workers: 1,

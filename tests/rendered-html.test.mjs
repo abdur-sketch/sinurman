@@ -851,10 +851,11 @@ test("Playwright memakai port khusus dan standalone server", async () => {
 });
 
 test("login PIN SPMB fail-closed dan admin-only untuk penerbitan", async () => {
-  const [login, admin, config] = await Promise.all([
+  const [login, admin, config, proxy] = await Promise.all([
     file("app/api/spmb/pin/login/route.ts"),
     file("app/api/admissions/pin/route.ts"),
     file("app/api/spmb/pin/config/route.ts"),
+    file("proxy.ts"),
   ]);
   assert.match(login, /registrationPinEnabled/);
   assert.match(login, /status: 404/);
@@ -865,4 +866,6 @@ test("login PIN SPMB fail-closed dan admin-only untuk penerbitan", async () => {
   assert.match(admin, /requirePermission\(user, "admissions"\)/);
   assert.match(admin, /Reset PIN/);
   assert.match(config, /enabled: registrationPinEnabled/);
+  assert.match(proxy, /\/api\/spmb\/pin\/login/);
+  assert.match(proxy, /\/api\/spmb\/pin\/config/);
 });

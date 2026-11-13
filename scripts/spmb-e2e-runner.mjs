@@ -1,10 +1,13 @@
 import { spawn } from "node:child_process";
 
+const port = process.env.PLAYWRIGHT_AUTH_PORT || "3200";
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${port}`;
+
 const waitForServer = async () => {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch("http://127.0.0.1:3000/api/health");
+      const response = await fetch(`${baseURL}/api/health`);
       if (response.status === 200 || response.status === 503) return;
     } catch { /* server is still starting */ }
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -24,6 +27,9 @@ const env = {
   FIREBASE_STORAGE_EMULATOR_HOST: "127.0.0.1:9199",
   SINURMAN_STAGING_OTP_MODE: "mock",
   SINURMAN_STAGING_TEST_OTP_CODE: process.env.SINURMAN_STAGING_TEST_OTP_CODE || "246810",
+  SPMB_REGISTRATION_PIN_ENABLED: "true",
+  PORT: port,
+  PLAYWRIGHT_BASE_URL: baseURL,
 };
 const server = spawn(process.execPath, ["scripts/spmb-e2e-server.mjs"], { env, stdio: "inherit" });
 try {

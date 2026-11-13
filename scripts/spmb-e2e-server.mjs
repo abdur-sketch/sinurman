@@ -44,6 +44,7 @@ const env = {
   FIREBASE_STORAGE_EMULATOR_HOST: process.env.FIREBASE_STORAGE_EMULATOR_HOST || "127.0.0.1:9199",
   SINURMAN_STAGING_OTP_MODE: "mock",
   SINURMAN_STAGING_TEST_OTP_CODE: process.env.SINURMAN_STAGING_TEST_OTP_CODE || "246810",
+  SPMB_REGISTRATION_PIN_ENABLED: "true",
   RBAC_QA_DB_PATH: dbPath,
 };
 const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start"], { cwd: root, env, stdio: "inherit" });
