@@ -22,6 +22,11 @@ type Engine = {
 type RuntimeState = { ddl: string[]; tables: Record<string, Row[]> };
 type RunMeta = { changes: number; last_row_id?: number };
 
+function duplicateSchemaError(error: unknown) {
+  const message = error instanceof Error ? error.message : String((error as { message?: unknown })?.message ?? error);
+  return /already exists|duplicate/i.test(message);
+}
+
 const systemCollection = () => firebaseAdmin().firestore.collection("_system");
 const schemaDocument = () => systemCollection().doc("d1-schema-v3");
 const v2SchemaDocument = () => systemCollection().doc("d1-schema-v2");
@@ -82,9 +87,21 @@ function normalizeSql(sql: string, params: unknown[]) {
   return { sql: normalized, params: values };
 }
 
-function createEngine(state: RuntimeState) {
+export function createEngine(state: RuntimeState) {
   const engine = new alasql.Database() as unknown as Engine;
-  for (const ddl of state.ddl) engine.exec(ddl);
+  for (const ddl of state.ddl) {
+    // Firestore-D1 persists DDL metadata separately from table rows. A legacy
+    // metadata document can contain an ALTER for a column already present in
+    // the base CREATE TABLE. Verify the live in-memory schema first, then skip
+    // only that already-satisfied ALTER. Other DDL failures must propagate.
+    const alter = ddl.match(/^\s*ALTER\s+TABLE\s+([A-Za-z_]\w*)\s+ADD(?:\s+COLUMN)?\s+([A-Za-z_]\w*)/i);
+    if (alter && engine.tables[alter[1]]?.columns.some((column) => column.columnid === alter[2])) continue;
+    try {
+      engine.exec(ddl);
+    } catch (error) {
+      if (!alter || !duplicateSchemaError(error)) throw error;
+    }
+  }
   for (const [name, rows] of Object.entries(state.tables)) {
     const table = engine.tables[name];
     if (!table) continue;
@@ -115,7 +132,7 @@ function execute(engine: Engine, state: RuntimeState, rawSql: string, rawParams:
     } catch (error) {
       // Multiple App Hosting instances can initialize the schema concurrently.
       // Once the index exists, this migration is already satisfied.
-      if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) throw error;
+      if (!duplicateSchemaError(error)) throw error;
     }
     return { value, meta: { changes: 0 } satisfies RunMeta };
   }
@@ -130,7 +147,7 @@ function execute(engine: Engine, state: RuntimeState, rawSql: string, rawParams:
     } catch (error) {
       // Schema initialization is idempotent across concurrent instances. If
       // another initializer added this column first, continue normally.
-      if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) throw error;
+      if (!duplicateSchemaError(error)) throw error;
     }
     // SQLite would expose NULL/default values for existing rows after ADD
     // COLUMN. Materialise the default in our document rows as well so the

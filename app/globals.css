@@ -16,6 +16,72 @@
   --shadow: 0 7px 18px rgba(31, 45, 61, .075);
 }
 
+/* Final SPMB test workspace overrides. These come after the compact global
+   dashboard scale so the admin form remains readable in production. */
+.spmb-test-admin {
+  width: min(1120px, calc(100% - 40px));
+  max-width: 1120px;
+  margin-inline: auto;
+}
+.spmb-test-admin .spmb-form-card .card-header {
+  min-height: 96px;
+  padding: 24px 28px;
+}
+.spmb-test-admin .spmb-form-card .card-header h3 {
+  font-size: 19px !important;
+  line-height: 1.35;
+}
+.spmb-test-admin .spmb-form-card .card-header p {
+  font-size: 13px !important;
+  line-height: 1.55;
+}
+.spmb-test-admin .spmb-form-field label,
+.spmb-test-admin .spmb-options-field label {
+  font-size: 14px !important;
+  line-height: 1.35;
+}
+.spmb-test-admin .spmb-options-field > .spmb-field-heading small,
+.spmb-test-admin .spmb-help-text,
+.spmb-test-admin .spmb-field-error {
+  font-size: 12px !important;
+  line-height: 1.5;
+}
+.spmb-test-admin .spmb-question-form,
+.spmb-test-admin .spmb-assignment-form {
+  gap: 22px;
+  padding: 28px;
+}
+.spmb-test-admin .spmb-form-field input,
+.spmb-test-admin .spmb-form-field select,
+.spmb-test-admin .spmb-form-field textarea,
+.spmb-test-admin .spmb-option-row input {
+  font-size: 14px;
+}
+.spmb-test-admin .spmb-fieldset {
+  padding: 20px;
+}
+.spmb-test-admin .spmb-fieldset legend {
+  font-size: 14px;
+}
+.spmb-test-admin .spmb-form-actions {
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+@media (max-width:760px) {
+  .spmb-test-admin {
+    width: min(100%, calc(100% - 24px));
+  }
+  .spmb-test-admin .spmb-form-card .card-header {
+    min-height: 88px;
+    padding: 20px;
+  }
+  .spmb-test-admin .spmb-question-form,
+  .spmb-test-admin .spmb-assignment-form {
+    gap: 18px;
+    padding: 20px;
+  }
+}
+
 * { box-sizing: border-box; }
 html { background: var(--bg); }
 body { margin: 0; color: var(--text); font-family: Inter, "Segoe UI", Arial, sans-serif; }
@@ -46,6 +112,61 @@ button { cursor: pointer; }
 .nav-group button.active { color:var(--blue); background:rgba(44,123,229,.1); font-weight:650; }
 .nav-group button i { font-style:normal; width:18px; text-align:center; font-size:16px; }
 .nav-group button b { margin-left:auto; border-radius:20px; background:#e63757; color:#fff; font-size:10px; min-width:19px; padding:3px 5px; text-align:center; }
+.nav-item-wrap { display:flex; flex-direction:column; }
+.nav-submenu { display:grid; gap:2px; margin:0 0 7px 41px; padding:3px 0 3px 12px; border-left:1px solid color-mix(in srgb,var(--blue) 24%,var(--line)); }
+.nav-submenu a { display:block; overflow:hidden; padding:5px 8px; border-radius:6px; color:var(--muted); font-size:10px; line-height:1.2; text-decoration:none; text-overflow:ellipsis; white-space:nowrap; }
+.nav-submenu a:first-child { color:var(--blue); font-weight:750; }
+.nav-submenu a:hover,.nav-submenu a:focus-visible { color:var(--blue); background:rgba(44,123,229,.08); outline:0; }
+.spmb-test-admin { max-width:1280px; }
+.spmb-test-admin .spmb-form-card { overflow:visible; border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 28px rgba(31,45,61,.06); }
+.spmb-test-admin .spmb-form-card .card-header { min-height:84px; padding:22px 24px; }
+.spmb-test-admin .spmb-form-card .card-header h3 { margin:0 0 6px; color:var(--navy); font-size:19px; font-weight:700; letter-spacing:-.2px; }
+.spmb-test-admin .spmb-form-card .card-header p { max-width:720px; margin:0; color:var(--muted); font-size:13px; line-height:1.55; }
+.spmb-test-admin #penugasan-peserta>.card-header>.primary-button { display:none !important; }
+.spmb-question-form,.spmb-assignment-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; padding:24px; }
+.spmb-form-field,.spmb-options-field { min-width:0; display:flex; flex-direction:column; gap:8px; }
+.spmb-form-field label,.spmb-options-field label { color:var(--text); font-size:14px; font-weight:650; line-height:1.3; }
+.spmb-form-field input,.spmb-form-field select,.spmb-form-field textarea,.spmb-option-row input { width:100%; min-height:44px; padding:11px 12px; border:1px solid var(--line); border-radius:9px; outline:0; color:var(--text); background:var(--card); font-size:14px; transition:border-color .16s ease,box-shadow .16s ease; }
+.spmb-form-field textarea { min-height:112px; resize:vertical; line-height:1.5; }
+.spmb-form-field input:focus,.spmb-form-field select:focus,.spmb-form-field textarea:focus,.spmb-option-row input:focus { border-color:var(--blue); box-shadow:0 0 0 3px rgba(44,123,229,.12); }
+.spmb-field-wide { grid-column:1/-1; }
+.spmb-help-text { color:var(--muted); font-size:12px; line-height:1.45; }
+.spmb-field-error { color:var(--red); font-size:12px; font-weight:600; line-height:1.4; }
+.spmb-field-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.spmb-field-heading>div { display:flex; flex-direction:column; gap:4px; }
+.spmb-add-option { min-height:36px; padding:0 12px; white-space:nowrap; }
+.spmb-options-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.spmb-option-row { display:flex; align-items:center; gap:8px; min-width:0; }
+.spmb-option-row>span { width:30px; height:30px; flex:0 0 30px; display:grid; place-items:center; border-radius:8px; color:var(--blue); background:rgba(44,123,229,.1); font-size:12px; font-weight:750; }
+.spmb-option-row input { min-width:0; }
+.spmb-remove-option { width:28px; height:28px; flex:0 0 28px; padding:0; border:0; border-radius:50%; color:var(--red); background:rgba(230,55,87,.08); font-size:18px; line-height:1; }
+.spmb-form-actions { display:flex; align-items:flex-end; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-top:2px; }
+.spmb-form-actions>.primary-button { min-height:44px; padding:0 18px; }
+.spmb-assignment-form { gap:20px; }
+.spmb-fieldset { min-width:0; margin:0; padding:16px; border:1px solid var(--line); border-radius:12px; }
+.spmb-fieldset legend { padding:0 7px; color:var(--navy); font-size:13px; font-weight:700; }
+.spmb-inline-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.spmb-input-with-suffix { position:relative; }
+.spmb-input-with-suffix input { padding-right:70px; }
+.spmb-input-with-suffix span { position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:12px; pointer-events:none; }
+.spmb-check-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.spmb-check-grid label { display:flex; align-items:center; gap:8px; min-height:42px; padding:10px 12px; border:1px solid var(--line); border-radius:9px; color:var(--text); font-size:13px; font-weight:600; }
+.spmb-check-grid input { width:17px; height:17px; accent-color:var(--blue); }
+.spmb-secondary-actions { display:flex; flex-wrap:wrap; gap:8px; margin-right:auto; }
+@media (max-width:760px) {
+  .spmb-question-form,.spmb-assignment-form { grid-template-columns:1fr; gap:16px; padding:18px; }
+  .spmb-field-wide { grid-column:auto; }
+  .spmb-test-admin .spmb-form-card .card-header { align-items:flex-start; padding:18px; }
+  .spmb-test-admin .spmb-form-card .card-header h3 { font-size:18px; }
+  .spmb-test-admin .spmb-form-card .card-header p { font-size:12px; }
+  .spmb-options-grid,.spmb-inline-grid,.spmb-check-grid { grid-template-columns:1fr; }
+  .spmb-field-heading { flex-direction:column; }
+  .spmb-add-option { align-self:flex-start; }
+  .spmb-form-actions { align-items:stretch; flex-direction:column; }
+  .spmb-secondary-actions { width:100%; margin:0; }
+  .spmb-secondary-actions button { flex:1; }
+  .spmb-form-actions>.primary-button { width:100%; }
+}
 .sidebar-help { width:100%; padding:14px 12px; margin:28px 0 18px; border:1px solid transparent; border-radius:10px; display:flex; gap:10px; align-items:center; background:linear-gradient(135deg,rgba(44,123,229,.11),rgba(0,168,118,.08)); text-align:left; }
 .sidebar-help:hover { border-color:rgba(44,123,229,.18); transform:translateY(-1px); }
 .sidebar-help>span:first-child { width:29px; height:29px; flex:0 0 29px; border-radius:50%; background:var(--blue); color:white; display:grid; place-items:center; font-weight:bold; }

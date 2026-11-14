@@ -15,10 +15,28 @@ async function getSession(request: Request) {
   return row;
 }
 
-function isOpen(assignment: { status: string; opens_at: string; closes_at: string }) {
+function effectiveClose(assignment: { closes_at: string; started_at?: string; duration_minutes?: number }) {
+  const scheduledClose = assignment.closes_at ? Date.parse(assignment.closes_at) : Number.POSITIVE_INFINITY;
+  const duration = Number(assignment.duration_minutes || 0);
+  const durationClose = assignment.started_at && duration > 0
+    ? Date.parse(assignment.started_at) + duration * 60_000
+    : Number.POSITIVE_INFINITY;
+  return Math.min(scheduledClose, durationClose);
+}
+
+// Stable per-assignment ordering: refreshes must never rearrange questions or options.
+function stableOrder(seed: string) {
+  let value = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    value ^= seed.charCodeAt(i);
+    value = Math.imul(value, 16777619);
+  }
+  return value >>> 0;
+}
+function isOpen(assignment: { status: string; opens_at: string; closes_at: string; started_at?: string; duration_minutes?: number }) {
   const current = Date.now();
   const opens = assignment.opens_at ? Date.parse(assignment.opens_at) : 0;
-  const closes = assignment.closes_at ? Date.parse(assignment.closes_at) : Number.POSITIVE_INFINITY;
+  const closes = effectiveClose(assignment);
   return assignment.status !== "Ditutup" && assignment.status !== "Dinilai" && current >= opens && current <= closes;
 }
 
@@ -28,23 +46,34 @@ export async function GET(request: Request) {
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Sesi portal tidak ditemukan atau sudah berakhir." }, { status: 401 });
     const assignment = await database().prepare(
-      "SELECT id,status,opens_at,closes_at,started_at,submitted_at,score,total_points,published FROM spmb_test_assignments WHERE admission_id=?",
+      "SELECT id,status,result_status,test_name,instructions,opens_at,closes_at,duration_minutes,question_count,shuffle_questions,shuffle_options,started_at,submitted_at,score,total_points,published FROM spmb_test_assignments WHERE admission_id=?",
     ).bind(session.admission_id).first<Record<string, unknown>>();
     if (!assignment) return Response.json({ available: false, message: "Belum ada soal tes yang ditugaskan." });
-    if (!assignment.started_at && isOpen(assignment as {status:string;opens_at:string;closes_at:string})) {
+    if (!assignment.started_at && isOpen(assignment as {status:string;opens_at:string;closes_at:string;started_at:string;duration_minutes:number})) {
       await database().prepare("UPDATE spmb_test_assignments SET started_at=?,status='Dikerjakan',updated_at=? WHERE id=? AND started_at='' ").bind(new Date().toISOString(), new Date().toISOString(), assignment.id).run();
       assignment.started_at = new Date().toISOString(); assignment.status = "Dikerjakan";
     }
     const questionRows = await database().prepare(
-      `SELECT q.id,q.prompt,q.options_json,q.points FROM spmb_test_questions q
-       JOIN spmb_test_assignment_questions aq ON aq.question_id=q.id
+      `SELECT aq.question_id,aq.snapshot_json,q.prompt,q.options_json,q.points FROM spmb_test_assignment_questions aq
+       JOIN spmb_test_questions q ON q.id=aq.question_id
        WHERE aq.assignment_id=? ORDER BY q.id ASC`,
     ).bind(assignment.id).all();
     const answers = await database().prepare("SELECT question_id,answer FROM spmb_test_answers WHERE assignment_id=?").bind(assignment.id).all();
+    const visibleQuestions = questionRows.results.map((row) => {
+      const snapshot = row.snapshot_json ? JSON.parse(String(row.snapshot_json)) : { prompt: row.prompt, options: JSON.parse(String(row.options_json || "[]")), points: row.points };
+      const options: string[] = [...snapshot.options];
+      if (Number(assignment.shuffle_options)) {
+        options.sort((a, b) => stableOrder(`${assignment.id}:${row.question_id}:option:${a}`) - stableOrder(`${assignment.id}:${row.question_id}:option:${b}`) || a.localeCompare(b));
+      }
+      return { id: row.question_id, prompt: snapshot.prompt, options, points: snapshot.points };
+    });
+    if (Number(assignment.shuffle_questions)) {
+      visibleQuestions.sort((a, b) => stableOrder(`${assignment.id}:question:${a.id}`) - stableOrder(`${assignment.id}:question:${b.id}`) || Number(a.id) - Number(b.id));
+    }
     return Response.json({
-      available: isOpen(assignment as {status:string;opens_at:string;closes_at:string}) || Boolean(assignment.submitted_at),
-      assignment: { id: assignment.id, status: assignment.status, opens_at: assignment.opens_at, closes_at: assignment.closes_at, submitted_at: assignment.submitted_at, score: assignment.published ? assignment.score : null, total_points: assignment.published ? assignment.total_points : null },
-      questions: questionRows.results.map((row) => ({ id: row.id, prompt: row.prompt, options: JSON.parse(String(row.options_json || "[]")), points: row.points })),
+      available: isOpen(assignment as {status:string;opens_at:string;closes_at:string;started_at:string;duration_minutes:number}) || Boolean(assignment.submitted_at),
+      assignment: { id: assignment.id, test_name: assignment.test_name, instructions: assignment.instructions, duration_minutes: assignment.duration_minutes, status: assignment.status, result_status: assignment.published ? assignment.result_status : "Menunggu Pengesahan", opens_at: assignment.opens_at, closes_at: effectiveClose(assignment as {closes_at:string;started_at:string;duration_minutes:number}) === Number.POSITIVE_INFINITY ? "" : new Date(effectiveClose(assignment as {closes_at:string;started_at:string;duration_minutes:number})).toISOString(), submitted_at: assignment.submitted_at, score: assignment.published ? assignment.score : null, total_points: assignment.published ? 100 : null },
+      questions: isOpen(assignment as {status:string;opens_at:string;closes_at:string;started_at:string;duration_minutes:number}) && !assignment.submitted_at ? visibleQuestions : [],
       answers: answers.results,
     });
   } catch {
@@ -57,29 +86,37 @@ export async function POST(request: Request) {
     await ensureDatabaseSchema();
     const session = await getSession(request);
     if (!session) return Response.json({ error: "Sesi portal tidak ditemukan atau sudah berakhir." }, { status: 401 });
-    const body = await request.json() as { answers?: Array<{question_id?:unknown;answer?:unknown}> };
-    const assignment = await database().prepare("SELECT id,status,opens_at,closes_at,submitted_at FROM spmb_test_assignments WHERE admission_id=?").bind(session.admission_id).first<{id:number;status:string;opens_at:string;closes_at:string;submitted_at:string}>();
+    const body = await request.json() as { mode?: string; answers?: Array<{question_id?:unknown;answer?:unknown}> };
+    const assignment = await database().prepare("SELECT id,status,opens_at,closes_at,started_at,duration_minutes,total_points,submitted_at FROM spmb_test_assignments WHERE admission_id=?").bind(session.admission_id).first<{id:number;status:string;opens_at:string;closes_at:string;started_at:string;duration_minutes:number;total_points:number;submitted_at:string}>();
     if (!assignment) return Response.json({ error: "Belum ada soal tes yang ditugaskan." }, { status: 404 });
-    if (!isOpen(assignment)) return Response.json({ error: "Tes belum dibuka, sudah ditutup, atau sudah dikirim." }, { status: 409 });
+    if (!isOpen(assignment) || assignment.submitted_at) return Response.json({ error: "Tes belum dibuka, sudah ditutup, atau sudah dikirim." }, { status: 409 });
     const submitted = Array.isArray(body.answers) ? body.answers.slice(0, 100) : [];
     const ids = submitted.map((item) => Number(item.question_id)).filter((id) => Number.isInteger(id) && id > 0);
-    if (!ids.length) return Response.json({ error: "Jawaban tes belum diisi." }, { status: 400 });
-    const questions = await database().prepare(`SELECT q.id,q.correct_option,q.points FROM spmb_test_questions q JOIN spmb_test_assignment_questions aq ON aq.question_id=q.id WHERE aq.assignment_id=? AND q.id IN (${ids.map(() => "?").join(",")})`).bind(assignment.id, ...ids).all<{id:number;correct_option:string;points:number}>();
-    const byId = new Map(questions.results.map((question) => [question.id, question]));
+    if (!ids.length || new Set(ids).size !== ids.length || ids.length !== submitted.length) return Response.json({ error: "Jawaban tes belum diisi." }, { status: 400 });
+    const questions = await database().prepare(`SELECT aq.question_id,aq.snapshot_json,q.correct_option,q.points FROM spmb_test_assignment_questions aq JOIN spmb_test_questions q ON q.id=aq.question_id WHERE aq.assignment_id=? AND q.id IN (${ids.map(() => "?").join(",")})`).bind(assignment.id, ...ids).all<{question_id:number;snapshot_json:string;correct_option:string;points:number}>();
+    const byId = new Map(questions.results.map((question) => { const snapshot = question.snapshot_json ? JSON.parse(question.snapshot_json) : question; return [question.question_id, { correct_option: String(snapshot.correct_option ?? question.correct_option), points: Number(snapshot.points ?? question.points) }]; }));
+    if (questions.results.length !== ids.length) return Response.json({ error: "Jawaban memuat soal yang tidak ditugaskan." }, { status: 400 });
     const timestamp = new Date().toISOString();
-    let score = 0;
+    if (body.mode === "draft") {
+      await database().batch(submitted.map((item) => database().prepare(
+        "INSERT OR REPLACE INTO spmb_test_answers (assignment_id,question_id,answer,is_correct,points_awarded,answered_at) VALUES (?,?,?,?,?,?)",
+      ).bind(assignment.id, Number(item.question_id), text(item.answer, 300), 0, 0, timestamp)));
+      return Response.json({ ok: true, message: "Jawaban sementara tersimpan." });
+    }
+    let rawScore = 0;
     const writes = submitted.flatMap((item) => {
       const question = byId.get(Number(item.question_id));
       if (!question) return [];
       const answer = text(item.answer, 300);
       const correct = answer === question.correct_option;
-      if (correct) score += Number(question.points || 0);
-      return [database().prepare("INSERT OR REPLACE INTO spmb_test_answers (assignment_id,question_id,answer,is_correct,points_awarded,answered_at) VALUES (?,?,?,?,?,?)").bind(assignment.id, question.id, answer, correct ? 1 : 0, correct ? question.points : 0, timestamp)];
+      if (correct) rawScore += Number(question.points || 0);
+      return [database().prepare("INSERT OR REPLACE INTO spmb_test_answers (assignment_id,question_id,answer,is_correct,points_awarded,answered_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM spmb_test_assignments WHERE id=? AND submitted_at=? AND status='Dinilai')").bind(assignment.id, Number(item.question_id), answer, correct ? 1 : 0, correct ? question.points : 0, timestamp, assignment.id, timestamp)];
     });
-    await database().batch([
+    const batch = await database().batch([
+      database().prepare("UPDATE spmb_test_assignments SET status='Dinilai',result_status='Menunggu Pengesahan',submitted_at=?,score=?,updated_at=? WHERE id=? AND submitted_at='' AND status IN ('Ditugaskan','Dikerjakan') AND (opens_at='' OR opens_at<=?) AND (closes_at='' OR closes_at>=?) AND (duration_minutes=0 OR started_at='' OR datetime(started_at, '+' || duration_minutes || ' minutes')>=datetime(?))").bind(timestamp, assignment.total_points ? Math.round((rawScore / assignment.total_points) * 100) : 0, timestamp, assignment.id, timestamp, timestamp, timestamp),
       ...writes,
-      database().prepare("UPDATE spmb_test_assignments SET status='Dinilai',submitted_at=?,score=?,updated_at=? WHERE id=?").bind(timestamp, score, timestamp, assignment.id),
     ]);
+    if (!batch[0]?.meta.changes) return Response.json({ error: "Tes sudah dikirim atau waktu pengerjaan berakhir." }, { status: 409 });
     return Response.json({ ok: true, message: "Jawaban tes berhasil dikirim. Menunggu pengesahan admin." });
   } catch {
     return Response.json({ error: "Jawaban tes gagal disimpan." }, { status: 500 });

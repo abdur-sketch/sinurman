@@ -711,7 +711,7 @@ test("backup operasional dapat disimpan ke storage dan status integrasi dapat di
   assert.match(backup, /export async function PUT/);
   assert.match(backupService, /env\.FILES\.put/);
   assert.match(backupService, /version:3/);
-  assert.match(backupService, /automaticInterval=20\*60\*60\*1000/);
+  assert.match(backupService, /automaticInterval=18\*60\*60\*1000/);
   assert.match(backupService, /retentionDays=90/);
   assert.match(backup, /confirm!=="PULIHKAN"/);
   assert.match(integrations, /databaseMode/);
@@ -764,6 +764,7 @@ test("health check produksi memeriksa database dan backup otomatis", async () =>
     file("proxy.ts"),
   ]);
   assert.match(health, /SELECT COUNT\(\*\) AS total FROM users/);
+  assert.match(health, /Promise\.all/);
   assert.match(health, /backups\/\.automatic-backup\.json/);
   assert.match(health, /latencyMs/);
   assert.match(proxy, /\/api\/health/);
@@ -830,4 +831,41 @@ test("Tahsin dan Profil Santri 360 memakai satu ID santri terpadu", async () => 
   assert.match(bootstrap, /JOIN students s ON s\.id=t\.student_id/);
   assert.match(migration, /FOREIGN KEY \(`student_id`\) REFERENCES `students`\(`id`\)/);
   assert.match(backup, /"tahsin_records"/);
+});
+
+test("Firestore-D1 schema initialization guards duplicate ALTER metadata", async () => {
+  const source = await file("lib/firebase/firestore-d1.ts");
+  assert.match(source, /function duplicateSchemaError\(error: unknown\)/);
+  assert.match(source, /const alter = ddl\.match\(\/\^\\s\*ALTER\\s\+TABLE/);
+  assert.match(source, /engine\.tables\[alter\[1\]\]\?\.columns\.some/);
+  assert.match(source, /if \(!alter \|\| !duplicateSchemaError\(error\)\) throw error/);
+  assert.match(source, /if \(!duplicateSchemaError\(error\)\) throw error/);
+});
+
+test("Playwright memakai port khusus dan standalone server", async () => {
+  const config = await file("playwright.config.mjs");
+  assert.match(config, /PLAYWRIGHT_PORT \?\? "3100"/);
+  assert.match(config, /\.next\/standalone\/server\.js/);
+  assert.match(config, /reuseExistingServer: true/);
+  assert.doesNotMatch(config, /next start/);
+});
+
+test("login PIN SPMB fail-closed dan admin-only untuk penerbitan", async () => {
+  const [login, admin, config, proxy] = await Promise.all([
+    file("app/api/spmb/pin/login/route.ts"),
+    file("app/api/admissions/pin/route.ts"),
+    file("app/api/spmb/pin/config/route.ts"),
+    file("proxy.ts"),
+  ]);
+  assert.match(login, /registrationPinEnabled/);
+  assert.match(login, /status: 404/);
+  assert.match(login, /failed_attempts/);
+  assert.match(login, /locked_until/);
+  assert.match(login, /HttpOnly; Secure; SameSite=Lax/);
+  assert.doesNotMatch(login, /return Response\.json\(\{[^}]*pin/);
+  assert.match(admin, /requirePermission\(user, "admissions"\)/);
+  assert.match(admin, /Reset PIN/);
+  assert.match(config, /enabled: registrationPinEnabled/);
+  assert.match(proxy, /\/api\/spmb\/pin\/login/);
+  assert.match(proxy, /\/api\/spmb\/pin\/config/);
 });
