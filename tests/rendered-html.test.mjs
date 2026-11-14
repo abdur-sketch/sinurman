@@ -711,7 +711,7 @@ test("backup operasional dapat disimpan ke storage dan status integrasi dapat di
   assert.match(backup, /export async function PUT/);
   assert.match(backupService, /env\.FILES\.put/);
   assert.match(backupService, /version:3/);
-  assert.match(backupService, /automaticInterval=20\*60\*60\*1000/);
+  assert.match(backupService, /automaticInterval=18\*60\*60\*1000/);
   assert.match(backupService, /retentionDays=90/);
   assert.match(backup, /confirm!=="PULIHKAN"/);
   assert.match(integrations, /databaseMode/);

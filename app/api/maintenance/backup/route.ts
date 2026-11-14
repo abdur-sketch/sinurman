@@ -15,8 +15,12 @@ export async function POST(request:Request) {
   if(!process.env.CRON_SECRET)return Response.json({error:"Scheduler belum dikonfigurasi."},{status:503});
   if(!authorized(request))return Response.json({error:"Akses scheduler ditolak."},{status:401});
   try {
-    if(!(await automaticBackupDue()))return Response.json({ok:true,skipped:true,message:"Backup otomatis terbaru masih berlaku."});
+    if(!(await automaticBackupDue())) {
+      console.info(JSON.stringify({event:"automatic_backup",status:"skipped",source:"scheduler"}));
+      return Response.json({ok:true,skipped:true,message:"Backup otomatis terbaru masih berlaku."});
+    }
     const result=await createStoredBackup("scheduler@sinurman.system",true);
+    console.info(JSON.stringify({event:"automatic_backup",status:"created",objectKey:result.objectKey,sizeBytes:result.sizeBytes,checksum:result.checksum}));
     return Response.json({ok:true,...result,message:"Backup otomatis terjadwal berhasil dibuat."});
   } catch(error) {
     return Response.json({error:error instanceof Error?error.message:"Backup otomatis gagal."},{status:500});
